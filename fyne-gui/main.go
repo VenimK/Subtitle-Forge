@@ -162,7 +162,7 @@ func checkDependencies() map[string]bool {
 				// Check if the file is executable (Unix-style permission check)
 				perm := info.Mode().Perm()
 				isExecutable := (perm & 0111) != 0 // Check if any execute bit is set
-				
+
 				vobsub2srtFound = isExecutable
 				fmt.Println("[DEBUG] vobsub2srt executable permission check:", isExecutable)
 			}
@@ -902,7 +902,7 @@ func main() {
 	// Create app with explicit ID and set metadata directly
 	a := app.NewWithID("com.gmm.subtitleforge")
 	a.SetIcon(theme.FileTextIcon())
-	
+
 	// Apply dark theme to the entire application
 	a.Settings().SetTheme(theme.DarkTheme())
 
@@ -2745,7 +2745,7 @@ func main() {
 
 	// Use a more efficient layout with container.NewBorder for better performance
 	// Create app title with version
-	titleLabel := widget.NewLabel("Subtitle Forge v1.6")
+	titleLabel := widget.NewLabel("Subtitle Forge v1.6.2")
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	topContent := container.NewVBox(
@@ -2765,33 +2765,33 @@ func main() {
 			t.Check.SetChecked(true)
 		}
 	})
-	
+
 	deselectAllBtn := widget.NewButton("Deselect All", func() {
 		for _, t := range trackItems {
 			t.Check.SetChecked(false)
 		}
 	})
-	
+
 	// Track filter
 	filterEntry := widget.NewEntry()
 	filterEntry.SetPlaceHolder("Filter tracks by language, codec, or name...")
-	
+
 	// Function to filter tracks based on search text
 	filterTracks := func(filterText string) {
 		// Clear the track list UI
 		trackList.Objects = nil
-		
+
 		// If no filter, show all tracks
 		if filterText == "" {
 			for _, t := range trackItems {
 				// Create row for this track
 				trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name))
-				
+
 				var row *fyne.Container
 				if t.ConvertOCR != nil {
 					// For PGS/VobSub subtitles, show OCR option and language selection
 					ocrLabel := widget.NewLabel("Convert to SRT")
-					
+
 					if t.LangSelect != nil {
 						// Add language selection dropdown for OCR-based conversion
 						langLabel := widget.NewLabel("OCR Language:")
@@ -2804,13 +2804,13 @@ func main() {
 					// For other subtitle formats
 					row = container.NewHBox(t.Check, t.Status, trackInfo)
 				}
-				
+
 				trackList.Add(row)
 			}
 		} else {
 			// Convert filter text to lowercase for case-insensitive comparison
 			lowerFilter := strings.ToLower(filterText)
-			
+
 			// Add only tracks that match the filter
 			for _, t := range trackItems {
 				// Check if the track matches the filter criteria
@@ -2818,16 +2818,16 @@ func main() {
 					strings.Contains(strings.ToLower(t.Codec), lowerFilter) ||
 					strings.Contains(strings.ToLower(t.Name), lowerFilter) ||
 					strings.Contains(strings.ToLower(fmt.Sprintf("Track %d", t.Num)), lowerFilter)
-				
+
 				if matchesFilter {
 					// Create row for this track
 					trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name))
-					
+
 					var row *fyne.Container
 					if t.ConvertOCR != nil {
 						// For PGS/VobSub subtitles, show OCR option and language selection
 						ocrLabel := widget.NewLabel("Convert to SRT")
-						
+
 						if t.LangSelect != nil {
 							// Add language selection dropdown for OCR-based conversion
 							langLabel := widget.NewLabel("OCR Language:")
@@ -2840,36 +2840,36 @@ func main() {
 						// For other subtitle formats
 						row = container.NewHBox(t.Check, t.Status, trackInfo)
 					}
-					
+
 					trackList.Add(row)
 				}
 			}
 		}
-		
+
 		trackList.Refresh()
 	}
-	
+
 	// Set up filter entry change handler
 	filterEntry.OnChanged = func(text string) {
 		filterTracks(text)
 	}
-	
+
 	// Track control container with buttons and filter
 	// Make the filter entry take more space by setting its placeholder to be longer
 	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, or track number...                                                 ")
-	
+
 	// Using a grid layout to give the filter entry more space
 	filterBox := container.New(
 		layout.NewFormLayout(),
 		widget.NewLabel("Filter:"),
 		filterEntry,
 	)
-	
+
 	trackControlsContainer := container.NewVBox(
 		container.NewHBox(selectAllBtn, deselectAllBtn),
 		filterBox,
 	)
-	
+
 	middleContent := container.NewVBox(
 		widget.NewLabel("Subtitle Tracks:"),
 		trackControlsContainer,
@@ -3027,7 +3027,7 @@ func main() {
 
 	// Create forced track option
 	forcedTrack := widget.NewCheck("Mark as forced subtitle track", nil)
-	
+
 	// Create option to remove other subtitle tracks
 	removeOtherTracks := widget.NewCheck("Remove all other subtitle tracks", nil)
 
@@ -3053,10 +3053,10 @@ func main() {
 						break
 					}
 				}
-				
+
 				// Auto-update track name to match selected language
-				if trackNameEntry.Text == "" || trackNameEntry.Text == "English" || 
-				   containsLanguageName(trackNameEntry.Text, languages) {
+				if trackNameEntry.Text == "" || trackNameEntry.Text == "English" ||
+					containsLanguageName(trackNameEntry.Text, languages) {
 					trackNameEntry.SetText(selected)
 				}
 			}
@@ -3109,7 +3109,7 @@ func main() {
 		mkvmergeArgs := []string{
 			"-o", outputPath,
 		}
-		
+
 		// If removing other subtitle tracks is checked, use --no-subtitles option
 		if removeOtherTracks.Checked {
 			mkvmergeArgs = append(mkvmergeArgs, "--no-subtitles", mkvPath)
@@ -3117,11 +3117,11 @@ func main() {
 		} else {
 			mkvmergeArgs = append(mkvmergeArgs, mkvPath)
 		}
-		
+
 		// Add language and track name options for the SRT file
-		mkvmergeArgs = append(mkvmergeArgs, 
-			"--language", "0:" + lang,
-			"--track-name", "0:" + trackName,
+		mkvmergeArgs = append(mkvmergeArgs,
+			"--language", "0:"+lang,
+			"--track-name", "0:"+trackName,
 		)
 
 		// Add default track option if checked
@@ -3165,7 +3165,7 @@ func main() {
 		mkvDropLabel,
 	)
 	mkvDropContainer.Resize(fyne.NewSize(300, 60))
-	
+
 	srtDropArea := canvas.NewRectangle(color.NRGBA{R: 200, G: 200, B: 200, A: 100})
 	srtDropLabel := widget.NewLabelWithStyle("Drop SRT File Here", fyne.TextAlignCenter, fyne.TextStyle{})
 	srtDropContainer := container.NewStack(
@@ -3173,7 +3173,7 @@ func main() {
 		srtDropLabel,
 	)
 	srtDropContainer.Resize(fyne.NewSize(300, 60))
-	
+
 	// Group file selection
 	fileSelectionGroup := widget.NewCard("File Selection", "", container.NewVBox(
 		container.NewHBox(selectInsertMkvBtn, insertMkvFileLabel),
@@ -3184,17 +3184,17 @@ func main() {
 
 	// Group subtitle options
 	// Set placeholders with extra spaces to make input fields wider
-	trackNameEntry.SetPlaceHolder("Enter track name...                                                ");
-	
+	trackNameEntry.SetPlaceHolder("Enter track name...                                                ")
+
 	// Create section titles with bold styling
 	languageTitle := canvas.NewText("Language Settings", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
 	languageTitle.TextSize = 16
 	languageTitle.TextStyle.Bold = true
-	
+
 	trackOptionsTitle := canvas.NewText("Track Options", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
 	trackOptionsTitle.TextSize = 16
 	trackOptionsTitle.TextStyle.Bold = true
-	
+
 	// Create form layout for better alignment of labels and inputs
 	languageForm := container.New(layout.NewFormLayout(),
 		widget.NewLabel("Language:"),
@@ -3204,14 +3204,14 @@ func main() {
 		widget.NewLabel("Track Name:"),
 		trackNameEntry,
 	)
-	
+
 	// Group track options
 	trackOptionsContainer := container.NewVBox(
 		defaultTrack,
 		forcedTrack,
 		removeOtherTracks,
 	)
-	
+
 	// Group subtitle options with improved organization
 	subtitleOptionsGroup := widget.NewCard("Subtitle Options", "", container.NewVBox(
 		container.NewPadded(languageTitle),
@@ -3224,28 +3224,28 @@ func main() {
 	// Group output options
 	// Make output filename entry wider with placeholder
 	outputNameEntry.SetPlaceHolder("Enter output filename (leave empty to use original filename)...                                         ")
-	
+
 	// Create section title with bold styling
 	outputTitle := canvas.NewText("Output Configuration", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
 	outputTitle.TextSize = 16
 	outputTitle.TextStyle.Bold = true
-	
+
 	// Create form layout for better alignment
 	outputForm := container.New(layout.NewFormLayout(),
 		widget.NewLabel("Output Filename:"),
 		outputNameEntry,
 	)
-	
+
 	// Add helpful text
 	helpText := widget.NewRichText(
 		&widget.TextSegment{Text: "Note: ", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
 		&widget.TextSegment{Text: "Leave filename empty to use the original filename with \"-subtitled\" suffix."},
 	)
 	helpText.Wrapping = fyne.TextWrapWord
-	
+
 	// Style the insert button
 	insertSubtitleBtn.Importance = widget.HighImportance
-	
+
 	// Group output options with improved organization
 	outputOptionsGroup := widget.NewCard("Output Options", "", container.NewVBox(
 		container.NewPadded(outputTitle),
@@ -3293,7 +3293,7 @@ func main() {
 				if len(uris) > 0 {
 					filePath := uris[0].Path()
 					fileExt := strings.ToLower(filepath.Ext(filePath))
-					
+
 					if fileExt == ".mkv" {
 						// Handle MKV file drop
 						insertMkvFileLabel.SetText(filePath)
@@ -3328,7 +3328,7 @@ func main() {
 				if len(uris) > 0 {
 					filePath := uris[0].Path()
 					fileExt := strings.ToLower(filepath.Ext(filePath))
-					
+
 					if fileExt == ".mkv" {
 						// Handle MKV file drop
 						mkvPath = filePath
@@ -3336,19 +3336,19 @@ func main() {
 							Title:   "File Dropped",
 							Content: "MKV file loaded: " + filepath.Base(filePath),
 						})
-						
+
 						// Update UI
 						selectedFile.SetText(mkvPath)
-						
+
 						// Set output directory to the same directory as the MKV file
 						outDir = filepath.Dir(mkvPath)
 						selectedDir.SetText(outDir)
-						
+
 						// Clear previous tracks
 						trackItems = []*TrackItem{}
 						trackList.Objects = nil
 						trackList.Refresh()
-						
+
 						result.SetText("MKV file dropped and loaded. Output directory automatically set to MKV location. Click 'Load Tracks' to analyze the MKV file.")
 					} else {
 						a.SendNotification(&fyne.Notification{
