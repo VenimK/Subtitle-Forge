@@ -45,27 +45,22 @@ type TrackItem struct {
 	LangSelect *widget.Select // Language selection dropdown for OCR
 }
 
-// checkDependencies verifies if all required external tools are installed
+// checkDependencies verifies if all required external dependencies
 func checkDependencies() map[string]bool {
-	results := make(map[string]bool)
+	dependencyResults := make(map[string]bool)
+	dependencyResults["FFmpeg"] = checkFfmpeg()
+	dependencyResults["vobsub2srt"] = checkVobsub2srt()
+	dependencyResults["MKVMerge"] = checkMkvmerge()
+	dependencyResults["MKVExtract"] = checkMkvextract()
+	dependencyResults["Deno"] = checkDeno()
+	dependencyResults["Tesseract"] = checkTesseract()
+	dependencyResults["Go"] = checkGo()
+	
+	return dependencyResults
+}
 
-	// Check for mkvmerge
-	mkvmergeCmd := exec.Command("mkvmerge", "--version")
-	results["mkvmerge"] = mkvmergeCmd.Run() == nil
-
-	// Check for mkvextract
-	mkvextractCmd := exec.Command("mkvextract", "--version")
-	results["mkvextract"] = mkvextractCmd.Run() == nil
-
-	// Check for Deno
-	denoCmd := exec.Command("deno", "--version")
-	results["deno"] = denoCmd.Run() == nil
-
-	// Check for Tesseract (optional, as it might be bundled with the script)
-	tesseractCmd := exec.Command("tesseract", "--version")
-	results["tesseract"] = tesseractCmd.Run() == nil
-
-	// Check for ffmpeg
+// Check for ffmpeg installation
+func checkFfmpeg() bool {
 	// First try Homebrew path explicitly (preferred)
 	homebrewPath := "/opt/homebrew/bin/ffmpeg"
 	ffmpegFound := false
@@ -121,9 +116,11 @@ func checkDependencies() map[string]bool {
 	}
 
 	fmt.Println("[DEBUG] Final ffmpeg found status:", ffmpegFound)
-	results["ffmpeg"] = ffmpegFound
+	return ffmpegFound
+}
 
-	// Check for vobsub2srt binary
+// Check for vobsub2srt installation
+func checkVobsub2srt() bool {
 	fmt.Println("[DEBUG] Checking for vobsub2srt...")
 	vobsub2srtPath := "/usr/local/bin/vobsub2srt"
 	vobsub2srtFound := false
@@ -166,15 +163,83 @@ func checkDependencies() map[string]bool {
 				vobsub2srtFound = isExecutable
 				fmt.Println("[DEBUG] vobsub2srt executable permission check:", isExecutable)
 			}
-
-			// End of if block
 		}
 	}
 
 	fmt.Println("[DEBUG] Final vobsub2srt found status:", vobsub2srtFound)
-	results["vobsub2srt"] = vobsub2srtFound
+	return vobsub2srtFound
+}
 
-	// Check for Go installation
+// Check for MKVMerge installation
+func checkMkvmerge() bool {
+	fmt.Println("[DEBUG] Checking for MKVMerge...")
+	mkvmergeCmd := exec.Command("mkvmerge", "--version")
+	mkvmergeOutput, err := mkvmergeCmd.CombinedOutput()
+	mkvmergeFound := err == nil && len(mkvmergeOutput) > 0
+	
+	if mkvmergeFound {
+		fmt.Println("[DEBUG] MKVMerge found:", strings.TrimSpace(string(mkvmergeOutput)))
+	} else {
+		fmt.Println("[DEBUG] MKVMerge not found or error:", err)
+	}
+	
+	fmt.Println("[DEBUG] Final MKVMerge found status:", mkvmergeFound)
+	return mkvmergeFound
+}
+
+// Check for MKVExtract installation
+func checkMkvextract() bool {
+	fmt.Println("[DEBUG] Checking for MKVExtract...")
+	mkvextractCmd := exec.Command("mkvextract", "--version")
+	mkvextractOutput, err := mkvextractCmd.CombinedOutput()
+	mkvextractFound := err == nil && len(mkvextractOutput) > 0
+	
+	if mkvextractFound {
+		fmt.Println("[DEBUG] MKVExtract found:", strings.TrimSpace(string(mkvextractOutput)))
+	} else {
+		fmt.Println("[DEBUG] MKVExtract not found or error:", err)
+	}
+	
+	fmt.Println("[DEBUG] Final MKVExtract found status:", mkvextractFound)
+	return mkvextractFound
+}
+
+// Check for Deno installation
+func checkDeno() bool {
+	fmt.Println("[DEBUG] Checking for Deno...")
+	denoCmd := exec.Command("deno", "--version")
+	denoOutput, err := denoCmd.CombinedOutput()
+	denoFound := err == nil && len(denoOutput) > 0
+	
+	if denoFound {
+		fmt.Println("[DEBUG] Deno found:", strings.TrimSpace(string(denoOutput)))
+	} else {
+		fmt.Println("[DEBUG] Deno not found or error:", err)
+	}
+	
+	fmt.Println("[DEBUG] Final Deno found status:", denoFound)
+	return denoFound
+}
+
+// Check for Tesseract installation
+func checkTesseract() bool {
+	fmt.Println("[DEBUG] Checking for Tesseract...")
+	tesseractCmd := exec.Command("tesseract", "--version")
+	tesseractOutput, err := tesseractCmd.CombinedOutput()
+	tesseractFound := err == nil && len(tesseractOutput) > 0
+	
+	if tesseractFound {
+		fmt.Println("[DEBUG] Tesseract found:", strings.TrimSpace(string(tesseractOutput)))
+	} else {
+		fmt.Println("[DEBUG] Tesseract not found or error:", err)
+	}
+	
+	fmt.Println("[DEBUG] Final Tesseract found status:", tesseractFound)
+	return tesseractFound
+}
+
+// Check for Go installation
+func checkGo() bool {
 	fmt.Println("[DEBUG] Checking for Go...")
 	goCmd := exec.Command("go", "version")
 	goOutput, err := goCmd.CombinedOutput()
@@ -187,9 +252,7 @@ func checkDependencies() map[string]bool {
 	}
 
 	fmt.Println("[DEBUG] Final Go found status:", goFound)
-	results["go"] = goFound
-
-	return results
+	return goFound
 }
 
 // installDependency handles the installation of a specific dependency
@@ -227,8 +290,10 @@ func installDependency(w fyne.Window, tool string) {
 				}
 
 				// Set up command and description based on tool
-				switch tool {
-				case "mkvmerge", "mkvextract":
+				// Using a case-insensitive approach to handle various tool name formats
+				toolLower := strings.ToLower(tool)
+				switch toolLower {
+				case "mkvmerge", "mkvextract", "mkvm":
 					// Install MKVToolNix via Homebrew
 					cmd = exec.Command("brew", "install", "mkvtoolnix")
 					installDesc = "Installing MKVToolNix (provides mkvmerge and mkvextract)"
@@ -240,7 +305,7 @@ func installDependency(w fyne.Window, tool string) {
 					// Install Tesseract via Homebrew
 					cmd = exec.Command("brew", "install", "tesseract")
 					installDesc = "Installing Tesseract OCR engine"
-				case "ffmpeg":
+				case "ffmpeg", "ffmp":
 					// Install ffmpeg via Homebrew
 					cmd = exec.Command("brew", "install", "ffmpeg")
 					installDesc = "Installing FFmpeg multimedia framework"
@@ -374,23 +439,31 @@ func updateDependencyStatus(w fyne.Window) {
 	// Check dependencies
 	dependencyResults := checkDependencies()
 
-	// Update the status text
-	dependencyStatus := "System Dependency Check:\n"
+	// Update the status text with improved formatting
+	dependencyStatus := "Current Status:\n"
 	allDependenciesInstalled := true
 
 	// Track missing tools
 	missingTools := []string{}
 
+	// We'll use a simpler approach with plain text for now since color styling is causing issues
+	
+	// Process each dependency
 	for tool, installed := range dependencyResults {
-		status := "✅ Installed"
-		if !installed {
+		var status string
+		
+		if installed {
+			status = "✅ Installed"
+		} else {
 			status = "❌ Not found"
 			allDependenciesInstalled = false
 			missingTools = append(missingTools, tool)
 		}
+		
 		dependencyStatus += fmt.Sprintf("- %s: %s\n", tool, status)
 	}
 
+	// Add summary message
 	if !allDependenciesInstalled {
 		dependencyStatus += "\n⚠️ Some required tools are missing. Please install them before using all features.\n"
 	} else {
@@ -3266,14 +3339,163 @@ func main() {
 		resultsGroup,
 	)
 
-	// Create settings tab content
-	settingsLabel := widget.NewLabel("System Dependency Check:\n")
+	// Create settings tab content with improved styling
+	// Create a title with bold styling
+	settingsTitle := canvas.NewText("Application Settings", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	settingsTitle.TextSize = 18
+	settingsTitle.TextStyle.Bold = true
+
+	// Create a header for dependencies section
+	dependencyTitle := widget.NewLabelWithStyle("System Dependencies", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+
+	// Create a placeholder for the dynamic dependency status updates
+	settingsLabel := widget.NewLabel("Checking dependencies...")
 	settingsLabel.Wrapping = fyne.TextWrapWord
 
+	// Create a card for theme settings
+	themeTitle := canvas.NewText("Theme Settings", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	themeTitle.TextSize = 16
+	themeTitle.TextStyle.Bold = true
+
+	// Theme selector with styled label
+	themeOptions := []string{"System Default", "Light Theme", "Dark Theme"}
+	themeSelector := widget.NewSelect(themeOptions, func(selected string) {
+		switch selected {
+		case "Light Theme":
+			a.Settings().SetTheme(theme.LightTheme())
+		case "Dark Theme":
+			a.Settings().SetTheme(theme.DarkTheme())
+		default:
+			a.Settings().SetTheme(theme.DefaultTheme())
+		}
+	})
+	themeSelector.SetSelected("Dark Theme") // Set to match current theme
+	
+	// Create a styled theme label with custom color
+	themeLabel := widget.NewLabelWithStyle("Application Theme:", fyne.TextAlignLeading, fyne.TextStyle{
+		Bold:      true,
+		Italic:    false,
+		Monospace: false,
+	})
+	
+	// Create a colored rectangle background for the label
+	labelRect := canvas.NewRectangle(color.NRGBA{R: 40, G: 40, B: 80, A: 255})
+	labelContainer := container.NewStack(labelRect, container.NewPadded(themeLabel))
+	
+	// Note: Standard labels don't support direct color setting
+	// Instead, we're using a colored background with the default text color
+	
+	// Create a button to apply theme changes with custom styling and color
+	applyThemeBtn := widget.NewButtonWithIcon("Apply Theme", theme.ConfirmIcon(), func() {
+		// The theme is already applied in the selector's onChange function
+		dialog.ShowInformation("Theme Applied", "Application theme has been updated.", w)
+	})
+	applyThemeBtn.Importance = widget.HighImportance
+	
+	// Create a custom colored apply button
+	applyBtnBackground := canvas.NewRectangle(color.NRGBA{R: 0, G: 120, B: 80, A: 255})
+	applyBtnContainer := container.NewStack(applyBtnBackground, container.NewPadded(applyThemeBtn))
+
+	// Help section
+	helpTitle := canvas.NewText("Help & Information", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	helpTitle.TextSize = 16
+	helpTitle.TextStyle.Bold = true
+
+	// App information
+	versionInfo := widget.NewRichText(
+		&widget.TextSegment{Text: "Subtitle Forge v1.6.2\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Text: "A tool for extracting and converting subtitles from MKV files.\n\n"},
+		&widget.TextSegment{Text: "© 2025 VenimK@David Software\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Italic: true}}},
+	)
+	versionInfo.Wrapping = fyne.TextWrapWord
+
+	// Add a helpful description of dependencies
+	dependencyDescription := widget.NewLabel("The application requires these external tools to function properly:")
+	dependencyDescription.Wrapping = fyne.TextWrapWord
+	
+	// Create a list of dependencies with descriptions
+	dependencyList := widget.NewLabel("• FFmpeg: Used for video and subtitle processing\n• vobsub2srt: Converts VobSub subtitles to SRT format\n• MKVMerge: Used for MKV file manipulation\n• MKVExtract: Extracts content from MKV files\n• Deno: JavaScript runtime for scripts\n• Tesseract: Optical character recognition for subtitles\n• Go: Required for building the application")
+	dependencyList.Wrapping = fyne.TextWrapWord
+	
+	// Instructions for missing dependencies
+	dependencyInstructions := widget.NewLabel("If any dependencies are missing, use the buttons below to install them.")
+	dependencyInstructions.Wrapping = fyne.TextWrapWord
+	dependencyInstructions.TextStyle = fyne.TextStyle{Italic: true}
+	
+	// Combine all dependency components
+	dependencySection := container.NewVBox(
+		dependencyTitle,
+		container.NewPadded(dependencyDescription),
+		container.NewPadded(dependencyList),
+		container.NewPadded(settingsLabel),
+		container.NewPadded(dependencyInstructions),
+		container.NewPadded(dependencyButtons),
+	)
+
+	// Custom themed button for resetting to default settings
+	resetSettingsBtn := widget.NewButtonWithIcon("Reset to Defaults", theme.ViewRefreshIcon(), func() {
+		// Reset theme to dark theme
+		a.Settings().SetTheme(theme.DarkTheme())
+		themeSelector.SetSelected("Dark Theme")
+		dialog.ShowInformation("Settings Reset", "Settings have been reset to defaults.", w)
+	})
+	
+	// Style the reset button
+	resetSettingsBtn.Importance = widget.MediumImportance
+	
+	// Create a custom colored reset button
+	resetBtnBackground := canvas.NewRectangle(color.NRGBA{R: 120, G: 60, B: 0, A: 255})
+	resetBtnContainer := container.NewStack(resetBtnBackground, container.NewPadded(resetSettingsBtn))
+	
+	// Create a styled container for theme buttons
+	themeButtonsContainer := container.NewHBox(
+		applyBtnContainer,
+		layout.NewSpacer(),
+		resetBtnContainer,
+	)
+	
+	// Create info label with custom color styling
+	themeInfoLabel := widget.NewRichTextWithText("Select a theme and click Apply to change the application appearance.")
+	themeInfoLabel.Segments[0].(*widget.TextSegment).Style = widget.RichTextStyle{
+		TextStyle: fyne.TextStyle{Italic: true},
+		ColorName: theme.ColorNameForeground,
+	}
+	
+	// Create a colored background for the info text
+	infoBackground := canvas.NewRectangle(color.NRGBA{R: 40, G: 40, B: 60, A: 255})
+	infoContainer := container.NewStack(infoBackground, container.NewPadded(themeInfoLabel))
+	
+	// Set a custom color for the info text - using ColorName from theme
+	// Note: RichTextStyle doesn't have a direct Color field
+	themeInfoLabel.Segments[0].(*widget.TextSegment).Style.ColorName = theme.ColorNamePrimary
+	
+	// Assemble theme section with styled and colored components
+	themeSection := container.NewVBox(
+		container.NewPadded(themeTitle),
+		container.NewPadded(container.New(layout.NewFormLayout(),
+			labelContainer,
+			themeSelector,
+		)),
+		container.NewPadded(infoContainer),
+		container.NewPadded(themeButtonsContainer),
+	)
+
+	helpSection := container.NewVBox(
+		container.NewPadded(helpTitle),
+		container.NewPadded(versionInfo),
+	)
+
+	// Create cards for each section
+	dependencyCard := widget.NewCard("", "", dependencySection)
+	themeCard := widget.NewCard("", "", themeSection)
+	helpCard := widget.NewCard("", "", helpSection)
+
+	// Assemble settings tab content
 	settingsTabContent := container.NewVBox(
-		widget.NewLabel("Settings"),
-		settingsLabel,
-		dependencyButtons,
+		container.NewPadded(settingsTitle),
+		dependencyCard,
+		themeCard,
+		helpCard,
 	)
 	updateDependencyStatus(w)
 
