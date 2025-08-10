@@ -1,4 +1,4 @@
-# Subtitle Forge v1.6
+# Subtitle Forge v1.6.2
 
 A tool for extracting and converting subtitles from MKV files, available in both command-line (CLI) and graphical user interface (GUI) versions.
 
@@ -7,6 +7,15 @@ A tool for extracting and converting subtitles from MKV files, available in both
 This project provides two applications:
 1. **CLI Version** - Command-line tool for extracting subtitles from MKV files
 2. **GUI Version** - Fyne-based graphical application with enhanced features including PGS to SRT conversion
+
+## What's New in v1.6.2
+
+- **Track Selection Controls**: Added "Select All" and "Deselect All" buttons for quick subtitle track management
+- **Track Filtering**: New filter input field allowing real-time filtering of subtitle tracks by language, codec, name, or track number
+- **Enhanced UI Layout**: Improved organization in the Insert Subtitles tab with better labeling and visual structure
+- **Dark Theme Support**: Application now supports a sleek dark theme for reduced eye strain
+- **Improved Input Fields**: Wider input fields with helpful placeholders for better usability
+- **Contextual Help Text**: Added helpful information text for output file naming options
 
 ## What's New in v1.6
 

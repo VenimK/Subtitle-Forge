@@ -13,6 +13,7 @@ This project provides two applications:
 - **Enhanced Drag and Drop**: Improved drag and drop functionality in both Extract and Insert Subtitles tabs
 - **Consistent User Experience**: File dropping now works reliably across all application tabs
 - **Visual Feedback**: Better visual indicators when files are dropped
+- **Subtitle Replacement Option**: New option to remove all existing subtitle tracks when inserting a new subtitle
 
 ## What's New in v1.5
 
@@ -51,10 +52,13 @@ This project provides two applications:
 - Automatic naming of extracted subtitle files based on track properties
 
 ### GUI Version
-- User-friendly graphical interface
-- Extract subtitle tracks from MKV files
+- User-friendly graphical interface with two main tabs:
+  - **Extract Subtitles**: Extract and convert subtitle tracks from MKV files
+  - **Insert Subtitles**: Add external SRT subtitle files into MKV files
+- Full drag and drop support in both tabs for easy file selection
 - Convert PGS/SUP subtitles to SRT format using OCR
 - Convert VobSub (.idx/.sub) subtitles to SRT format using OCR
+- Convert ASS/SSA subtitles to SRT format
 - Enhanced progress reporting:
   - Detailed progress bar showing percentage complete
   - Real-time frame processing status

@@ -902,6 +902,9 @@ func main() {
 	// Create app with explicit ID and set metadata directly
 	a := app.NewWithID("com.gmm.subtitleforge")
 	a.SetIcon(theme.FileTextIcon())
+	
+	// Apply dark theme to the entire application
+	a.Settings().SetTheme(theme.DarkTheme())
 
 	// Create main window with explicit name
 	w := a.NewWindow("Subtitle Forge")
@@ -2756,8 +2759,120 @@ func main() {
 		progress,
 	)
 
+	// Track control buttons (select/deselect all)
+	selectAllBtn := widget.NewButton("Select All", func() {
+		for _, t := range trackItems {
+			t.Check.SetChecked(true)
+		}
+	})
+	
+	deselectAllBtn := widget.NewButton("Deselect All", func() {
+		for _, t := range trackItems {
+			t.Check.SetChecked(false)
+		}
+	})
+	
+	// Track filter
+	filterEntry := widget.NewEntry()
+	filterEntry.SetPlaceHolder("Filter tracks by language, codec, or name...")
+	
+	// Function to filter tracks based on search text
+	filterTracks := func(filterText string) {
+		// Clear the track list UI
+		trackList.Objects = nil
+		
+		// If no filter, show all tracks
+		if filterText == "" {
+			for _, t := range trackItems {
+				// Create row for this track
+				trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name))
+				
+				var row *fyne.Container
+				if t.ConvertOCR != nil {
+					// For PGS/VobSub subtitles, show OCR option and language selection
+					ocrLabel := widget.NewLabel("Convert to SRT")
+					
+					if t.LangSelect != nil {
+						// Add language selection dropdown for OCR-based conversion
+						langLabel := widget.NewLabel("OCR Language:")
+						row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel, langLabel, t.LangSelect)
+					} else {
+						// For ASS/SSA conversion (no OCR language needed)
+						row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel)
+					}
+				} else {
+					// For other subtitle formats
+					row = container.NewHBox(t.Check, t.Status, trackInfo)
+				}
+				
+				trackList.Add(row)
+			}
+		} else {
+			// Convert filter text to lowercase for case-insensitive comparison
+			lowerFilter := strings.ToLower(filterText)
+			
+			// Add only tracks that match the filter
+			for _, t := range trackItems {
+				// Check if the track matches the filter criteria
+				matchesFilter := strings.Contains(strings.ToLower(t.Lang), lowerFilter) ||
+					strings.Contains(strings.ToLower(t.Codec), lowerFilter) ||
+					strings.Contains(strings.ToLower(t.Name), lowerFilter) ||
+					strings.Contains(strings.ToLower(fmt.Sprintf("Track %d", t.Num)), lowerFilter)
+				
+				if matchesFilter {
+					// Create row for this track
+					trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name))
+					
+					var row *fyne.Container
+					if t.ConvertOCR != nil {
+						// For PGS/VobSub subtitles, show OCR option and language selection
+						ocrLabel := widget.NewLabel("Convert to SRT")
+						
+						if t.LangSelect != nil {
+							// Add language selection dropdown for OCR-based conversion
+							langLabel := widget.NewLabel("OCR Language:")
+							row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel, langLabel, t.LangSelect)
+						} else {
+							// For ASS/SSA conversion (no OCR language needed)
+							row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel)
+						}
+					} else {
+						// For other subtitle formats
+						row = container.NewHBox(t.Check, t.Status, trackInfo)
+					}
+					
+					trackList.Add(row)
+				}
+			}
+		}
+		
+		trackList.Refresh()
+	}
+	
+	// Set up filter entry change handler
+	filterEntry.OnChanged = func(text string) {
+		filterTracks(text)
+	}
+	
+	// Track control container with buttons and filter
+	// Make the filter entry take more space by setting its placeholder to be longer
+	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, or track number...                                                 ")
+	
+	// Using a grid layout to give the filter entry more space
+	filterBox := container.New(
+		layout.NewFormLayout(),
+		widget.NewLabel("Filter:"),
+		filterEntry,
+	)
+	
+	trackControlsContainer := container.NewVBox(
+		container.NewHBox(selectAllBtn, deselectAllBtn),
+		filterBox,
+	)
+	
 	middleContent := container.NewVBox(
 		widget.NewLabel("Subtitle Tracks:"),
+		trackControlsContainer,
 		trackListScroll,
 	)
 
@@ -3068,24 +3183,74 @@ func main() {
 	))
 
 	// Group subtitle options
+	// Set placeholders with extra spaces to make input fields wider
+	trackNameEntry.SetPlaceHolder("Enter track name...                                                ");
+	
+	// Create section titles with bold styling
+	languageTitle := canvas.NewText("Language Settings", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	languageTitle.TextSize = 16
+	languageTitle.TextStyle.Bold = true
+	
+	trackOptionsTitle := canvas.NewText("Track Options", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	trackOptionsTitle.TextSize = 16
+	trackOptionsTitle.TextStyle.Bold = true
+	
+	// Create form layout for better alignment of labels and inputs
+	languageForm := container.New(layout.NewFormLayout(),
+		widget.NewLabel("Language:"),
+		langDropdown,
+		widget.NewLabel("Language Code:"),
+		customLangDropdown,
+		widget.NewLabel("Track Name:"),
+		trackNameEntry,
+	)
+	
+	// Group track options
+	trackOptionsContainer := container.NewVBox(
+		defaultTrack,
+		forcedTrack,
+		removeOtherTracks,
+	)
+	
+	// Group subtitle options with improved organization
 	subtitleOptionsGroup := widget.NewCard("Subtitle Options", "", container.NewVBox(
-		container.NewPadded(
-			container.NewHBox(layout.NewSpacer(), widget.NewLabel("Language:"), layout.NewSpacer(), langDropdown, layout.NewSpacer()),
-		),
-		container.NewPadded(
-			container.NewHBox(layout.NewSpacer(), widget.NewLabel("Language Code:"), layout.NewSpacer(), customLangDropdown, layout.NewSpacer()),
-		),
-		container.NewPadded(
-			container.NewHBox(layout.NewSpacer(), widget.NewLabel("Track Name:"), layout.NewSpacer(), trackNameEntry, layout.NewSpacer()),
-		),
-		container.NewPadded(defaultTrack),
-		container.NewPadded(forcedTrack),
-		container.NewPadded(removeOtherTracks),
+		container.NewPadded(languageTitle),
+		container.NewPadded(languageForm),
+		canvas.NewLine(color.NRGBA{R: 200, G: 200, B: 200, A: 128}),
+		container.NewPadded(trackOptionsTitle),
+		container.NewPadded(trackOptionsContainer),
 	))
 
 	// Group output options
+	// Make output filename entry wider with placeholder
+	outputNameEntry.SetPlaceHolder("Enter output filename (leave empty to use original filename)...                                         ")
+	
+	// Create section title with bold styling
+	outputTitle := canvas.NewText("Output Configuration", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	outputTitle.TextSize = 16
+	outputTitle.TextStyle.Bold = true
+	
+	// Create form layout for better alignment
+	outputForm := container.New(layout.NewFormLayout(),
+		widget.NewLabel("Output Filename:"),
+		outputNameEntry,
+	)
+	
+	// Add helpful text
+	helpText := widget.NewRichText(
+		&widget.TextSegment{Text: "Note: ", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Text: "Leave filename empty to use the original filename with \"-subtitled\" suffix."},
+	)
+	helpText.Wrapping = fyne.TextWrapWord
+	
+	// Style the insert button
+	insertSubtitleBtn.Importance = widget.HighImportance
+	
+	// Group output options with improved organization
 	outputOptionsGroup := widget.NewCard("Output Options", "", container.NewVBox(
-		container.NewHBox(widget.NewLabel("Output Filename:"), layout.NewSpacer(), outputNameEntry),
+		container.NewPadded(outputTitle),
+		container.NewPadded(outputForm),
+		container.NewPadded(helpText),
 		container.NewHBox(layout.NewSpacer(), insertSubtitleBtn, layout.NewSpacer()),
 	))
 
