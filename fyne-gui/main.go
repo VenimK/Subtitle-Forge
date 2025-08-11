@@ -55,7 +55,8 @@ func checkDependencies() map[string]bool {
 	dependencyResults["Deno"] = checkDeno()
 	dependencyResults["Tesseract"] = checkTesseract()
 	dependencyResults["Go"] = checkGo()
-	
+	dependencyResults["PGStoSRT"] = checkPgsToSrt()
+
 	return dependencyResults
 }
 
@@ -176,13 +177,13 @@ func checkMkvmerge() bool {
 	mkvmergeCmd := exec.Command("mkvmerge", "--version")
 	mkvmergeOutput, err := mkvmergeCmd.CombinedOutput()
 	mkvmergeFound := err == nil && len(mkvmergeOutput) > 0
-	
+
 	if mkvmergeFound {
 		fmt.Println("[DEBUG] MKVMerge found:", strings.TrimSpace(string(mkvmergeOutput)))
 	} else {
 		fmt.Println("[DEBUG] MKVMerge not found or error:", err)
 	}
-	
+
 	fmt.Println("[DEBUG] Final MKVMerge found status:", mkvmergeFound)
 	return mkvmergeFound
 }
@@ -193,13 +194,13 @@ func checkMkvextract() bool {
 	mkvextractCmd := exec.Command("mkvextract", "--version")
 	mkvextractOutput, err := mkvextractCmd.CombinedOutput()
 	mkvextractFound := err == nil && len(mkvextractOutput) > 0
-	
+
 	if mkvextractFound {
 		fmt.Println("[DEBUG] MKVExtract found:", strings.TrimSpace(string(mkvextractOutput)))
 	} else {
 		fmt.Println("[DEBUG] MKVExtract not found or error:", err)
 	}
-	
+
 	fmt.Println("[DEBUG] Final MKVExtract found status:", mkvextractFound)
 	return mkvextractFound
 }
@@ -210,13 +211,13 @@ func checkDeno() bool {
 	denoCmd := exec.Command("deno", "--version")
 	denoOutput, err := denoCmd.CombinedOutput()
 	denoFound := err == nil && len(denoOutput) > 0
-	
+
 	if denoFound {
 		fmt.Println("[DEBUG] Deno found:", strings.TrimSpace(string(denoOutput)))
 	} else {
 		fmt.Println("[DEBUG] Deno not found or error:", err)
 	}
-	
+
 	fmt.Println("[DEBUG] Final Deno found status:", denoFound)
 	return denoFound
 }
@@ -227,20 +228,24 @@ func checkTesseract() bool {
 	tesseractCmd := exec.Command("tesseract", "--version")
 	tesseractOutput, err := tesseractCmd.CombinedOutput()
 	tesseractFound := err == nil && len(tesseractOutput) > 0
-	
+
 	if tesseractFound {
 		fmt.Println("[DEBUG] Tesseract found:", strings.TrimSpace(string(tesseractOutput)))
 	} else {
 		fmt.Println("[DEBUG] Tesseract not found or error:", err)
 	}
-	
+
 	fmt.Println("[DEBUG] Final Tesseract found status:", tesseractFound)
 	return tesseractFound
 }
 
+// PGS to SRT script path - configurable via UI
+var pgsToSrtScriptPath = filepath.Join(os.Getenv("HOME"), "pgs-to-srt", "pgs-to-srt.js")
+
 // Check for Go installation
 func checkGo() bool {
 	fmt.Println("[DEBUG] Checking for Go...")
+
 	goCmd := exec.Command("go", "version")
 	goOutput, err := goCmd.CombinedOutput()
 	goFound := err == nil && len(goOutput) > 0
@@ -248,11 +253,39 @@ func checkGo() bool {
 	if goFound {
 		fmt.Println("[DEBUG] Go found:", strings.TrimSpace(string(goOutput)))
 	} else {
-		fmt.Println("[DEBUG] Go not found or error:", err)
+		fmt.Println("[DEBUG] Go not found, error:", err)
 	}
 
 	fmt.Println("[DEBUG] Final Go found status:", goFound)
 	return goFound
+}
+
+// Check for PGS to SRT script
+func checkPgsToSrt() bool {
+	fmt.Println("[DEBUG] Checking for PGS to SRT script...")
+
+	// Use the configurable script path
+	scriptPath := pgsToSrtScriptPath
+
+	// Check if the script exists at the specified path
+	_, err := os.Stat(scriptPath)
+	scriptFound := err == nil
+
+	if scriptFound {
+		fmt.Println("[DEBUG] PGS to SRT script found at:", scriptPath)
+
+		// Additionally check if Deno is available to run the script
+		denoAvailable := checkDeno()
+		if !denoAvailable {
+			fmt.Println("[DEBUG] PGS to SRT script found but Deno runtime is missing")
+			return false
+		}
+	} else {
+		fmt.Println("[DEBUG] PGS to SRT script not found, error:", err)
+	}
+
+	fmt.Println("[DEBUG] Final PGS to SRT script found status:", scriptFound)
+	return scriptFound
 }
 
 // installDependency handles the installation of a specific dependency
@@ -333,6 +366,118 @@ func installDependency(w fyne.Window, tool string) {
 
 					cmd = exec.Command("bash", scriptPath)
 					installDesc = "Installing VobSub2SRT (may require additional dependencies)"
+				case "pgstoSRT", "pgs-to-srt", "pgstoSrt", "pgstosrt":
+					// Create a temp directory for creating the installation script
+					tempDir, err := os.MkdirTemp("", "pgs-to-srt-install")
+					if err != nil {
+						progress.Hide()
+						dialog.ShowError(
+							fmt.Errorf("Failed to create temporary directory: %v", err),
+							w)
+						return
+					}
+					defer os.RemoveAll(tempDir) // Clean up when done
+
+					// Create a bash script that will clone and install PGS-to-SRT
+					// This ensures we can capture output and report progress
+					scriptContent := `#!/bin/bash
+					set -e
+					
+					# Check if git is installed
+					if ! command -v git &> /dev/null; then
+					  echo "Error: git is not installed. Please install git first."
+					  exit 1
+					fi
+					
+					# Check if deno is installed
+					if ! command -v deno &> /dev/null; then
+					  echo "Error: deno is not installed. Please install deno first."
+					  exit 1
+					fi
+					
+					# Remove existing directory and zip if they exist
+					if [ -d "$HOME/pgs-to-srt" ]; then
+					  echo "Removing existing pgs-to-srt directory..."
+					  rm -rf "$HOME/pgs-to-srt"
+					fi
+					
+					if [ -f "$HOME/pgs-to-srt.zip" ]; then
+					  rm -f "$HOME/pgs-to-srt.zip"
+					fi
+					
+					# Step 1: Clone the repository
+					echo "Cloning PGS-to-SRT repository..."
+					git clone https://github.com/wydengyre/pgs-to-srt.git "$HOME/pgs-to-srt"
+					
+					# Step 2: Download the ZIP file
+					echo "Downloading PGS-to-SRT ZIP release..."
+					ZIP_URL="https://github.com/wydengyre/pgs-to-srt/releases/download/release-5/pgs-to-srt.zip"
+					
+					# Use curl with fallback to wget
+					if command -v curl &> /dev/null; then
+					  curl -L "$ZIP_URL" -o "$HOME/pgs-to-srt.zip"
+					else
+					  wget -O "$HOME/pgs-to-srt.zip" "$ZIP_URL"
+					fi
+					
+					# Step 3: Extract the ZIP file to a temporary directory first
+					echo "Extracting files..."
+					TMP_EXTRACT_DIR="$HOME/pgs-to-srt-tmp"
+					mkdir -p "$TMP_EXTRACT_DIR"
+					unzip -o "$HOME/pgs-to-srt.zip" -d "$TMP_EXTRACT_DIR"
+					
+					# Step 4: Find the pgs-to-srt.js file
+					echo "Locating pgs-to-srt.js file..."
+					JS_FILE=$(find "$TMP_EXTRACT_DIR" -name "pgs-to-srt.js" | head -n 1)
+					
+					if [ -z "$JS_FILE" ]; then
+					  echo "Installation failed: pgs-to-srt.js not found in extracted files"
+					  rm -rf "$TMP_EXTRACT_DIR"
+					  rm -f "$HOME/pgs-to-srt.zip"
+					  exit 1
+					fi
+					
+					echo "Found pgs-to-srt.js at: $JS_FILE"
+					
+					# Copy all extracted files to the target location
+					echo "Copying all extracted files to $HOME/pgs-to-srt..."
+					
+					# Find the parent directory containing all extracted files
+					JS_DIR=$(dirname "$JS_FILE")
+					
+					# Copy all files and directories from the extraction directory
+					cp -R "$JS_DIR"/* "$HOME/pgs-to-srt/"
+					
+					# Step 5: Install using deno
+					echo "Installing PGS-to-SRT using deno..."
+					cd "$HOME/pgs-to-srt"
+					deno install --global -f --allow-read "pgs-to-srt.js"
+					
+					# Clean up
+					rm -rf "$TMP_EXTRACT_DIR"
+					rm -f "$HOME/pgs-to-srt.zip"
+					
+					echo "PGS-to-SRT installed successfully"
+					exit 0
+					`
+
+					// Write the script to a temporary file
+					installScriptPath := filepath.Join(tempDir, "install_pgs_to_srt.sh")
+					err = os.WriteFile(installScriptPath, []byte(scriptContent), 0755)
+					if err != nil {
+						progress.Hide()
+						dialog.ShowError(
+							fmt.Errorf("Failed to create installation script: %v", err),
+							w)
+						return
+					}
+
+					// Execute the script
+					cmd = exec.Command("bash", installScriptPath)
+					installDesc = "Installing PGS-to-SRT script"
+
+					// Update the global path variable to point to the installed script
+					pgsToSrtScriptPath = filepath.Join(os.Getenv("HOME"), "pgs-to-srt", "pgs-to-srt.js")
 				default:
 					// Hide the progress dialog
 					progress.Hide()
@@ -447,11 +592,11 @@ func updateDependencyStatus(w fyne.Window) {
 	missingTools := []string{}
 
 	// We'll use a simpler approach with plain text for now since color styling is causing issues
-	
+
 	// Process each dependency
 	for tool, installed := range dependencyResults {
 		var status string
-		
+
 		if installed {
 			status = "✅ Installed"
 		} else {
@@ -459,7 +604,7 @@ func updateDependencyStatus(w fyne.Window) {
 			allDependenciesInstalled = false
 			missingTools = append(missingTools, tool)
 		}
-		
+
 		dependencyStatus += fmt.Sprintf("- %s: %s\n", tool, status)
 	}
 
@@ -1694,8 +1839,8 @@ func main() {
 							trackList.Refresh()
 						})
 
-						// Use the user's custom pgs-to-srt-2 tool with Deno
-						pgsToSrtScript := "/Users/venimk/Downloads/pgs-to-srt-2/pgs-to-srt.js"
+						// Use the configured PGS-to-SRT script with Deno
+						pgsToSrtScript := pgsToSrtScriptPath
 						// Get language from user selection or use track language as default
 						langCode := "eng" // Default to English
 						if t.Lang != "" {
@@ -3370,28 +3515,28 @@ func main() {
 		}
 	})
 	themeSelector.SetSelected("Dark Theme") // Set to match current theme
-	
+
 	// Create a styled theme label with custom color
 	themeLabel := widget.NewLabelWithStyle("Application Theme:", fyne.TextAlignLeading, fyne.TextStyle{
 		Bold:      true,
 		Italic:    false,
 		Monospace: false,
 	})
-	
+
 	// Create a colored rectangle background for the label
 	labelRect := canvas.NewRectangle(color.NRGBA{R: 40, G: 40, B: 80, A: 255})
 	labelContainer := container.NewStack(labelRect, container.NewPadded(themeLabel))
-	
+
 	// Note: Standard labels don't support direct color setting
 	// Instead, we're using a colored background with the default text color
-	
+
 	// Create a button to apply theme changes with custom styling and color
 	applyThemeBtn := widget.NewButtonWithIcon("Apply Theme", theme.ConfirmIcon(), func() {
 		// The theme is already applied in the selector's onChange function
 		dialog.ShowInformation("Theme Applied", "Application theme has been updated.", w)
 	})
 	applyThemeBtn.Importance = widget.HighImportance
-	
+
 	// Create a custom colored apply button
 	applyBtnBackground := canvas.NewRectangle(color.NRGBA{R: 0, G: 120, B: 80, A: 255})
 	applyBtnContainer := container.NewStack(applyBtnBackground, container.NewPadded(applyThemeBtn))
@@ -3405,23 +3550,64 @@ func main() {
 	versionInfo := widget.NewRichText(
 		&widget.TextSegment{Text: "Subtitle Forge v1.6.2\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
 		&widget.TextSegment{Text: "A tool for extracting and converting subtitles from MKV files.\n\n"},
-		&widget.TextSegment{Text: "© 2025 VenimK@David Software\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Italic: true}}},
+		&widget.TextSegment{Text: " 2025 VenimK@David Software\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Italic: true}}},
 	)
 	versionInfo.Wrapping = fyne.TextWrapWord
 
 	// Add a helpful description of dependencies
 	dependencyDescription := widget.NewLabel("The application requires these external tools to function properly:")
 	dependencyDescription.Wrapping = fyne.TextWrapWord
-	
+
 	// Create a list of dependencies with descriptions
-	dependencyList := widget.NewLabel("• FFmpeg: Used for video and subtitle processing\n• vobsub2srt: Converts VobSub subtitles to SRT format\n• MKVMerge: Used for MKV file manipulation\n• MKVExtract: Extracts content from MKV files\n• Deno: JavaScript runtime for scripts\n• Tesseract: Optical character recognition for subtitles\n• Go: Required for building the application")
+	dependencyList := widget.NewLabel("• FFmpeg: Used for video and subtitle processing\n• vobsub2srt: Converts VobSub subtitles to SRT format\n• MKVMerge: Used for MKV file manipulation\n• MKVExtract: Extracts content from MKV files\n• Deno: JavaScript runtime for scripts\n• Tesseract: Optical character recognition for subtitles\n• Go: Required for building the application\n• PGStoSRT: Script for converting PGS subtitles to SRT format")
 	dependencyList.Wrapping = fyne.TextWrapWord
-	
+
 	// Instructions for missing dependencies
 	dependencyInstructions := widget.NewLabel("If any dependencies are missing, use the buttons below to install them.")
 	dependencyInstructions.Wrapping = fyne.TextWrapWord
 	dependencyInstructions.TextStyle = fyne.TextStyle{Italic: true}
-	
+
+	// Create a section for PGS to SRT script configuration
+	pgsToSrtTitle := canvas.NewText("PGS to SRT Script Configuration", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	pgsToSrtTitle.TextSize = 16
+	pgsToSrtTitle.TextStyle.Bold = true
+
+	// Create a label to display the current script path
+	pgsToSrtPathLabel := widget.NewLabel(pgsToSrtScriptPath)
+	pgsToSrtPathLabel.Wrapping = fyne.TextWrapWord
+
+	// Create a button to browse for the script file
+	pgsToSrtBrowseBtn := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
+		// Create a file open dialog
+		dlg := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+
+			// Update the script path
+			pgsToSrtScriptPath = reader.URI().Path()
+			pgsToSrtPathLabel.SetText(pgsToSrtScriptPath)
+			reader.Close()
+
+			// Run the dependency check again to update status
+			updateDependencyStatus(w)
+		}, w)
+
+		// Set filters for JavaScript files
+		dlg.SetFilter(storage.NewExtensionFileFilter([]string{".js"}))
+		dlg.Show()
+	})
+
+	// Create a form layout for the PGS to SRT script configuration
+	pgsToSrtForm := container.New(layout.NewFormLayout(),
+		widget.NewLabel("Script Path:"),
+		container.NewBorder(nil, nil, nil, pgsToSrtBrowseBtn, pgsToSrtPathLabel),
+	)
+
+	// Add a description for the PGS to SRT script
+	pgsToSrtDescription := widget.NewLabel("The PGS to SRT script is used to convert PGS subtitles to SRT format. It requires Deno runtime.")
+	pgsToSrtDescription.Wrapping = fyne.TextWrapWord
+
 	// Combine all dependency components
 	dependencySection := container.NewVBox(
 		dependencyTitle,
@@ -3430,6 +3616,10 @@ func main() {
 		container.NewPadded(settingsLabel),
 		container.NewPadded(dependencyInstructions),
 		container.NewPadded(dependencyButtons),
+		canvas.NewLine(color.NRGBA{R: 200, G: 200, B: 200, A: 128}),
+		container.NewPadded(pgsToSrtTitle),
+		container.NewPadded(pgsToSrtDescription),
+		container.NewPadded(pgsToSrtForm),
 	)
 
 	// Custom themed button for resetting to default settings
@@ -3439,36 +3629,36 @@ func main() {
 		themeSelector.SetSelected("Dark Theme")
 		dialog.ShowInformation("Settings Reset", "Settings have been reset to defaults.", w)
 	})
-	
+
 	// Style the reset button
 	resetSettingsBtn.Importance = widget.MediumImportance
-	
+
 	// Create a custom colored reset button
 	resetBtnBackground := canvas.NewRectangle(color.NRGBA{R: 120, G: 60, B: 0, A: 255})
 	resetBtnContainer := container.NewStack(resetBtnBackground, container.NewPadded(resetSettingsBtn))
-	
+
 	// Create a styled container for theme buttons
 	themeButtonsContainer := container.NewHBox(
 		applyBtnContainer,
 		layout.NewSpacer(),
 		resetBtnContainer,
 	)
-	
+
 	// Create info label with custom color styling
 	themeInfoLabel := widget.NewRichTextWithText("Select a theme and click Apply to change the application appearance.")
 	themeInfoLabel.Segments[0].(*widget.TextSegment).Style = widget.RichTextStyle{
 		TextStyle: fyne.TextStyle{Italic: true},
 		ColorName: theme.ColorNameForeground,
 	}
-	
+
 	// Create a colored background for the info text
 	infoBackground := canvas.NewRectangle(color.NRGBA{R: 40, G: 40, B: 60, A: 255})
 	infoContainer := container.NewStack(infoBackground, container.NewPadded(themeInfoLabel))
-	
+
 	// Set a custom color for the info text - using ColorName from theme
 	// Note: RichTextStyle doesn't have a direct Color field
 	themeInfoLabel.Segments[0].(*widget.TextSegment).Style.ColorName = theme.ColorNamePrimary
-	
+
 	// Assemble theme section with styled and colored components
 	themeSection := container.NewVBox(
 		container.NewPadded(themeTitle),
