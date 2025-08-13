@@ -11,43 +11,86 @@ import (
 type CustomTheme struct {
 	// Embed the default theme to get default values for unspecified theme elements
 	defaultTheme fyne.Theme
+	// User preferences for theme colors
+	userPrefs UserThemePreferences
+	// Whether to use custom colors or default theme colors
+	useCustomColors bool
 }
 
 // NewCustomTheme creates a new instance of our custom theme
 func NewCustomTheme() fyne.Theme {
+	// Load user preferences
+	userPrefs, err := LoadThemePreferences()
+	if err != nil {
+		// If there's an error loading preferences, use defaults
+		userPrefs = DefaultUserThemePreferences()
+	}
+
 	return &CustomTheme{
 		defaultTheme: theme.DefaultTheme(),
+		userPrefs:    userPrefs,
+		useCustomColors: true, // Default to using custom colors
+	}
+}
+
+// NewCustomThemeWithPrefs creates a new instance of our custom theme with specific preferences
+func NewCustomThemeWithPrefs(prefs UserThemePreferences, useCustom bool) fyne.Theme {
+	return &CustomTheme{
+		defaultTheme: theme.DefaultTheme(),
+		userPrefs:    prefs,
+		useCustomColors: useCustom,
 	}
 }
 
 // Color returns the color for the specified name
 func (t *CustomTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	// If not using custom colors, delegate to the default theme
+	if !t.useCustomColors {
+		return t.defaultTheme.Color(name, variant)
+	}
+
+	// Otherwise use our custom colors from user preferences
 	switch name {
 	case theme.ColorNamePrimary:
-		return color.NRGBA{R: 0, G: 100, B: 150, A: 255} // Blue-ish
+		return t.userPrefs.PrimaryColor
 	case theme.ColorNameBackground:
-		return color.NRGBA{R: 240, G: 240, B: 245, A: 255} // Very light blue-gray
+		return t.userPrefs.BackgroundColor
 	case theme.ColorNameButton:
-		return color.NRGBA{R: 220, G: 220, B: 240, A: 255} // Light purple-blue
+		return t.userPrefs.ButtonColor
 	case theme.ColorNameDisabled:
-		return color.NRGBA{R: 180, G: 180, B: 180, A: 128} // Gray with transparency
+		return t.userPrefs.DisabledColor
 	case theme.ColorNameForeground:
-		return color.NRGBA{R: 40, G: 40, B: 50, A: 255} // Dark blue-gray, almost black
+		return t.userPrefs.ForegroundColor
 	case theme.ColorNameHover:
-		return color.NRGBA{R: 0, G: 120, B: 180, A: 30} // Translucent blue for hover effect
+		return t.userPrefs.HoverColor
 	case theme.ColorNameInputBackground:
-		return color.NRGBA{R: 230, G: 230, B: 240, A: 255} // Very light purple for input fields
+		return t.userPrefs.InputBgColor
 	case theme.ColorNamePlaceHolder:
-		return color.NRGBA{R: 150, G: 150, B: 170, A: 255} // Muted blue-gray for placeholders
+		return t.userPrefs.PlaceholderColor
 	case theme.ColorNamePressed:
-		return color.NRGBA{R: 0, G: 80, B: 120, A: 255} // Darker blue for pressed state
+		return t.userPrefs.PressedColor
 	case theme.ColorNameScrollBar:
-		return color.NRGBA{R: 200, G: 200, B: 220, A: 255} // Light purple-blue for scrollbar
+		return t.userPrefs.ScrollBarColor
 	case theme.ColorNameShadow:
-		return color.NRGBA{R: 0, G: 0, B: 0, A: 40} // Semi-transparent shadow
+		return t.userPrefs.ShadowColor
 	}
 
 	return t.defaultTheme.Color(name, variant)
+}
+
+// GetUserPreferences returns the current user preferences
+func (t *CustomTheme) GetUserPreferences() UserThemePreferences {
+	return t.userPrefs
+}
+
+// SetUserPreferences updates the theme with new user preferences
+func (t *CustomTheme) SetUserPreferences(prefs UserThemePreferences) {
+	t.userPrefs = prefs
+}
+
+// SetUseCustomColors sets whether to use custom colors or default theme colors
+func (t *CustomTheme) SetUseCustomColors(useCustom bool) {
+	t.useCustomColors = useCustom
 }
 
 // Font returns the font resource for the specified style and size

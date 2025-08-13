@@ -1121,14 +1121,31 @@ func main() {
 	a := app.NewWithID("com.gmm.subtitleforge")
 	a.SetIcon(theme.FileTextIcon())
 
-	// Apply dark theme to the entire application
-	a.Settings().SetTheme(theme.DarkTheme())
+	// Apply theme based on saved preference
+	savedTheme := a.Preferences().StringWithFallback("theme", "Dark Theme")
+	switch savedTheme {
+	case "Light Theme":
+		a.Settings().SetTheme(theme.LightTheme())
+	case "Dark Theme":
+		a.Settings().SetTheme(theme.DarkTheme())
+	case "Custom Theme":
+		customTheme := NewCustomTheme().(*CustomTheme)
+		customTheme.SetUseCustomColors(true)
+		a.Settings().SetTheme(customTheme)
+	default:
+		a.Settings().SetTheme(theme.DefaultTheme())
+	}
 
 	// Create main window with explicit name
 	w := a.NewWindow("Subtitle Forge")
 	// Set app metadata on window
 	w.SetMaster()
 	w.CenterOnScreen()
+	// Ensure window has adequate size
+	// In Fyne, windows are resizable by default unless explicitly set as fixed size
+	w.Resize(fyne.NewSize(1024, 768))
+	// Explicitly ensure the window is not fixed size
+	w.SetFixedSize(false)
 
 	// Setup keyboard shortcuts
 	setupKeyboardShortcuts := func(fileOpenFunc, dirChangeFunc, loadTracksFunc, startExtractFunc func()) {
@@ -2963,7 +2980,7 @@ func main() {
 
 	// Use a more efficient layout with container.NewBorder for better performance
 	// Create app title with version
-	titleLabel := widget.NewLabel("Subtitle Forge v1.6.2")
+	titleLabel := widget.NewLabel("Subtitle Forge v1.6.5")
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	topContent := container.NewVBox(
@@ -3503,18 +3520,30 @@ func main() {
 	themeTitle.TextStyle.Bold = true
 
 	// Theme selector with styled label
-	themeOptions := []string{"System Default", "Light Theme", "Dark Theme"}
+	themeOptions := []string{"System Default", "Light Theme", "Dark Theme", "Custom Theme"}
 	themeSelector := widget.NewSelect(themeOptions, func(selected string) {
+		// Save the theme preference
+		a.Preferences().SetString("theme", selected)
+		
 		switch selected {
 		case "Light Theme":
 			a.Settings().SetTheme(theme.LightTheme())
 		case "Dark Theme":
 			a.Settings().SetTheme(theme.DarkTheme())
+		case "Custom Theme":
+			// Create a custom theme with user preferences
+			customTheme := NewCustomTheme().(*CustomTheme)
+			// Enable custom colors
+			customTheme.SetUseCustomColors(true)
+			a.Settings().SetTheme(customTheme)
 		default:
 			a.Settings().SetTheme(theme.DefaultTheme())
 		}
 	})
-	themeSelector.SetSelected("Dark Theme") // Set to match current theme
+	
+	// Load saved theme preference or default to Dark Theme
+	selectedTheme := a.Preferences().StringWithFallback("theme", "Dark Theme")
+	themeSelector.SetSelected(selectedTheme)
 
 	// Create a styled theme label with custom color
 	themeLabel := widget.NewLabelWithStyle("Application Theme:", fyne.TextAlignLeading, fyne.TextStyle{
@@ -3532,14 +3561,41 @@ func main() {
 
 	// Create a button to apply theme changes with custom styling and color
 	applyThemeBtn := widget.NewButtonWithIcon("Apply Theme", theme.ConfirmIcon(), func() {
-		// The theme is already applied in the selector's onChange function
-		dialog.ShowInformation("Theme Applied", "Application theme has been updated.", w)
+		// Get the currently selected theme
+		selected := themeSelector.Selected
+		
+		// Save the theme preference
+		a.Preferences().SetString("theme", selected)
+		
+		// Apply the theme based on selection
+		switch selected {
+		case "Light Theme":
+			a.Settings().SetTheme(theme.LightTheme())
+		case "Dark Theme":
+			a.Settings().SetTheme(theme.DarkTheme())
+		case "Custom Theme":
+			customTheme := NewCustomTheme().(*CustomTheme)
+			customTheme.SetUseCustomColors(true)
+			a.Settings().SetTheme(customTheme)
+		default:
+			a.Settings().SetTheme(theme.DefaultTheme())
+		}
+		
+		dialog.ShowInformation("Theme Applied", "Application theme has been updated and saved.", w)
 	})
 	applyThemeBtn.Importance = widget.HighImportance
 
 	// Create a custom colored apply button
 	applyBtnBackground := canvas.NewRectangle(color.NRGBA{R: 0, G: 120, B: 80, A: 255})
 	applyBtnContainer := container.NewStack(applyBtnBackground, container.NewPadded(applyThemeBtn))
+
+	// Create a button to customize theme colors
+	customizeThemeBtn := widget.NewButtonWithIcon("Customize Colors", theme.ColorPaletteIcon(), func() {
+		// Open the theme customizer dialog
+		customizer := NewThemeCustomizer(a, w)
+		customizer.Show()
+	})
+	customizeThemeBtn.Importance = widget.MediumImportance
 
 	// Help section
 	helpTitle := canvas.NewText("Help & Information", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
@@ -3548,7 +3604,7 @@ func main() {
 
 	// App information
 	versionInfo := widget.NewRichText(
-		&widget.TextSegment{Text: "Subtitle Forge v1.6.2\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Text: "Subtitle Forge v1.6.5\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
 		&widget.TextSegment{Text: "A tool for extracting and converting subtitles from MKV files.\n\n"},
 		&widget.TextSegment{Text: " 2025 VenimK@David Software\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Italic: true}}},
 	)
@@ -3641,6 +3697,8 @@ func main() {
 	themeButtonsContainer := container.NewHBox(
 		applyBtnContainer,
 		layout.NewSpacer(),
+		customizeThemeBtn,
+		layout.NewSpacer(),
 		resetBtnContainer,
 	)
 
@@ -3689,11 +3747,16 @@ func main() {
 	)
 	updateDependencyStatus(w)
 
-	// Create tabs
+	// Wrap each tab content in a scroll container to ensure proper resizability
+	extractScroll := container.NewScroll(extractTabContent)
+	insertScroll := container.NewScroll(insertTabContent)
+	settingsScroll := container.NewScroll(settingsTabContent)
+	
+	// Create tabs with scrollable content
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Extract Subtitles", extractTabContent),
-		container.NewTabItem("Insert Subtitles", insertTabContent),
-		container.NewTabItem("Settings", settingsTabContent),
+		container.NewTabItem("Extract Subtitles", extractScroll),
+		container.NewTabItem("Insert Subtitles", insertScroll),
+		container.NewTabItem("Settings", settingsScroll),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 
