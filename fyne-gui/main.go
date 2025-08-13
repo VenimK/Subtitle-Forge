@@ -1036,6 +1036,8 @@ func copyFile(src, dst string) error {
 }
 
 // Helper function to adjust SRT timing
+
+
 func adjustSRTTiming(content string, offsetSeconds float64) string {
 	lines := strings.Split(content, "\n")
 	result := []string{}
@@ -1125,12 +1127,31 @@ func main() {
 	savedTheme := a.Preferences().StringWithFallback("theme", "Dark Theme")
 	switch savedTheme {
 	case "Light Theme":
-		a.Settings().SetTheme(theme.LightTheme())
+		customTheme := NewCustomThemeWithPrefs(LightTheme(), true).(*CustomTheme)
+		a.Settings().SetTheme(customTheme)
 	case "Dark Theme":
-		a.Settings().SetTheme(theme.DarkTheme())
-	case "Custom Theme":
-		customTheme := NewCustomTheme().(*CustomTheme)
-		customTheme.SetUseCustomColors(true)
+		customTheme := NewCustomThemeWithPrefs(DarkTheme(), true).(*CustomTheme)
+		a.Settings().SetTheme(customTheme)
+	case "Blue Theme":
+		customTheme := NewCustomThemeWithPrefs(BlueCoolTheme(), true).(*CustomTheme)
+		a.Settings().SetTheme(customTheme)
+	case "Warm Theme":
+		customTheme := NewCustomThemeWithPrefs(WarmToneTheme(), true).(*CustomTheme)
+		a.Settings().SetTheme(customTheme)
+	case "Green Theme":
+		customTheme := NewCustomThemeWithPrefs(VibrantGreenTheme(), true).(*CustomTheme)
+		a.Settings().SetTheme(customTheme)
+	case "Spring Theme":
+		customTheme := NewCustomThemeWithPrefs(SpringTheme(), true).(*CustomTheme)
+		a.Settings().SetTheme(customTheme)
+	case "Summer Theme":
+		customTheme := NewCustomThemeWithPrefs(SummerTheme(), true).(*CustomTheme)
+		a.Settings().SetTheme(customTheme)
+	case "Autumn Theme":
+		customTheme := NewCustomThemeWithPrefs(AutumnTheme(), true).(*CustomTheme)
+		a.Settings().SetTheme(customTheme)
+	case "Winter Theme":
+		customTheme := NewCustomThemeWithPrefs(WinterTheme(), true).(*CustomTheme)
 		a.Settings().SetTheme(customTheme)
 	default:
 		a.Settings().SetTheme(theme.DefaultTheme())
@@ -1432,7 +1453,7 @@ func main() {
 		// Create a file filter for MKV files
 		filter := storage.NewExtensionFileFilter([]string{".mkv"})
 
-		// Use custom dialog with filter
+		// Create a file dialog with explicit styling for readability
 		fd := dialog.NewFileOpen(func(file fyne.URIReadCloser, err error) {
 			if err != nil || file == nil {
 				return
@@ -2760,12 +2781,14 @@ func main() {
 							// Convert 3-letter code to 2-letter code if a mapping exists
 							if twoLetterCode, exists := langCodeMap[strings.ToLower(langCode)]; exists {
 								fyne.Do(func() {
-									result.SetText(result.Text + fmt.Sprintf("\n[DEBUG] Mapped language code: %s -> %s", langCode, twoLetterCode))
+									// Use bold formatting for important debug information to improve readability
+									result.SetText(result.Text + fmt.Sprintf("\n[DEBUG] Mapped language code: ** %s -> %s **", langCode, twoLetterCode))
 								})
 								langCode = twoLetterCode
 							} else {
 								fyne.Do(func() {
-									result.SetText(result.Text + fmt.Sprintf("\n[DEBUG] No mapping found for language code: %s, using as-is", langCode))
+									// Use bold formatting for important debug information to improve readability
+									result.SetText(result.Text + fmt.Sprintf("\n[DEBUG] No mapping found for language code: ** %s **, using as-is", langCode))
 								})
 							}
 						}
@@ -3238,13 +3261,30 @@ func main() {
 	})
 	langDropdown.SetSelected("English")
 
-	// Create custom language code dropdown
+	// Create custom language code dropdown with improved readability
 	selectedLangCode := "eng"
+	
+	// Create the dropdown with explicit text color
 	customLangDropdown := widget.NewSelect(langCodes, func(selected string) {
 		selectedLangCode = selected
 	})
 	customLangDropdown.SetSelected("eng")
+	
+	// Create a high-contrast container for the dropdown
+	padded := container.NewPadded(customLangDropdown)
+	langCodeContainer := container.NewMax(
+		// Light background rectangle for contrast
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		// Add the dropdown directly
+		padded,
+	)
+	
+	// Create a card with the high-contrast container
+	langCodeCard := widget.NewCard("", "", langCodeContainer)
+	
+	// Initially hide both elements
 	customLangDropdown.Hide()
+	langCodeCard.Hide()
 
 	// Create track name entry
 	trackNameEntry := widget.NewEntry()
@@ -3275,9 +3315,11 @@ func main() {
 		selectedLang = selected
 		if selected == "Custom" {
 			customLangDropdown.Show()
+			langCodeCard.Show()
 			// Don't auto-update track name for custom selection
 		} else {
 			customLangDropdown.Hide()
+			langCodeCard.Hide()
 			// Automatically select the corresponding language code
 			if code, ok := languages[selected]; ok {
 				// Find the matching code in langCodes
@@ -3421,54 +3463,144 @@ func main() {
 	// Set placeholders with extra spaces to make input fields wider
 	trackNameEntry.SetPlaceHolder("Enter track name...                                                ")
 
-	// Create section titles with bold styling
-	languageTitle := canvas.NewText("Language Settings", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
-	languageTitle.TextSize = 16
-	languageTitle.TextStyle.Bold = true
+	// Create section titles with explicit styling for guaranteed readability
+	languageTitleContainer := container.NewMax(
+		// Light background for contrast
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		// Bold text with dark color for maximum readability
+		canvas.NewText("Language Settings", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+	)
+	languageTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
+	languageTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
+	
+	trackOptionsTitleContainer := container.NewMax(
+		// Light background for contrast
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		// Bold text with dark color for maximum readability
+		canvas.NewText("Track Options", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+	)
+	trackOptionsTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
+	trackOptionsTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
+	
+	// Create separator for visual distinction
+	languageSeparator := widget.NewSeparator()
+	trackOptionsSeparator := widget.NewSeparator()
 
-	trackOptionsTitle := canvas.NewText("Track Options", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
-	trackOptionsTitle.TextSize = 16
-	trackOptionsTitle.TextStyle.Bold = true
-
-	// Create form layout for better alignment of labels and inputs
+	// Create form layout for better alignment of labels and inputs with enhanced readability
+	// Create labels with explicit styling for guaranteed readability
+	languageLabelContainer := container.NewMax(
+		// Light background for contrast
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		// Bold text with dark color for maximum readability
+		canvas.NewText("Language:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+	)
+	languageLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
+	
+	langCodeLabelContainer := container.NewMax(
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		canvas.NewText("Language Code:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+	)
+	langCodeLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
+	
+	trackNameLabelContainer := container.NewMax(
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		canvas.NewText("Track Name:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+	)
+	trackNameLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
+	
+	// Create a high-contrast container for the track name entry
+	trackNamePadded := container.NewPadded(trackNameEntry)
+	trackNameContainer := container.NewMax(
+		// Light background rectangle for contrast
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		// Add the entry directly
+		trackNamePadded,
+	)
+	
+	// Create a card with the high-contrast container
+	trackNameCard := widget.NewCard("", "", trackNameContainer)
+	
+	// Create form layout with high-contrast labels
 	languageForm := container.New(layout.NewFormLayout(),
-		widget.NewLabel("Language:"),
+		languageLabelContainer,
 		langDropdown,
-		widget.NewLabel("Language Code:"),
-		customLangDropdown,
-		widget.NewLabel("Track Name:"),
-		trackNameEntry,
+		langCodeLabelContainer,
+		langCodeCard, // Using the card we created earlier
+		trackNameLabelContainer,
+		trackNameCard,
+	)
+	
+	// Create a container for the language section with title, separator, and form
+	languageSection := container.NewVBox(
+		languageTitleContainer,
+		languageSeparator,
+		languageForm,
 	)
 
-	// Group track options
+	// Group track options with separator for visual distinction
 	trackOptionsContainer := container.NewVBox(
+		trackOptionsTitleContainer,
+		trackOptionsSeparator,
 		defaultTrack,
 		forcedTrack,
 		removeOtherTracks,
 	)
 
-	// Group subtitle options with improved organization
+	// Group subtitle options with improved organization and readability
 	subtitleOptionsGroup := widget.NewCard("Subtitle Options", "", container.NewVBox(
-		container.NewPadded(languageTitle),
-		container.NewPadded(languageForm),
-		canvas.NewLine(color.NRGBA{R: 200, G: 200, B: 200, A: 128}),
-		container.NewPadded(trackOptionsTitle),
-		container.NewPadded(trackOptionsContainer),
+		container.NewPadded(languageSection), // Using our new language section with title and separator
+		container.NewPadded(trackOptionsContainer), // Track options already include title and separator
 	))
 
 	// Group output options
 	// Make output filename entry wider with placeholder
 	outputNameEntry.SetPlaceHolder("Enter output filename (leave empty to use original filename)...                                         ")
 
-	// Create section title with bold styling
-	outputTitle := canvas.NewText("Output Configuration", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
-	outputTitle.TextSize = 16
-	outputTitle.TextStyle.Bold = true
-
-	// Create form layout for better alignment
+	// Create output title with explicit styling for guaranteed readability
+	outputTitleContainer := container.NewMax(
+		// Light background for contrast
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		// Bold text with dark color for maximum readability
+		canvas.NewText("Output Configuration", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+	)
+	outputTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
+	outputTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
+	
+	// Create a separator for visual distinction
+	outputSeparator := widget.NewSeparator()
+	
+	// Create output filename label with explicit styling for guaranteed readability
+	outputFilenameLabelContainer := container.NewMax(
+		// Light background for contrast
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		// Bold text with dark color for maximum readability
+		canvas.NewText("Output Filename:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+	)
+	outputFilenameLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
+	
+	// Create a high-contrast container for the output filename entry
+	outputNamePadded := container.NewPadded(outputNameEntry)
+	outputNameContainer := container.NewMax(
+		// Light background rectangle for contrast
+		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
+		// Add the entry directly
+		outputNamePadded,
+	)
+	
+	// Create a card with the high-contrast container
+	outputNameCard := widget.NewCard("", "", outputNameContainer)
+	
+	// Create form layout for better alignment with high-contrast labels
 	outputForm := container.New(layout.NewFormLayout(),
-		widget.NewLabel("Output Filename:"),
-		outputNameEntry,
+		outputFilenameLabelContainer,
+		outputNameCard,
+	)
+	
+	// Create a container for the output section with title and separator
+	outputSection := container.NewVBox(
+		outputTitleContainer,
+		outputSeparator,
+		outputForm,
 	)
 
 	// Add helpful text
@@ -3481,10 +3613,9 @@ func main() {
 	// Style the insert button
 	insertSubtitleBtn.Importance = widget.HighImportance
 
-	// Group output options with improved organization
+	// Group output options with improved organization and readability
 	outputOptionsGroup := widget.NewCard("Output Options", "", container.NewVBox(
-		container.NewPadded(outputTitle),
-		container.NewPadded(outputForm),
+		container.NewPadded(outputSection), // Using our new output section with title and separator
 		container.NewPadded(helpText),
 		container.NewHBox(layout.NewSpacer(), insertSubtitleBtn, layout.NewSpacer()),
 	))
@@ -3520,21 +3651,47 @@ func main() {
 	themeTitle.TextStyle.Bold = true
 
 	// Theme selector with styled label
-	themeOptions := []string{"System Default", "Light Theme", "Dark Theme", "Custom Theme"}
+	themeOptions := []string{"System Default", "Light Theme", "Dark Theme", "Blue Theme", "Warm Theme", "Green Theme", "Spring Theme", "Summer Theme", "Autumn Theme", "Winter Theme"}
 	themeSelector := widget.NewSelect(themeOptions, func(selected string) {
 		// Save the theme preference
 		a.Preferences().SetString("theme", selected)
 		
 		switch selected {
 		case "Light Theme":
-			a.Settings().SetTheme(theme.LightTheme())
+			// Use our predefined light theme
+			customTheme := NewCustomThemeWithPrefs(LightTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
 		case "Dark Theme":
-			a.Settings().SetTheme(theme.DarkTheme())
-		case "Custom Theme":
-			// Create a custom theme with user preferences
-			customTheme := NewCustomTheme().(*CustomTheme)
-			// Enable custom colors
-			customTheme.SetUseCustomColors(true)
+			// Use our predefined dark theme
+			customTheme := NewCustomThemeWithPrefs(DarkTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Blue Theme":
+			// Use our predefined blue theme
+			customTheme := NewCustomThemeWithPrefs(BlueCoolTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Warm Theme":
+			// Use our predefined warm theme
+			customTheme := NewCustomThemeWithPrefs(WarmToneTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Green Theme":
+			// Use our predefined green theme
+			customTheme := NewCustomThemeWithPrefs(VibrantGreenTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Spring Theme":
+			// Use our spring theme
+			customTheme := NewCustomThemeWithPrefs(SpringTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Summer Theme":
+			// Use our summer theme
+			customTheme := NewCustomThemeWithPrefs(SummerTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Autumn Theme":
+			// Use our autumn theme
+			customTheme := NewCustomThemeWithPrefs(AutumnTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Winter Theme":
+			// Use our winter theme
+			customTheme := NewCustomThemeWithPrefs(WinterTheme(), true).(*CustomTheme)
 			a.Settings().SetTheme(customTheme)
 		default:
 			a.Settings().SetTheme(theme.DefaultTheme())
@@ -3570,12 +3727,19 @@ func main() {
 		// Apply the theme based on selection
 		switch selected {
 		case "Light Theme":
-			a.Settings().SetTheme(theme.LightTheme())
+			customTheme := NewCustomThemeWithPrefs(LightTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
 		case "Dark Theme":
-			a.Settings().SetTheme(theme.DarkTheme())
-		case "Custom Theme":
-			customTheme := NewCustomTheme().(*CustomTheme)
-			customTheme.SetUseCustomColors(true)
+			customTheme := NewCustomThemeWithPrefs(DarkTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Blue Theme":
+			customTheme := NewCustomThemeWithPrefs(BlueCoolTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Warm Theme":
+			customTheme := NewCustomThemeWithPrefs(WarmToneTheme(), true).(*CustomTheme)
+			a.Settings().SetTheme(customTheme)
+		case "Green Theme":
+			customTheme := NewCustomThemeWithPrefs(VibrantGreenTheme(), true).(*CustomTheme)
 			a.Settings().SetTheme(customTheme)
 		default:
 			a.Settings().SetTheme(theme.DefaultTheme())
@@ -3589,13 +3753,7 @@ func main() {
 	applyBtnBackground := canvas.NewRectangle(color.NRGBA{R: 0, G: 120, B: 80, A: 255})
 	applyBtnContainer := container.NewStack(applyBtnBackground, container.NewPadded(applyThemeBtn))
 
-	// Create a button to customize theme colors
-	customizeThemeBtn := widget.NewButtonWithIcon("Customize Colors", theme.ColorPaletteIcon(), func() {
-		// Open the theme customizer dialog
-		customizer := NewThemeCustomizer(a, w)
-		customizer.Show()
-	})
-	customizeThemeBtn.Importance = widget.MediumImportance
+	// No theme customization option - using predefined themes only
 
 	// Help section
 	helpTitle := canvas.NewText("Help & Information", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
@@ -3696,8 +3854,6 @@ func main() {
 	// Create a styled container for theme buttons
 	themeButtonsContainer := container.NewHBox(
 		applyBtnContainer,
-		layout.NewSpacer(),
-		customizeThemeBtn,
 		layout.NewSpacer(),
 		resetBtnContainer,
 	)
