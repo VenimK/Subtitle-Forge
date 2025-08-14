@@ -45,8 +45,46 @@ type TrackItem struct {
 	LangSelect *widget.Select // Language selection dropdown for OCR
 }
 
-// checkDependencies verifies if all required external dependencies
+// Global debug logger for dependency checks
+var debugLogger *os.File
+
+// Helper function to get current working directory
+func getCurrentDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "<error getting working directory>"
+	}
+	return dir
+}
+
+// Helper function to get executable path
+func getExecutablePath() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "<error getting executable path>"
+	}
+	return exePath
+}
+
+// checkDependencies verifies if all required external dependencies are installed
 func checkDependencies() map[string]bool {
+	// Create a debug log file in the user's home directory
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		logPath := filepath.Join(homeDir, "subtitle_forge_debug.log")
+		logFile, err := os.Create(logPath)
+		if err == nil {
+			defer logFile.Close()
+			fmt.Fprintf(logFile, "=== Subtitle Forge Dependency Check Debug Log ===\n")
+			fmt.Fprintf(logFile, "Time: %s\n", time.Now().Format(time.RFC3339))
+			fmt.Fprintf(logFile, "Working Directory: %s\n", getCurrentDir())
+			fmt.Fprintf(logFile, "Executable Path: %s\n", getExecutablePath())
+			fmt.Fprintf(logFile, "Environment PATH: %s\n\n", os.Getenv("PATH"))
+			
+			// Set up a global debug logger that can be used by dependency check functions
+			debugLogger = logFile
+		}
+	}
 	dependencyResults := make(map[string]bool)
 	dependencyResults["FFmpeg"] = checkFfmpeg()
 	dependencyResults["vobsub2srt"] = checkVobsub2srt()
@@ -62,107 +100,189 @@ func checkDependencies() map[string]bool {
 
 // Check for ffmpeg installation
 func checkFfmpeg() bool {
-	// First try Homebrew path explicitly (preferred)
-	homebrewPath := "/opt/homebrew/bin/ffmpeg"
 	ffmpegFound := false
-
-	// Debug output for ffmpeg detection
 	fmt.Println("[DEBUG] Checking for ffmpeg...")
+	
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for FFmpeg ===\n")
+	}
 
-	// Simple file existence check for Homebrew ffmpeg
-	if _, err := os.Stat(homebrewPath); err == nil {
-		fmt.Println("[DEBUG] Homebrew ffmpeg exists at", homebrewPath)
-		// Just check if file exists and is executable
+	// First try using exec.LookPath to find ffmpeg in PATH
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err == nil {
+		fmt.Println("[DEBUG] ffmpeg found in PATH at", ffmpegPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "ffmpeg found in PATH at: %s\n", ffmpegPath)
+		}
 		ffmpegFound = true
-		fmt.Println("[DEBUG] Homebrew ffmpeg found")
 	} else {
-		fmt.Println("[DEBUG] Homebrew ffmpeg not found at", homebrewPath, "error:", err)
+		fmt.Println("[DEBUG] ffmpeg not found in PATH:", err)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "ffmpeg not found in PATH: %v\n", err)
+		}
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/opt/homebrew/bin/ffmpeg",
+			"/usr/local/bin/ffmpeg",
+			"/usr/bin/ffmpeg",
+		}
+		
+		// Get home directory for user-specific paths
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			// Add user-specific paths
+			userPaths := []string{
+				filepath.Join(homeDir, "miniconda3", "bin", "ffmpeg"),
+				filepath.Join(homeDir, "anaconda3", "bin", "ffmpeg"),
+				filepath.Join(homeDir, "bin", "ffmpeg"),
+			}
+			commonPaths = append(commonPaths, userPaths...)
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if fileInfo, err := os.Stat(path); err == nil {
+				// Check if executable
+				perm := fileInfo.Mode().Perm()
+				isExecutable := (perm & 0111) != 0
+				
+				if isExecutable {
+					fmt.Println("[DEBUG] ffmpeg found at", path)
+					if debugLogger != nil {
+						fmt.Fprintf(debugLogger, "ffmpeg found at: %s\n", path)
+					}
+					ffmpegFound = true
+					break
+				} else if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "ffmpeg exists at %s but is not executable\n", path)
+				}
+			} else if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Checked path %s: %v\n", path, err)
+			}
+		}
+		if debugLogger != nil && !ffmpegFound {
+			fmt.Fprintf(debugLogger, "ffmpeg not found in any common paths\n")
+		}
+	}
 
-		// Try standard path using -h flag instead of --version
-		fmt.Println("[DEBUG] Trying standard ffmpeg path")
+	// If still not found, try running the command directly as a last resort
+	if !ffmpegFound {
+		fmt.Println("[DEBUG] Trying to run ffmpeg command directly")
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "Trying to run ffmpeg command directly\n")
+		}
 		ffmpegCmd := exec.Command("ffmpeg", "-h")
 		output, err := ffmpegCmd.CombinedOutput()
 		ffmpegFound = err == nil && strings.Contains(string(output), "usage")
-		fmt.Println("[DEBUG] Standard ffmpeg check result:", ffmpegFound)
-		if err != nil {
-			fmt.Println("[DEBUG] Standard ffmpeg error:", err)
+		fmt.Println("[DEBUG] Direct ffmpeg command check result:", ffmpegFound)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "Direct ffmpeg command check result: %v\n", ffmpegFound)
 		}
-
-		// If still not found, try common Miniconda/Anaconda path
-		if !ffmpegFound {
-			// Get home directory
-			homeDir, err := os.UserHomeDir()
-			if err == nil {
-				// Check Miniconda path
-				minicondaPath := filepath.Join(homeDir, "miniconda3", "bin", "ffmpeg")
-				if _, err := os.Stat(minicondaPath); err == nil {
-					fmt.Println("[DEBUG] Miniconda ffmpeg exists at", minicondaPath)
-					// Just check if file exists and is executable
-					ffmpegFound = true
-					fmt.Println("[DEBUG] Miniconda ffmpeg found")
-				}
-
-				// Also check Anaconda path if needed
-				if !ffmpegFound {
-					anacondaPath := filepath.Join(homeDir, "anaconda3", "bin", "ffmpeg")
-					if _, err := os.Stat(anacondaPath); err == nil {
-						fmt.Println("[DEBUG] Anaconda ffmpeg exists at", anacondaPath)
-						// Just check if file exists and is executable
-						ffmpegFound = true
-						fmt.Println("[DEBUG] Anaconda ffmpeg found")
-					}
-				}
+		if err != nil {
+			fmt.Println("[DEBUG] Direct ffmpeg command error:", err)
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Direct ffmpeg command error: %v\n", err)
 			}
 		}
 	}
 
 	fmt.Println("[DEBUG] Final ffmpeg found status:", ffmpegFound)
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Final ffmpeg found status: %v\n\n", ffmpegFound)
+	}
 	return ffmpegFound
 }
 
 // Check for vobsub2srt installation
 func checkVobsub2srt() bool {
-	fmt.Println("[DEBUG] Checking for vobsub2srt...")
-	vobsub2srtPath := "/usr/local/bin/vobsub2srt"
 	vobsub2srtFound := false
+	fmt.Println("[DEBUG] Checking for vobsub2srt...")
 
-	// Check if vobsub2srt exists at the expected path
-	if fileInfo, err := os.Stat(vobsub2srtPath); err == nil {
-		fmt.Println("[DEBUG] vobsub2srt exists at", vobsub2srtPath)
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for vobsub2srt ===\n")
+	}
 
-		// Check if the file is executable (Unix-style permission check)
-		perm := fileInfo.Mode().Perm()
-		isExecutable := (perm & 0111) != 0 // Check if any execute bit is set
-
-		fmt.Println("[DEBUG] vobsub2srt executable permission check:", isExecutable)
-
-		if isExecutable {
-			// Just verify the binary exists and is executable
-			vobsub2srtFound = true
-			fmt.Println("[DEBUG] vobsub2srt found and is executable")
-		} else {
-			fmt.Println("[DEBUG] vobsub2srt exists but is not executable")
+	// First try using exec.LookPath to find vobsub2srt in PATH
+	vobsub2srtPath, err := exec.LookPath("vobsub2srt")
+	if err == nil {
+		fmt.Println("[DEBUG] vobsub2srt found in PATH at", vobsub2srtPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "vobsub2srt found in PATH at: %s\n", vobsub2srtPath)
 		}
+		vobsub2srtFound = true
 	} else {
-		fmt.Println("[DEBUG] vobsub2srt not found at", vobsub2srtPath, "error:", err)
-
-		// Try standard path using which command
-		fmt.Println("[DEBUG] Trying to find vobsub2srt in PATH")
+		fmt.Println("[DEBUG] vobsub2srt not found in PATH:", err)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "vobsub2srt not found in PATH: %v\n", err)
+		}
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/usr/local/bin/vobsub2srt",
+			"/usr/bin/vobsub2srt",
+			"/opt/homebrew/bin/vobsub2srt",
+		}
+		
+		// Get home directory for user-specific paths
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			// Add user-specific paths
+			userPaths := []string{
+				filepath.Join(homeDir, "bin", "vobsub2srt"),
+			}
+			commonPaths = append(commonPaths, userPaths...)
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if fileInfo, err := os.Stat(path); err == nil {
+				// Check if executable
+				perm := fileInfo.Mode().Perm()
+				isExecutable := (perm & 0111) != 0
+				
+				if isExecutable {
+					fmt.Println("[DEBUG] vobsub2srt found at", path)
+					if debugLogger != nil {
+						fmt.Fprintf(debugLogger, "vobsub2srt found at: %s\n", path)
+					}
+					vobsub2srtFound = true
+					break
+				} else if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "vobsub2srt exists at %s but is not executable\n", path)
+				}
+			} else if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Checked path %s: %v\n", path, err)
+			}
+		}
+		if debugLogger != nil && !vobsub2srtFound {
+			fmt.Fprintf(debugLogger, "vobsub2srt not found in any common paths\n")
+		}
+	}
+	
+	// Try standard path using which command
+	if !vobsub2srtFound {
+		fmt.Println("[DEBUG] Trying to find vobsub2srt in PATH using 'which'")
 		whichCmd := exec.Command("which", "vobsub2srt")
 		output, err := whichCmd.CombinedOutput()
 		if err == nil && len(output) > 0 {
 			altPath := strings.TrimSpace(string(output))
 			fmt.Println("[DEBUG] Found vobsub2srt at", altPath)
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Found vobsub2srt using 'which' at: %s\n", altPath)
 
-			// Check if the file exists and is executable
-			info, err := os.Stat(altPath)
-			if err == nil {
-				// Check if the file is executable (Unix-style permission check)
-				perm := info.Mode().Perm()
-				isExecutable := (perm & 0111) != 0 // Check if any execute bit is set
+				// Check if the file exists and is executable
+				info, err := os.Stat(altPath)
+				if err == nil {
+					// Check if the file is executable (Unix-style permission check)
+					perm := info.Mode().Perm()
+					isExecutable := (perm & 0111) != 0 // Check if any execute bit is set
 
-				vobsub2srtFound = isExecutable
-				fmt.Println("[DEBUG] vobsub2srt executable permission check:", isExecutable)
+					vobsub2srtFound = isExecutable
+					fmt.Println("[DEBUG] vobsub2srt executable permission check:", isExecutable)
+				}
 			}
 		}
 	}
@@ -174,14 +294,63 @@ func checkVobsub2srt() bool {
 // Check for MKVMerge installation
 func checkMkvmerge() bool {
 	fmt.Println("[DEBUG] Checking for MKVMerge...")
-	mkvmergeCmd := exec.Command("mkvmerge", "--version")
-	mkvmergeOutput, err := mkvmergeCmd.CombinedOutput()
-	mkvmergeFound := err == nil && len(mkvmergeOutput) > 0
-
-	if mkvmergeFound {
-		fmt.Println("[DEBUG] MKVMerge found:", strings.TrimSpace(string(mkvmergeOutput)))
+	mkvmergeFound := false
+	
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for MKVMerge ===\n")
+	}
+	
+	// First try using exec.LookPath to find mkvmerge in PATH
+	mkvmergePath, err := exec.LookPath("mkvmerge")
+	if err == nil {
+		fmt.Println("[DEBUG] mkvmerge found in PATH at", mkvmergePath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "mkvmerge found in PATH at: %s\n", mkvmergePath)
+		}
+		
+		// Verify by running the command
+		mkvmergeCmd := exec.Command("mkvmerge", "--version")
+		mkvmergeOutput, err := mkvmergeCmd.CombinedOutput()
+		mkvmergeFound = err == nil && len(mkvmergeOutput) > 0
+		
+		if mkvmergeFound {
+			fmt.Println("[DEBUG] MKVMerge found:", strings.TrimSpace(string(mkvmergeOutput)))
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "MKVMerge verified with version: %s\n", strings.TrimSpace(string(mkvmergeOutput)))
+			}
+		} else {
+			fmt.Println("[DEBUG] MKVMerge command failed:", err)
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "MKVMerge command failed: %v\n", err)
+			}
+		}
 	} else {
-		fmt.Println("[DEBUG] MKVMerge not found or error:", err)
+		fmt.Println("[DEBUG] mkvmerge not found in PATH:", err)
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/opt/homebrew/bin/mkvmerge",
+			"/usr/local/bin/mkvmerge",
+			"/usr/bin/mkvmerge",
+			"/Applications/MKVToolNix.app/Contents/MacOS/mkvmerge",
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
+				fmt.Println("[DEBUG] mkvmerge found at", path)
+				
+				// Verify by running the command
+				mkvmergeCmd := exec.Command(path, "--version")
+				mkvmergeOutput, err := mkvmergeCmd.CombinedOutput()
+				if err == nil && len(mkvmergeOutput) > 0 {
+					mkvmergeFound = true
+					fmt.Println("[DEBUG] MKVMerge verified at", path)
+					break
+				}
+			}
+		}
 	}
 
 	fmt.Println("[DEBUG] Final MKVMerge found status:", mkvmergeFound)
@@ -191,17 +360,85 @@ func checkMkvmerge() bool {
 // Check for MKVExtract installation
 func checkMkvextract() bool {
 	fmt.Println("[DEBUG] Checking for MKVExtract...")
-	mkvextractCmd := exec.Command("mkvextract", "--version")
-	mkvextractOutput, err := mkvextractCmd.CombinedOutput()
-	mkvextractFound := err == nil && len(mkvextractOutput) > 0
-
-	if mkvextractFound {
-		fmt.Println("[DEBUG] MKVExtract found:", strings.TrimSpace(string(mkvextractOutput)))
+	mkvextractFound := false
+	
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for MKVExtract ===\n")
+	}
+	
+	// First try using exec.LookPath to find mkvextract in PATH
+	mkvextractPath, err := exec.LookPath("mkvextract")
+	if err == nil {
+		fmt.Println("[DEBUG] mkvextract found in PATH at", mkvextractPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "mkvextract found in PATH at: %s\n", mkvextractPath)
+		}
+		
+		// Verify by running the command
+		mkvextractCmd := exec.Command("mkvextract", "--version")
+		mkvextractOutput, err := mkvextractCmd.CombinedOutput()
+		mkvextractFound = err == nil && len(mkvextractOutput) > 0
+		
+		if mkvextractFound {
+			fmt.Println("[DEBUG] MKVExtract found:", strings.TrimSpace(string(mkvextractOutput)))
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "MKVExtract verified with version: %s\n", strings.TrimSpace(string(mkvextractOutput)))
+			}
+		} else {
+			fmt.Println("[DEBUG] MKVExtract command failed:", err)
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "MKVExtract command failed: %v\n", err)
+			}
+		}
 	} else {
-		fmt.Println("[DEBUG] MKVExtract not found or error:", err)
+		fmt.Println("[DEBUG] mkvextract not found in PATH:", err)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "mkvextract not found in PATH: %v\n", err)
+		}
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/opt/homebrew/bin/mkvextract",
+			"/usr/local/bin/mkvextract",
+			"/usr/bin/mkvextract",
+			"/Applications/MKVToolNix.app/Contents/MacOS/mkvextract",
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
+				fmt.Println("[DEBUG] mkvextract found at", path)
+				if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "mkvextract found at: %s\n", path)
+				}
+				
+				// Verify by running the command
+				mkvextractCmd := exec.Command(path, "--version")
+				mkvextractOutput, err := mkvextractCmd.CombinedOutput()
+				if err == nil && len(mkvextractOutput) > 0 {
+					mkvextractFound = true
+					fmt.Println("[DEBUG] MKVExtract verified at", path)
+					if debugLogger != nil {
+						fmt.Fprintf(debugLogger, "MKVExtract verified at: %s\n", path)
+					}
+					break
+				} else if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "MKVExtract command failed at %s: %v\n", path, err)
+				}
+			} else if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Checked path %s: %v\n", path, err)
+			}
+		}
+		if debugLogger != nil && !mkvextractFound {
+			fmt.Fprintf(debugLogger, "mkvextract not found in any common paths\n")
+		}
 	}
 
 	fmt.Println("[DEBUG] Final MKVExtract found status:", mkvextractFound)
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Final MKVExtract found status: %v\n\n", mkvextractFound)
+	}
 	return mkvextractFound
 }
 
