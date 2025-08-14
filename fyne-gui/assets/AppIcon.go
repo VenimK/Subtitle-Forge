@@ -1,11 +1,15 @@
 package assets
 
 import (
+	_ "embed"
+
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/theme"
 )
+
+//go:embed icon.png
+var iconData []byte
 
 // AppIcon returns the application icon
 func AppIcon() fyne.Resource {
-	return theme.FileTextIcon()
+	return fyne.NewStaticResource("icon", iconData)
 }

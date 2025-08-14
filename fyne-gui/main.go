@@ -445,34 +445,171 @@ func checkMkvextract() bool {
 // Check for Deno installation
 func checkDeno() bool {
 	fmt.Println("[DEBUG] Checking for Deno...")
-	denoCmd := exec.Command("deno", "--version")
-	denoOutput, err := denoCmd.CombinedOutput()
-	denoFound := err == nil && len(denoOutput) > 0
-
-	if denoFound {
-		fmt.Println("[DEBUG] Deno found:", strings.TrimSpace(string(denoOutput)))
+	denoFound := false
+	
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for Deno ===\n")
+	}
+	
+	// First try using exec.LookPath to find deno in PATH
+	denoPath, err := exec.LookPath("deno")
+	if err == nil {
+		fmt.Println("[DEBUG] deno found in PATH at", denoPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "deno found in PATH at: %s\n", denoPath)
+		}
+		
+		// Verify by running the command
+		denoCmd := exec.Command(denoPath, "--version")
+		denoOutput, err := denoCmd.CombinedOutput()
+		denoFound = err == nil && len(denoOutput) > 0
+		
+		if denoFound {
+			fmt.Println("[DEBUG] Deno found:", strings.TrimSpace(string(denoOutput)))
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Deno verified with version: %s\n", strings.TrimSpace(string(denoOutput)))
+			}
+		} else {
+			fmt.Println("[DEBUG] Deno command failed:", err)
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Deno command failed: %v\n", err)
+			}
+		}
 	} else {
-		fmt.Println("[DEBUG] Deno not found or error:", err)
+		fmt.Println("[DEBUG] deno not found in PATH:", err)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "deno not found in PATH: %v\n", err)
+		}
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/usr/local/bin/deno",
+			"/opt/homebrew/bin/deno",
+			"/usr/bin/deno",
+			"/bin/deno",
+			filepath.Join(os.Getenv("HOME"), ".deno", "bin", "deno"),
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
+				fmt.Println("[DEBUG] deno found at", path)
+				if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "deno found at: %s\n", path)
+				}
+				
+				// Verify by running the command
+				denoCmd := exec.Command(path, "--version")
+				denoOutput, err := denoCmd.CombinedOutput()
+				if err == nil && len(denoOutput) > 0 {
+					denoFound = true
+					fmt.Println("[DEBUG] Deno verified at", path)
+					if debugLogger != nil {
+						fmt.Fprintf(debugLogger, "Deno verified at: %s\n", path)
+					}
+					break
+				} else if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "Deno command failed at %s: %v\n", path, err)
+				}
+			} else if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Checked path %s: %v\n", path, err)
+			}
+		}
+		if debugLogger != nil && !denoFound {
+			fmt.Fprintf(debugLogger, "deno not found in any common paths\n")
+		}
 	}
 
 	fmt.Println("[DEBUG] Final Deno found status:", denoFound)
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Final Deno found status: %v\n\n", denoFound)
+	}
 	return denoFound
 }
 
 // Check for Tesseract installation
 func checkTesseract() bool {
 	fmt.Println("[DEBUG] Checking for Tesseract...")
-	tesseractCmd := exec.Command("tesseract", "--version")
-	tesseractOutput, err := tesseractCmd.CombinedOutput()
-	tesseractFound := err == nil && len(tesseractOutput) > 0
-
-	if tesseractFound {
-		fmt.Println("[DEBUG] Tesseract found:", strings.TrimSpace(string(tesseractOutput)))
+	tesseractFound := false
+	
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for Tesseract ===\n")
+	}
+	
+	// First try using exec.LookPath to find tesseract in PATH
+	tesseractPath, err := exec.LookPath("tesseract")
+	if err == nil {
+		fmt.Println("[DEBUG] tesseract found in PATH at", tesseractPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "tesseract found in PATH at: %s\n", tesseractPath)
+		}
+		
+		// Verify by running the command
+		tesseractCmd := exec.Command(tesseractPath, "--version")
+		tesseractOutput, err := tesseractCmd.CombinedOutput()
+		tesseractFound = err == nil && len(tesseractOutput) > 0
+		
+		if tesseractFound {
+			fmt.Println("[DEBUG] Tesseract found:", strings.TrimSpace(string(tesseractOutput)))
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Tesseract verified with version: %s\n", strings.TrimSpace(string(tesseractOutput)))
+			}
+		} else {
+			fmt.Println("[DEBUG] Tesseract command failed:", err)
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Tesseract command failed: %v\n", err)
+			}
+		}
 	} else {
-		fmt.Println("[DEBUG] Tesseract not found or error:", err)
+		fmt.Println("[DEBUG] tesseract not found in PATH:", err)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "tesseract not found in PATH: %v\n", err)
+		}
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/usr/local/bin/tesseract",
+			"/opt/homebrew/bin/tesseract",
+			"/usr/bin/tesseract",
+			"/bin/tesseract",
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
+				fmt.Println("[DEBUG] tesseract found at", path)
+				if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "tesseract found at: %s\n", path)
+				}
+				
+				// Verify by running the command
+				tesseractCmd := exec.Command(path, "--version")
+				tesseractOutput, err := tesseractCmd.CombinedOutput()
+				if err == nil && len(tesseractOutput) > 0 {
+					tesseractFound = true
+					fmt.Println("[DEBUG] Tesseract verified at", path)
+					if debugLogger != nil {
+						fmt.Fprintf(debugLogger, "Tesseract verified at: %s\n", path)
+					}
+					break
+				} else if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "Tesseract command failed at %s: %v\n", path, err)
+				}
+			} else if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Checked path %s: %v\n", path, err)
+			}
+		}
+		if debugLogger != nil && !tesseractFound {
+			fmt.Fprintf(debugLogger, "tesseract not found in any common paths\n")
+		}
 	}
 
 	fmt.Println("[DEBUG] Final Tesseract found status:", tesseractFound)
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Final Tesseract found status: %v\n\n", tesseractFound)
+	}
 	return tesseractFound
 }
 
@@ -482,46 +619,169 @@ var pgsToSrtScriptPath = filepath.Join(os.Getenv("HOME"), "pgs-to-srt", "pgs-to-
 // Check for Go installation
 func checkGo() bool {
 	fmt.Println("[DEBUG] Checking for Go...")
-
-	goCmd := exec.Command("go", "version")
-	goOutput, err := goCmd.CombinedOutput()
-	goFound := err == nil && len(goOutput) > 0
-
-	if goFound {
-		fmt.Println("[DEBUG] Go found:", strings.TrimSpace(string(goOutput)))
+	goFound := false
+	
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for Go ===\n")
+	}
+	
+	// First try using exec.LookPath to find go in PATH
+	goPath, err := exec.LookPath("go")
+	if err == nil {
+		fmt.Println("[DEBUG] go found in PATH at", goPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "go found in PATH at: %s\n", goPath)
+		}
+		
+		// Verify by running the command
+		goCmd := exec.Command(goPath, "version")
+		goOutput, err := goCmd.CombinedOutput()
+		goFound = err == nil && len(goOutput) > 0
+		
+		if goFound {
+			fmt.Println("[DEBUG] Go found:", strings.TrimSpace(string(goOutput)))
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Go verified with version: %s\n", strings.TrimSpace(string(goOutput)))
+			}
+		} else {
+			fmt.Println("[DEBUG] Go command failed:", err)
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Go command failed: %v\n", err)
+			}
+		}
 	} else {
-		fmt.Println("[DEBUG] Go not found, error:", err)
+		fmt.Println("[DEBUG] go not found in PATH:", err)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "go not found in PATH: %v\n", err)
+		}
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/usr/local/go/bin/go",
+			"/usr/local/bin/go",
+			"/opt/homebrew/bin/go",
+			"/usr/bin/go",
+			"/bin/go",
+			filepath.Join(os.Getenv("HOME"), "go", "bin", "go"),
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
+				fmt.Println("[DEBUG] go found at", path)
+				if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "go found at: %s\n", path)
+				}
+				
+				// Verify by running the command
+				goCmd := exec.Command(path, "version")
+				goOutput, err := goCmd.CombinedOutput()
+				if err == nil && len(goOutput) > 0 {
+					goFound = true
+					fmt.Println("[DEBUG] Go verified at", path)
+					if debugLogger != nil {
+						fmt.Fprintf(debugLogger, "Go verified at: %s\n", path)
+					}
+					break
+				} else if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "Go command failed at %s: %v\n", path, err)
+				}
+			} else if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Checked path %s: %v\n", path, err)
+			}
+		}
+		if debugLogger != nil && !goFound {
+			fmt.Fprintf(debugLogger, "go not found in any common paths\n")
+		}
 	}
 
 	fmt.Println("[DEBUG] Final Go found status:", goFound)
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Final Go found status: %v\n\n", goFound)
+	}
 	return goFound
 }
 
 // Check for PGS to SRT script
 func checkPgsToSrt() bool {
 	fmt.Println("[DEBUG] Checking for PGS to SRT script...")
+	scriptFound := false
+	
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for PGS to SRT script ===\n")
+	}
 
-	// Use the configurable script path
+	// Use the configurable script path first
 	scriptPath := pgsToSrtScriptPath
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Checking configured script path: %s\n", scriptPath)
+	}
 
 	// Check if the script exists at the specified path
 	_, err := os.Stat(scriptPath)
-	scriptFound := err == nil
+	scriptFound = err == nil
 
 	if scriptFound {
 		fmt.Println("[DEBUG] PGS to SRT script found at:", scriptPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "PGS to SRT script found at: %s\n", scriptPath)
+		}
 
 		// Additionally check if Deno is available to run the script
 		denoAvailable := checkDeno()
 		if !denoAvailable {
 			fmt.Println("[DEBUG] PGS to SRT script found but Deno runtime is missing")
+			if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "PGS to SRT script found but Deno runtime is missing\n")
+			}
 			return false
 		}
 	} else {
-		fmt.Println("[DEBUG] PGS to SRT script not found, error:", err)
+		fmt.Println("[DEBUG] PGS to SRT script not found at configured path, error:", err)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "PGS to SRT script not found at configured path: %v\n", err)
+		}
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/usr/local/bin/pgs-to-srt.js",
+			filepath.Join(os.Getenv("HOME"), "pgs-to-srt", "pgs-to-srt.js"),
+			filepath.Join(os.Getenv("HOME"), ".deno", "bin", "pgs-to-srt.js"),
+			filepath.Join(os.Getenv("HOME"), ".deno", "bin", "pgs-to-srt"),
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if _, err := os.Stat(path); err == nil {
+				fmt.Println("[DEBUG] PGS to SRT script found at", path)
+				if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "PGS to SRT script found at: %s\n", path)
+				}
+				scriptFound = true
+				pgsToSrtScriptPath = path // Update the global path variable
+				
+				// Check if Deno is available to run the script
+				denoAvailable := checkDeno()
+				if !denoAvailable {
+					fmt.Println("[DEBUG] PGS to SRT script found but Deno runtime is missing")
+					if debugLogger != nil {
+						fmt.Fprintf(debugLogger, "PGS to SRT script found but Deno runtime is missing\n")
+					}
+					return false
+				}
+				break
+			} else if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "Checked path %s: %v\n", path, err)
+			}
+		}
 	}
 
 	fmt.Println("[DEBUG] Final PGS to SRT script found status:", scriptFound)
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Final PGS to SRT script found status: %v\n\n", scriptFound)
+	}
 	return scriptFound
 }
 
