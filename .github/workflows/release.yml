@@ -1,0 +1,86 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on version tags (e.g., v1.6.5)
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        include:
+          - os: macos-latest
+            output_name: subtitle-forge-mac
+            artifact_name: Subtitle-Forge-macOS
+            package_cmd: fyne package -os darwin -icon assets/icon.png --app-id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac
+          - os: ubuntu-latest
+            output_name: subtitle-forge-linux
+            artifact_name: subtitle-forge-linux
+            package_cmd: fyne package -os linux -icon assets/icon.png --app-id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-linux
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            sudo apt-get update
+            sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+          fi
+          go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Build application
+        working-directory: ./fyne-gui
+        run: |
+          mkdir -p build
+          go build -o build/${{ matrix.output_name }}
+          ${{ matrix.package_cmd }}
+
+      - name: Create archive
+        working-directory: ./fyne-gui
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            # Create zip for macOS app bundle
+            zip -r ${{ matrix.artifact_name }}.zip "Subtitle Forge.app"
+          else
+            # Create tar.gz for Linux
+            tar -czf ${{ matrix.artifact_name }}.tar.gz build/${{ matrix.output_name }}
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ./fyne-gui/${{ matrix.artifact_name }}.${{ matrix.os == 'macos-latest' && 'zip' || 'tar.gz' }}
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Subtitle-Forge-macOS/Subtitle-Forge-macOS.zip
+            subtitle-forge-linux/subtitle-forge-linux.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
