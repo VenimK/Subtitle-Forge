@@ -6,11 +6,10 @@ A tool for extracting and converting subtitles from MKV files, available in both
 
 This project provides two applications:
 1. **CLI Version** - Command-line tool for extracting subtitles from MKV files
-2. **GUI Version** - Fyne-based graphical application with enhanced features including PGS to SRT conversion and customizable themes
+2. **GUI Version** - Fyne-based graphical application with enhanced features including PGS to SRT conversion and seasonal dark themes
 
 ## What's New in v1.6.5
 
-- **Theme Color Customization**: Added ability to customize application theme colors (buttons, labels, backgrounds, text)
 - **Seasonal Dark Themes**: Added darker seasonal themes (Spring, Summer, Autumn, Winter) with improved contrast and readability
 - **Resizable Windows**: Improved window resizing support for both the main application and theme customizer
 - **Theme Persistence**: Theme preferences now persist between application restarts
