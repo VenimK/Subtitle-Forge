@@ -291,6 +291,9 @@ func checkVobsub2srt() bool {
 	return vobsub2srtFound
 }
 
+// Global variable to store the path to mkvmerge
+var mkvmergeBinaryPath string
+
 // Check for MKVMerge installation
 func checkMkvmerge() bool {
 	fmt.Println("[DEBUG] Checking for MKVMerge...")
@@ -310,7 +313,7 @@ func checkMkvmerge() bool {
 		}
 		
 		// Verify by running the command
-		mkvmergeCmd := exec.Command("mkvmerge", "--version")
+		mkvmergeCmd := exec.Command(mkvmergePath, "--version")
 		mkvmergeOutput, err := mkvmergeCmd.CombinedOutput()
 		mkvmergeFound = err == nil && len(mkvmergeOutput) > 0
 		
@@ -319,6 +322,8 @@ func checkMkvmerge() bool {
 			if debugLogger != nil {
 				fmt.Fprintf(debugLogger, "MKVMerge verified with version: %s\n", strings.TrimSpace(string(mkvmergeOutput)))
 			}
+			// Store the path for later use
+			mkvmergeBinaryPath = mkvmergePath
 		} else {
 			fmt.Println("[DEBUG] MKVMerge command failed:", err)
 			if debugLogger != nil {
@@ -347,15 +352,20 @@ func checkMkvmerge() bool {
 				if err == nil && len(mkvmergeOutput) > 0 {
 					mkvmergeFound = true
 					fmt.Println("[DEBUG] MKVMerge verified at", path)
+					// Store the path for later use
+					mkvmergeBinaryPath = path
 					break
 				}
 			}
 		}
 	}
 
-	fmt.Println("[DEBUG] Final MKVMerge found status:", mkvmergeFound)
+	fmt.Println("[DEBUG] Final MKVMerge found status:", mkvmergeFound, "Path:", mkvmergeBinaryPath)
 	return mkvmergeFound
 }
+
+// Global variable to store the path to mkvextract
+var mkvextractBinaryPath string
 
 // Check for MKVExtract installation
 func checkMkvextract() bool {
@@ -376,7 +386,7 @@ func checkMkvextract() bool {
 		}
 		
 		// Verify by running the command
-		mkvextractCmd := exec.Command("mkvextract", "--version")
+		mkvextractCmd := exec.Command(mkvextractPath, "--version")
 		mkvextractOutput, err := mkvextractCmd.CombinedOutput()
 		mkvextractFound = err == nil && len(mkvextractOutput) > 0
 		
@@ -385,6 +395,8 @@ func checkMkvextract() bool {
 			if debugLogger != nil {
 				fmt.Fprintf(debugLogger, "MKVExtract verified with version: %s\n", strings.TrimSpace(string(mkvextractOutput)))
 			}
+			// Store the path for later use
+			mkvextractBinaryPath = mkvextractPath
 		} else {
 			fmt.Println("[DEBUG] MKVExtract command failed:", err)
 			if debugLogger != nil {
@@ -419,9 +431,8 @@ func checkMkvextract() bool {
 				if err == nil && len(mkvextractOutput) > 0 {
 					mkvextractFound = true
 					fmt.Println("[DEBUG] MKVExtract verified at", path)
-					if debugLogger != nil {
-						fmt.Fprintf(debugLogger, "MKVExtract verified at: %s\n", path)
-					}
+					// Store the path for later use
+					mkvextractBinaryPath = path
 					break
 				} else if debugLogger != nil {
 					fmt.Fprintf(debugLogger, "MKVExtract command failed at %s: %v\n", path, err)
@@ -1326,7 +1337,28 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 
 		// Run mkvinfo command
 		go func() {
-			cmd := exec.Command("mkvinfo", mkvPath)
+			var cmd *exec.Cmd
+			// Since mkvinfo is part of the same package as mkvextract and mkvmerge,
+			// we can derive its path from the mkvextract path if available
+			if mkvextractBinaryPath != "" {
+				// Get the directory of mkvextract and use it for mkvinfo
+				mkvToolsDir := filepath.Dir(mkvextractBinaryPath)
+				mkvinfoPath := filepath.Join(mkvToolsDir, "mkvinfo")
+				
+				// Check if mkvinfo exists at the expected path
+				if _, err := os.Stat(mkvinfoPath); err == nil {
+					cmd = exec.Command(mkvinfoPath, mkvPath)
+					fmt.Println("[DEBUG] Using derived mkvinfo path:", mkvinfoPath)
+				} else {
+					// Fallback to PATH lookup
+					cmd = exec.Command("mkvinfo", mkvPath)
+					fmt.Println("[DEBUG] Could not find mkvinfo at derived path, using default PATH lookup")
+				}
+			} else {
+				// Fallback to PATH lookup
+				cmd = exec.Command("mkvinfo", mkvPath)
+				fmt.Println("[DEBUG] No stored mkvextract path to derive mkvinfo path from, using default PATH lookup")
+			}
 			output, err := cmd.CombinedOutput()
 
 			fyne.Do(func() {
@@ -1357,7 +1389,16 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 
 		// Run mkvextract command for chapters
 		go func() {
-			cmd := exec.Command("mkvextract", mkvPath, "chapters", outputPath)
+			var cmd *exec.Cmd
+			if mkvextractBinaryPath != "" {
+				// Use the stored full path to mkvextract
+				cmd = exec.Command(mkvextractBinaryPath, mkvPath, "chapters", outputPath)
+				fmt.Println("[DEBUG] Using stored mkvextract path for chapters extraction:", mkvextractBinaryPath)
+			} else {
+				// Fallback to PATH lookup
+				cmd = exec.Command("mkvextract", mkvPath, "chapters", outputPath)
+				fmt.Println("[DEBUG] No stored mkvextract path for chapters extraction, using default PATH lookup")
+			}
 			output, err := cmd.CombinedOutput()
 
 			fyne.Do(func() {
@@ -2004,10 +2045,20 @@ func main() {
 		}
 
 		// Run mkvmerge to get track info
-		cmd := exec.Command("mkvmerge", "-J", mkvPath)
+		var cmd *exec.Cmd
+		if mkvmergeBinaryPath != "" {
+			// Use the stored full path to mkvmerge
+			cmd = exec.Command(mkvmergeBinaryPath, "-J", mkvPath)
+			fmt.Println("[DEBUG] Using stored mkvmerge path:", mkvmergeBinaryPath)
+		} else {
+			// Fallback to PATH lookup (though this likely won't work if checkMkvmerge failed)
+			cmd = exec.Command("mkvmerge", "-J", mkvPath)
+			fmt.Println("[DEBUG] No stored mkvmerge path, using default PATH lookup")
+		}
+		
 		output, err := cmd.Output()
 		if err != nil {
-			dialog.ShowError(fmt.Errorf("Error running mkvmerge: %v", err), w)
+			dialog.ShowError(fmt.Errorf("Error running mkvmerge: %v (path: %s)", err, mkvmergeBinaryPath), w)
 			return
 		}
 
@@ -2244,7 +2295,16 @@ func main() {
 					})
 
 					// Create the command with proper arguments
-					cmd := exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, tempPgsFile))
+					var cmd *exec.Cmd
+					if mkvextractBinaryPath != "" {
+						// Use the stored full path to mkvextract
+						cmd = exec.Command(mkvextractBinaryPath, "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, tempPgsFile))
+						fmt.Println("[DEBUG] Using stored mkvextract path for PGS track extraction:", mkvextractBinaryPath)
+					} else {
+						// Fallback to PATH lookup
+						cmd = exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, tempPgsFile))
+						fmt.Println("[DEBUG] No stored mkvextract path for PGS track extraction, using default PATH lookup")
+					}
 					cmd.Dir = outDir
 
 					// Run the command and capture output
@@ -2914,7 +2974,16 @@ func main() {
 					})
 
 					// Create the command with proper arguments
-					cmd := exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, tempAssFile))
+					var cmd *exec.Cmd
+					if mkvextractBinaryPath != "" {
+						// Use the stored full path to mkvextract
+						cmd = exec.Command(mkvextractBinaryPath, "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, tempAssFile))
+						fmt.Println("[DEBUG] Using stored mkvextract path for ASS track extraction:", mkvextractBinaryPath)
+					} else {
+						// Fallback to PATH lookup
+						cmd = exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, tempAssFile))
+						fmt.Println("[DEBUG] No stored mkvextract path for ASS track extraction, using default PATH lookup")
+					}
 					cmd.Dir = outDir
 
 					// Run the command and capture output
@@ -3105,7 +3174,16 @@ func main() {
 					})
 
 					// Create the command with proper arguments
-					cmd := exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, idxFile))
+					var cmd *exec.Cmd
+					if mkvextractBinaryPath != "" {
+						// Use the stored full path to mkvextract
+						cmd = exec.Command(mkvextractBinaryPath, "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, idxFile))
+						fmt.Println("[DEBUG] Using stored mkvextract path for VobSub track extraction:", mkvextractBinaryPath)
+					} else {
+						// Fallback to PATH lookup
+						cmd = exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, idxFile))
+						fmt.Println("[DEBUG] No stored mkvextract path for VobSub track extraction, using default PATH lookup")
+					}
 					cmd.Dir = outDir
 
 					// Run the command and capture output
@@ -3407,7 +3485,16 @@ func main() {
 					})
 					// Use absolute paths for all subtitle extractions to avoid directory creation issues
 					absOutFile := filepath.Join(outDir, outFile)
-					cmd := exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, absOutFile))
+					var cmd *exec.Cmd
+					if mkvextractBinaryPath != "" {
+						// Use the stored full path to mkvextract
+						cmd = exec.Command(mkvextractBinaryPath, "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, absOutFile))
+						fmt.Println("[DEBUG] Using stored mkvextract path for generic track extraction:", mkvextractBinaryPath)
+					} else {
+						// Fallback to PATH lookup
+						cmd = exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", t.Num, absOutFile))
+						fmt.Println("[DEBUG] No stored mkvextract path for generic track extraction, using default PATH lookup")
+					}
 
 					fyne.Do(func() {
 						result.SetText(result.Text + fmt.Sprintf("\nExtracting to: %s", absOutFile))
@@ -3913,7 +4000,16 @@ func main() {
 
 		// Run mkvmerge command to add subtitle
 		go func() {
-			cmd := exec.Command("mkvmerge", mkvmergeArgs...)
+			var cmd *exec.Cmd
+			if mkvmergeBinaryPath != "" {
+				// Use the stored full path to mkvmerge
+				cmd = exec.Command(mkvmergeBinaryPath, mkvmergeArgs...)
+				fmt.Println("[DEBUG] Using stored mkvmerge path for subtitle addition:", mkvmergeBinaryPath)
+			} else {
+				// Fallback to PATH lookup
+				cmd = exec.Command("mkvmerge", mkvmergeArgs...)
+				fmt.Println("[DEBUG] No stored mkvmerge path for subtitle addition, using default PATH lookup")
+			}
 
 			output, err := cmd.CombinedOutput()
 
