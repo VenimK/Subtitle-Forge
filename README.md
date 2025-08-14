@@ -1,4 +1,4 @@
-# Subtitle Forge v1.6.5
+# Subtitle Forge v1.6.6
 
 A tool for extracting and converting subtitles from MKV files, available in both command-line (CLI) and graphical user interface (GUI) versions.
 
@@ -7,6 +7,13 @@ A tool for extracting and converting subtitles from MKV files, available in both
 This project provides two applications:
 1. **CLI Version** - Command-line tool for extracting subtitles from MKV files
 2. **GUI Version** - Fyne-based graphical application with enhanced features including PGS to SRT conversion and seasonal dark themes
+
+## What's New in v1.6.6
+
+- **Improved Dependency Detection**: Enhanced detection logic for all external dependencies (ffmpeg, vobsub2srt, MKVMerge, MKVExtract, Deno, Tesseract, Go, PGStoSRT)
+- **Packaged App Compatibility**: Fixed dependency detection in macOS app bundles by scanning multiple common installation paths
+- **Debug Logging**: Added detailed debug logging to help diagnose dependency issues in packaged environments
+- **Fixed Icon Format**: Corrected icon format for proper display in macOS dock/taskbar
 
 ## What's New in v1.6.5
 

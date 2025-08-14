@@ -3500,7 +3500,7 @@ func main() {
 
 	// Use a more efficient layout with container.NewBorder for better performance
 	// Create app title with version
-	titleLabel := widget.NewLabel("Subtitle Forge v1.6.5")
+	titleLabel := widget.NewLabel("Subtitle Forge v1.6.6")
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	topContent := container.NewVBox(
@@ -4259,7 +4259,7 @@ func main() {
 
 	// App information
 	versionInfo := widget.NewRichText(
-		&widget.TextSegment{Text: "Subtitle Forge v1.6.5\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Text: "Subtitle Forge v1.6.6\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
 		&widget.TextSegment{Text: "A tool for extracting and converting subtitles from MKV files.\n\n"},
 		&widget.TextSegment{Text: " 2025 VenimK@David Software\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Italic: true}}},
 	)
