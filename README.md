@@ -1,4 +1,4 @@
-# Subtitle Forge v1.6.9
+# Subtitle Forge v1.6.9a
 > Powerful subtitle extraction and conversion tool for **macOS** and **Linux** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -14,7 +14,7 @@ This project provides two applications:
 1. **CLI Version** - Command-line tool for extracting subtitles from MKV files
 2. **GUI Version** - Fyne-based graphical application with enhanced features including PGS to SRT conversion and seasonal dark themes
 
-## What's New in v1.6.9
+## What's New in v1.6.9a
 
 - **Improved Dependency Detection**: Enhanced detection logic for all external dependencies (ffmpeg, vobsub2srt, MKVMerge, MKVExtract, Deno, Tesseract, Go, PGStoSRT)
 - **Packaged App Compatibility**: Fixed dependency detection in macOS app bundles by scanning multiple common installation paths
