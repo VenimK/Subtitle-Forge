@@ -21,7 +21,10 @@ jobs:
             output_name: subtitle-forge-linux
             artifact_name: subtitle-forge-linux
             package_cmd: fyne package -os linux -icon assets/icon.png --app-id com.gmm.subtitleforge --app-version 1.6.9 -name "Subtitle Forge" -exe build/subtitle-forge-linux
-
+          - os: windows-latest
+            output_name: subtitle-forge-windows.exe
+            artifact_name: Subtitle-Forge-Windows
+            package_cmd: fyne package -os windows -icon assets/icon.png --app-id com.gmm.subtitleforge --app-version 1.6.9 -name "Subtitle Forge" -exe build/subtitle-forge.exe
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
