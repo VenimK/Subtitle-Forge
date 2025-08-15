@@ -16,7 +16,7 @@ jobs:
           - os: macos-latest
             output_name: subtitle-forge-mac
             artifact_name: Subtitle-Forge-macOS
-            package_cmd: fyne package -os darwin -icon assets/icon.png --app-id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac
+            package_cmd: fyne package -os darwin -icon assets/icon.png --app-id com.gmm.subtitleforge --app-version 1.6.9a -name "Subtitle Forge" -exe build/subtitle-forge-mac
           - os: ubuntu-latest
             output_name: subtitle-forge-linux
             artifact_name: subtitle-forge-linux
