@@ -1,4 +1,10 @@
-# Subtitle Forge v1.6.5
+# Subtitle Forge v1.6.9
+> Powerful subtitle extraction and conversion tool for **macOS** and **Linux** 🔹 Extract, convert, and manage subtitles with ease 🔹
+> [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
+> [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
+> [![GitHub All Releases](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/total.svg)](https://github.com/VenimK/Subtitle-Forge/releases)
+> [![GitHub Downloads Latest](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/latest/total?style=flat&label=downloads%40latest&color=orange)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
+> [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/VenimK)
 
 A tool for extracting and converting subtitles from MKV files, available in both command-line (CLI) and graphical user interface (GUI) versions.
 
@@ -7,6 +13,13 @@ A tool for extracting and converting subtitles from MKV files, available in both
 This project provides two applications:
 1. **CLI Version** - Command-line tool for extracting subtitles from MKV files
 2. **GUI Version** - Fyne-based graphical application with enhanced features including PGS to SRT conversion and seasonal dark themes
+
+## What's New in v1.6.9
+
+- **Improved Dependency Detection**: Enhanced detection logic for all external dependencies (ffmpeg, vobsub2srt, MKVMerge, MKVExtract, Deno, Tesseract, Go, PGStoSRT)
+- **Packaged App Compatibility**: Fixed dependency detection in macOS app bundles by scanning multiple common installation paths
+- **Debug Logging**: Added detailed debug logging to help diagnose dependency issues in packaged environments
+- **Fixed Icon Format**: Corrected icon format for proper display in macOS dock/taskbar
 
 ## What's New in v1.6.5
 
@@ -21,7 +34,7 @@ This project provides two applications:
 - **Track Selection Controls**: Added "Select All" and "Deselect All" buttons for quick subtitle track management
 - **Track Filtering**: New filter input field allowing real-time filtering of subtitle tracks by language, codec, name, or track number
 - **Enhanced UI Layout**: Improved organization in the Insert Subtitles tab with better labeling and visual structure
-- **Theme Support**: Application now supports multiple themes (Light, Dark, Blue, Warm, Green) for reduced eye strain
+- **Theme Support**: Application now supports multiple themes (Light, Dark, Blue, Warm, Green, and seasonal themes) with consistent readability across all UI elements
 - **Improved Input Fields**: Wider input fields with helpful placeholders for better usability
 - **Contextual Help Text**: Added helpful information text for output file naming options
 
@@ -245,14 +258,47 @@ The application also supports converting VobSub subtitles (.idx/.sub files) to S
 
 ### Prerequisites
 
-- Go 1.18 or later
-- Fyne dependencies: [Fyne Getting Started](https://developer.fyne.io/started/)
+- **Go 1.18 or later** (REQUIRED): You must have Go installed to build from source
+  - Install on macOS: `brew install go` or download from [golang.org](https://golang.org/dl/)
+  - Install on Linux: `apt install golang` (Ubuntu/Debian) or download from [golang.org](https://golang.org/dl/)
+  - Install on Windows: Download and run the installer from [golang.org](https://golang.org/dl/)
+  - Verify installation: `go version` should show the installed version
+- **Fyne dependencies**: Required for GUI compilation
+  - Follow the setup guide at [Fyne Getting Started](https://developer.fyne.io/started/)
+  - macOS: `brew install gcc`
+  - Linux: `apt install gcc libgl1-mesa-dev xorg-dev`
+  - Windows: Install MinGW or MSYS2
 
 ### Build Steps
 
-1. Clone the repository
-2. Navigate to the `fyne-gui` directory
-3. Run the build script: `./build.sh`
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/VenimK/Subtitle-Forge.git
+   ```
+
+2. Navigate to the `fyne-gui` directory:
+   ```bash
+   cd Subtitle-Forge/fyne-gui
+   ```
+
+3. Make the build script executable:
+   ```bash
+   chmod +x build.sh
+   ```
+
+4. Run the build script:
+   ```bash
+   ./build.sh
+   ```
+
+5. Run the compiled application:
+   ```bash
+   # On macOS
+   ./build/subtitle-forge-mac
+   
+   # On Linux
+   ./build/subtitle-forge-linux
+   ```
 
 For cross-compilation, you may need additional tools:
 - For Windows builds on macOS: `brew install mingw-w64`
