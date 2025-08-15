@@ -48,6 +48,72 @@ type TrackItem struct {
 // Global debug logger for dependency checks
 var debugLogger *os.File
 
+// findHomebrewPath checks for Homebrew installation in common locations
+func findHomebrewPath() (string, error) {
+	// Log to debug file if available
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "=== Checking for Homebrew ===\n")
+	}
+
+	// First try using exec.LookPath to find brew in PATH
+	brewPath, err := exec.LookPath("brew")
+	if err == nil {
+		fmt.Println("[DEBUG] Homebrew found in PATH at", brewPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "Homebrew found in PATH at: %s\n", brewPath)
+		}
+		return brewPath, nil
+	} else {
+		fmt.Println("[DEBUG] Homebrew not found in PATH:", err)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "Homebrew not found in PATH: %v\n", err)
+		}
+		
+		// Check common installation paths
+		commonPaths := []string{
+			"/opt/homebrew/bin/brew",    // Apple Silicon Macs
+			"/usr/local/bin/brew",      // Intel Macs
+			"/usr/bin/brew",
+		}
+		
+		// Get home directory for user-specific paths
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			// Add user-specific paths
+			userPaths := []string{
+				filepath.Join(homeDir, "homebrew", "bin", "brew"),
+				filepath.Join(homeDir, ".homebrew", "bin", "brew"),
+				filepath.Join(homeDir, "bin", "brew"),
+			}
+			commonPaths = append(commonPaths, userPaths...)
+		}
+		
+		// Check each path
+		for _, path := range commonPaths {
+			if fileInfo, err := os.Stat(path); err == nil {
+				// Check if executable
+				perm := fileInfo.Mode().Perm()
+				isExecutable := (perm & 0111) != 0
+				
+				if isExecutable {
+					fmt.Println("[DEBUG] Homebrew found at", path)
+					if debugLogger != nil {
+						fmt.Fprintf(debugLogger, "Homebrew found at: %s\n", path)
+					}
+					return path, nil
+				}
+			}
+		}
+		
+		// If we get here, Homebrew was not found
+		fmt.Println("[DEBUG] Homebrew not found in any common locations")
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "Homebrew not found in any common locations\n")
+		}
+		return "", fmt.Errorf("Homebrew not found")
+	}
+}
+
 // Helper function to get current working directory
 func getCurrentDir() string {
 	dir, err := os.Getwd()
@@ -824,7 +890,8 @@ func installDependency(w fyne.Window, tool string) {
 
 				// Check if brew is installed first
 				if tool != "vobsub2srt" { // Skip brew check for vobsub2srt as it uses custom script
-					_, err := exec.LookPath("brew")
+					// Use robust Homebrew detection
+					_, err := findHomebrewPath()
 					if err != nil {
 						// Hide progress dialog
 						progress.Hide()
@@ -842,7 +909,27 @@ func installDependency(w fyne.Window, tool string) {
 									// Run Homebrew installation in a goroutine
 									go func() {
 										// Create the installation command
-										cmd := exec.Command("/bin/bash", "-c", "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)")
+										// Use a more reliable approach to run the Homebrew installation script
+										tempScript := filepath.Join(os.TempDir(), "homebrew_install.sh")
+										
+										// Download the script first
+										downloadCmd := exec.Command("curl", "-fsSL", "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh", "-o", tempScript)
+										downloadErr := downloadCmd.Run()
+										if downloadErr != nil {
+											fyne.Do(func() {
+												brewProgress.Hide()
+												dialog.ShowError(
+													fmt.Errorf("Failed to download Homebrew installation script: %v", err),
+													w)
+											})
+											return
+										}
+										
+										// Make the script executable
+										os.Chmod(tempScript, 0755)
+										
+										// Run the installation script
+										cmd := exec.Command("/bin/bash", tempScript)
 										
 										// Run the command
 										err := cmd.Run()
