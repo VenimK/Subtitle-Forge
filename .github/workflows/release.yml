@@ -24,7 +24,7 @@ jobs:
           - os: windows-latest
             output_name: subtitle-forge-windows.exe
             artifact_name: Subtitle-Forge-Windows
-            package_cmd: fyne package -os windows -icon assets/icon.png --app-id com.gmm.subtitleforge --app-version 1.6.9 -name "Subtitle Forge" -exe build/subtitle-forge.exe
+            package_cmd: fyne package -os windows -icon assets/icon.png --app-id com.gmm.subtitleforge --app-version 1.6.9 -name "Subtitle Forge" -exe build/subtitle-forge-windows.exe
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -34,37 +34,73 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Install dependencies
+      # Install Linux dependencies
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            sudo apt-get update
-            sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
-          fi
-          go install fyne.io/tools/cmd/fyne@latest
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
 
+      # Install Fyne CLI (works on all platforms)
+      - name: Install Fyne CLI
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      # Create build directory (platform-specific commands)
+      - name: Create build directory (Unix)
+        if: matrix.os != 'windows-latest'
+        working-directory: ./fyne-gui
+        run: mkdir -p build
+
+      - name: Create build directory (Windows)
+        if: matrix.os == 'windows-latest'
+        working-directory: ./fyne-gui
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path build
+
+      # Build application
       - name: Build application
         working-directory: ./fyne-gui
-        run: |
-          mkdir -p build
-          go build -o build/${{ matrix.output_name }}
-          ${{ matrix.package_cmd }}
+        run: go build -o build/${{ matrix.output_name }}
 
-      - name: Create archive
+      # Package application
+      - name: Package application
         working-directory: ./fyne-gui
-        run: |
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            # Create zip for macOS app bundle
-            zip -r ${{ matrix.artifact_name }}.zip "Subtitle Forge.app"
-          else
-            # Create tar.gz for Linux
-            tar -czf ${{ matrix.artifact_name }}.tar.gz build/${{ matrix.output_name }}
-          fi
+        run: ${{ matrix.package_cmd }}
 
-      - name: Upload artifact
+      # Create archive for macOS
+      - name: Create macOS archive
+        if: matrix.os == 'macos-latest'
+        working-directory: ./fyne-gui
+        run: zip -r ${{ matrix.artifact_name }}.zip "Subtitle Forge.app"
+
+      # Create archive for Linux
+      - name: Create Linux archive
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: ./fyne-gui
+        run: tar -czf ${{ matrix.artifact_name }}.tar.gz build/${{ matrix.output_name }}
+
+      # Create archive for Windows
+      - name: Create Windows archive
+        if: matrix.os == 'windows-latest'
+        working-directory: ./fyne-gui
+        shell: pwsh
+        run: Compress-Archive -Path "Subtitle Forge.exe" -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
+
+      # Upload artifacts
+      - name: Upload ZIP artifacts
+        if: matrix.os == 'macos-latest' || matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ./fyne-gui/${{ matrix.artifact_name }}.${{ matrix.os == 'macos-latest' && 'zip' || 'tar.gz' }}
+          path: ./fyne-gui/${{ matrix.artifact_name }}.zip
+          retention-days: 1
+
+      - name: Upload Linux artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ./fyne-gui/${{ matrix.artifact_name }}.tar.gz
           retention-days: 1
 
   release:
@@ -82,6 +118,7 @@ jobs:
           files: |
             Subtitle-Forge-macOS/Subtitle-Forge-macOS.zip
             subtitle-forge-linux/subtitle-forge-linux.tar.gz
+            Subtitle-Forge-Windows/Subtitle-Forge-Windows.zip
           draft: false
           prerelease: false
           generate_release_notes: true
