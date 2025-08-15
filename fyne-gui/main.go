@@ -887,11 +887,13 @@ func installDependency(w fyne.Window, tool string) {
 				// Prepare the installation command based on the tool
 				var cmd *exec.Cmd
 				var installDesc string
+				var brewPath string
 
 				// Check if brew is installed first
 				if tool != "vobsub2srt" { // Skip brew check for vobsub2srt as it uses custom script
 					// Use robust Homebrew detection
-					_, err := findHomebrewPath()
+					var err error
+					brewPath, err = findHomebrewPath()
 					if err != nil {
 						// Hide progress dialog
 						progress.Hide()
@@ -919,7 +921,7 @@ func installDependency(w fyne.Window, tool string) {
 											fyne.Do(func() {
 												brewProgress.Hide()
 												dialog.ShowError(
-													fmt.Errorf("Failed to download Homebrew installation script: %v", err),
+													fmt.Errorf("Failed to download Homebrew installation script: %v", downloadErr),
 													w)
 											})
 											return
@@ -972,26 +974,35 @@ func installDependency(w fyne.Window, tool string) {
 				// Set up command and description based on tool
 				// Using a case-insensitive approach to handle various tool name formats
 				toolLower := strings.ToLower(tool)
+				
+				// Store the Homebrew path for use in commands
+				var brewCommand string
+				if tool != "vobsub2srt" { // Skip for vobsub2srt as it uses custom script
+					brewCommand = brewPath // Use the detected Homebrew path
+				} else {
+					brewCommand = "brew" // Fallback, though this shouldn't be reached for vobsub2srt
+				}
+				
 				switch toolLower {
 				case "mkvmerge", "mkvextract", "mkvm":
 					// Install MKVToolNix via Homebrew
-					cmd = exec.Command("brew", "install", "mkvtoolnix")
+					cmd = exec.Command(brewCommand, "install", "mkvtoolnix")
 					installDesc = "Installing MKVToolNix (provides mkvmerge and mkvextract)"
 				case "deno":
 					// Install Deno via Homebrew
-					cmd = exec.Command("brew", "install", "deno")
+					cmd = exec.Command(brewCommand, "install", "deno")
 					installDesc = "Installing Deno runtime"
 				case "tesseract":
 					// Install Tesseract via Homebrew
-					cmd = exec.Command("brew", "install", "tesseract")
+					cmd = exec.Command(brewCommand, "install", "tesseract")
 					installDesc = "Installing Tesseract OCR engine"
 				case "ffmpeg", "ffmp":
 					// Install ffmpeg via Homebrew
-					cmd = exec.Command("brew", "install", "ffmpeg")
+					cmd = exec.Command(brewCommand, "install", "ffmpeg")
 					installDesc = "Installing FFmpeg multimedia framework"
 				case "go":
 					// Install Go via Homebrew
-					cmd = exec.Command("brew", "install", "go")
+					cmd = exec.Command(brewCommand, "install", "go")
 					installDesc = "Installing Go programming language"
 				case "vobsub2srt":
 					// Use the custom installation script for VobSub2SRT
