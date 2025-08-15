@@ -829,10 +829,55 @@ func installDependency(w fyne.Window, tool string) {
 						// Hide progress dialog
 						progress.Hide()
 
-						// Show error about Homebrew not being installed
-						dialog.ShowError(
-							fmt.Errorf("Homebrew is required but not installed. Please install Homebrew first:\n\nhttps://brew.sh"),
+						// Show confirmation dialog to install Homebrew
+						confirmDialog := dialog.NewConfirm(
+							"Homebrew Required",
+							"Homebrew is required but not installed. Would you like to install Homebrew now?\n\nThis will run the official Homebrew installation script.",
+							func(install bool) {
+								if install {
+									// Show progress dialog for Homebrew installation
+									brewProgress := dialog.NewProgress("Installing Homebrew", "Running Homebrew installation script...", w)
+									brewProgress.Show()
+
+									// Run Homebrew installation in a goroutine
+									go func() {
+										// Create the installation command
+										cmd := exec.Command("/bin/bash", "-c", "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)")
+										
+										// Run the command
+										err := cmd.Run()
+										
+										// Update UI on main thread
+										fyne.Do(func() {
+											// Hide progress dialog
+											brewProgress.Hide()
+											
+											if err != nil {
+												// Show error if installation failed
+												dialog.ShowError(
+													fmt.Errorf("Failed to install Homebrew: %v\n\nPlease install manually from https://brew.sh", err),
+													w)
+											} else {
+												// Show success message and offer to continue with dependency installation
+												dialog.ShowConfirm(
+													"Homebrew Installed",
+													"Homebrew was successfully installed. Would you like to continue installing "+tool+"?",
+													func(continueInstall bool) {
+														if continueInstall {
+															// Restart the dependency installation process
+															installDependency(w, tool)
+														}
+													},
+													w)
+											}
+										})
+									}()
+								}
+							},
 							w)
+						confirmDialog.SetDismissText("Cancel")
+						confirmDialog.SetConfirmText("Install Homebrew")
+						confirmDialog.Show()
 						return
 					}
 				}
