@@ -84,7 +84,38 @@ jobs:
         if: matrix.os == 'windows-latest'
         working-directory: ./fyne-gui
         shell: pwsh
-        run: Compress-Archive -Path "Subtitle Forge.exe" -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
+        run: |
+          # List files to debug
+          Write-Host "Listing files in current directory:"
+          Get-ChildItem
+          
+          Write-Host "Listing files in build directory:"
+          Get-ChildItem -Path build -ErrorAction SilentlyContinue
+          
+          # Try to find the executable and create archive
+          if (Test-Path "Subtitle Forge.exe") {
+            Write-Host "Found Subtitle Forge.exe in current directory"
+            Compress-Archive -Path "Subtitle Forge.exe" -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
+          } elseif (Test-Path "build\subtitle-forge-windows.exe") {
+            Write-Host "Found subtitle-forge-windows.exe in build directory"
+            Compress-Archive -Path "build\subtitle-forge-windows.exe" -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
+          } else {
+            # Find any exe files
+            Write-Host "Searching for any .exe files..."
+            $exeFiles = Get-ChildItem -Recurse -Filter "*.exe"
+            if ($exeFiles.Count -gt 0) {
+              Write-Host "Found executable files:"
+              foreach ($file in $exeFiles) {
+                Write-Host $file.FullName
+              }
+              # Use the first exe file found
+              Write-Host "Using $($exeFiles[0].FullName) for archive"
+              Compress-Archive -Path $exeFiles[0].FullName -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
+            } else {
+              Write-Error "No executable files found!"
+              exit 1
+            }
+          }
 
       # Upload artifacts
       - name: Upload ZIP artifacts
