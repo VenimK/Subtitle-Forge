@@ -453,6 +453,9 @@ func checkMkvextract() bool {
 	return mkvextractFound
 }
 
+// Global variable to store the path to deno
+var denoBinaryPath string
+
 // Check for Deno installation
 func checkDeno() bool {
 	fmt.Println("[DEBUG] Checking for Deno...")
@@ -481,6 +484,8 @@ func checkDeno() bool {
 			if debugLogger != nil {
 				fmt.Fprintf(debugLogger, "Deno verified with version: %s\n", strings.TrimSpace(string(denoOutput)))
 			}
+			// Store the path for later use
+			denoBinaryPath = denoPath
 		} else {
 			fmt.Println("[DEBUG] Deno command failed:", err)
 			if debugLogger != nil {
@@ -519,6 +524,8 @@ func checkDeno() bool {
 					if debugLogger != nil {
 						fmt.Fprintf(debugLogger, "Deno verified at: %s\n", path)
 					}
+					// Store the path for later use
+					denoBinaryPath = path
 					break
 				} else if debugLogger != nil {
 					fmt.Fprintf(debugLogger, "Deno command failed at %s: %v\n", path, err)
@@ -532,9 +539,9 @@ func checkDeno() bool {
 		}
 	}
 
-	fmt.Println("[DEBUG] Final Deno found status:", denoFound)
+	fmt.Println("[DEBUG] Final Deno found status:", denoFound, "Path:", denoBinaryPath)
 	if debugLogger != nil {
-		fmt.Fprintf(debugLogger, "Final Deno found status: %v\n\n", denoFound)
+		fmt.Fprintf(debugLogger, "Final Deno found status: %v, Path: %s\n\n", denoFound, denoBinaryPath)
 	}
 	return denoFound
 }
@@ -2609,8 +2616,17 @@ func main() {
 						}
 
 						// Run the conversion tool with Deno - using shell to enable output redirection
-						cmd = exec.Command("sh", "-c", fmt.Sprintf("deno run --allow-read --allow-write \"%s\" \"%s\" \"%s\" > \"%s\"",
-							pgsToSrtScript, trainedDataPath, absInputPath, tmpOutputPath))
+						var denoCmd string
+						if denoBinaryPath != "" {
+							denoCmd = fmt.Sprintf("%s run --allow-read --allow-write \"%s\" \"%s\" \"%s\" > \"%s\"", 
+								denoBinaryPath, pgsToSrtScript, trainedDataPath, absInputPath, tmpOutputPath)
+							logger.Printf("Using stored Deno path: %s\n", denoBinaryPath)
+						} else {
+							denoCmd = fmt.Sprintf("deno run --allow-read --allow-write \"%s\" \"%s\" \"%s\" > \"%s\"",
+								pgsToSrtScript, trainedDataPath, absInputPath, tmpOutputPath)
+							logger.Printf("No stored Deno path, using default 'deno' command\n")
+						}
+						cmd = exec.Command("sh", "-c", denoCmd)
 
 						// Set the working directory to ensure relative paths work correctly
 						cmd.Dir = filepath.Dir(pgsToSrtScript)
@@ -2621,8 +2637,13 @@ func main() {
 							result.SetText(result.Text + fmt.Sprintf("Working directory: %s\n", cmd.Dir))
 							result.SetText(result.Text + fmt.Sprintf("PATH: %s\n", os.Getenv("PATH")))
 							result.SetText(result.Text + "\n=== Command ===\n")
-							result.SetText(result.Text + fmt.Sprintf("deno run --allow-read --allow-write %s %s %s > %s\n",
-								pgsToSrtScript, trainedDataPath, absInputPath, tmpOutputPath))
+							if denoBinaryPath != "" {
+								result.SetText(result.Text + fmt.Sprintf("%s run --allow-read --allow-write %s %s %s > %s\n",
+									denoBinaryPath, pgsToSrtScript, trainedDataPath, absInputPath, tmpOutputPath))
+							} else {
+								result.SetText(result.Text + fmt.Sprintf("deno run --allow-read --allow-write %s %s %s > %s\n",
+									pgsToSrtScript, trainedDataPath, absInputPath, tmpOutputPath))
+							}
 						})
 
 						// Set up pipes to capture output in real-time
