@@ -1,5 +1,5 @@
 # Subtitle Forge v1.6.9a
-> Powerful subtitle extraction and conversion tool for **macOS** and **Linux** 🔹 Extract, convert, and manage subtitles with ease 🔹
+> Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
 > [![GitHub All Releases](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/total.svg)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -13,6 +13,32 @@ A tool for extracting and converting subtitles from MKV files, available in both
 This project provides two applications:
 1. **CLI Version** - Command-line tool for extracting subtitles from MKV files
 2. **GUI Version** - Fyne-based graphical application with enhanced features including PGS to SRT conversion and seasonal dark themes
+
+## Installation
+
+### macOS
+1. Download the latest release for macOS
+2. Unzip the file
+3. **Important**: After unzipping, open Terminal and run the following command to remove quarantine attributes:
+   ```
+   xattr -cr "Subtitle Forge.app"
+   ```
+4. Move the app to your Applications folder
+
+### Windows
+1. Download the latest release for Windows
+2. Unzip the file
+3. Run the included `install_dependencies.ps1` script as administrator to install required dependencies
+4. Launch the application
+
+### Linux
+1. Download the latest release for Linux
+2. Unzip the file
+3. For headless servers, use the included `install_dependencies.sh` script to install dependencies:
+   ```
+   sudo ./install_dependencies.sh
+   ```
+4. Launch the application
 
 ## What's New in v1.6.9a
 
