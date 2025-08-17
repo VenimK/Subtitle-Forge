@@ -71,6 +71,9 @@ install_dependencies() {
             log_message "INFO" "Installing Go..."
             apt-get install -y golang
             
+            log_message "INFO" "Installing Git and build tools..."
+            apt-get install -y git build-essential cmake
+            
             log_message "INFO" "Installing Deno dependencies..."
             apt-get install -y curl unzip
             ;;
@@ -89,6 +92,9 @@ install_dependencies() {
             log_message "INFO" "Installing Go..."
             $PKG_MANAGER install -y golang
             
+            log_message "INFO" "Installing Git and build tools..."
+            $PKG_MANAGER install -y git cmake gcc-c++
+            
             log_message "INFO" "Installing Deno dependencies..."
             $PKG_MANAGER install -y curl unzip
             ;;
@@ -106,6 +112,9 @@ install_dependencies() {
             
             log_message "INFO" "Installing Go..."
             pacman -S --noconfirm go
+            
+            log_message "INFO" "Installing Git and build tools..."
+            pacman -S --noconfirm git base-devel cmake
             
             log_message "INFO" "Installing Deno dependencies..."
             pacman -S --noconfirm curl unzip
@@ -141,13 +150,13 @@ install_vobsub2srt() {
     
     case $PKG_MANAGER in
         apt)
-            apt-get install -y cmake build-essential libpng-dev libtesseract-dev
+            apt-get install -y cmake build-essential libpng-dev libtesseract-dev libtiff-dev
             ;;
         dnf|yum)
-            $PKG_MANAGER install -y cmake gcc-c++ libpng-devel tesseract-devel
+            $PKG_MANAGER install -y cmake gcc-c++ libpng-devel tesseract-devel libtiff-devel
             ;;
         pacman)
-            pacman -S --noconfirm cmake base-devel libpng tesseract
+            pacman -S --noconfirm cmake base-devel libpng tesseract libtiff
             ;;
     esac
     
@@ -158,23 +167,50 @@ install_vobsub2srt() {
     cd "$TEMP_DIR"
     
     # Clone and build
-    git clone https://github.com/ruediger/VobSub2SRT.git
-    cd VobSub2SRT
-    ./configure
-    make
-    make install
+    if ! git clone https://github.com/nicostrebel/VobSub2SRT.git; then
+        log_message "ERROR" "Failed to clone VobSub2SRT repository"
+        return 1
+    fi
+    
+    cd VobSub2SRT || {
+        log_message "ERROR" "Failed to enter VobSub2SRT directory"
+        return 1
+    }
+    
+    if ! ./configure; then
+        log_message "ERROR" "Failed to configure VobSub2SRT"
+        return 1
+    fi
+    
+    if ! make; then
+        log_message "ERROR" "Failed to build VobSub2SRT"
+        return 1
+    fi
+    
+    if ! make install; then
+        log_message "ERROR" "Failed to install VobSub2SRT"
+        return 1
+    fi
     
     # Clean up
     cd /
     rm -rf "$TEMP_DIR"
     
     log_message "INFO" "VobSub2SRT installed successfully."
+    return 0
 }
 
 # Run installations
 install_dependencies
 install_deno
-install_vobsub2srt
+
+# Try to install VobSub2SRT but continue if it fails
+log_message "INFO" "Attempting to install VobSub2SRT..."
+if install_vobsub2srt; then
+    log_message "INFO" "VobSub2SRT installed successfully."
+else
+    log_message "WARNING" "VobSub2SRT installation failed, but this is optional. Continuing..."
+fi
 
 log_message "INFO" "All dependencies have been installed successfully!"
 log_message "INFO" "You can now run Subtitle Forge on this server."
