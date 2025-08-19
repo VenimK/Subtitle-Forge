@@ -16,15 +16,15 @@ jobs:
           - os: macos-latest
             output_name: subtitle-forge-mac
             artifact_name: Subtitle-Forge-macOS
-            package_cmd: fyne package -os darwin -icon assets/icon.png --app-id com.gmm.subtitleforge --app-version ${{ github.ref_name }} -name "Subtitle Forge" -exe build/subtitle-forge-mac
+            package_cmd: fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac
           - os: ubuntu-latest
             output_name: subtitle-forge-linux
             artifact_name: subtitle-forge-linux
-            package_cmd: fyne package -os linux -icon assets/icon.png --app-id com.gmm.subtitleforge --app-version ${{ github.ref_name }} -name "Subtitle Forge" -exe build/subtitle-forge-linux
+            package_cmd: fyne package -os linux -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-linux
           - os: windows-latest
             output_name: subtitle-forge-windows.exe
             artifact_name: Subtitle-Forge-Windows
-            package_cmd: fyne package -os windows -icon assets/icon.png --app-id com.gmm.subtitleforge --app-version ${{ github.ref_name }} -name "Subtitle Forge" -exe build/subtitle-forge-windows.exe
+            package_cmd: fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-windows.exe
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,6 +33,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+
 
       # Install Linux dependencies
       - name: Install Linux dependencies
@@ -63,9 +64,14 @@ jobs:
         run: go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/${{ matrix.output_name }}
 
       # Package application
+      - name: Extract version without v prefix
+        id: version
+        shell: bash
+        run: echo "VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')" >> $GITHUB_OUTPUT
+
       - name: Package application
         working-directory: ./fyne-gui
-        run: ${{ matrix.package_cmd }}
+        run: ${{ matrix.package_cmd }} --appVersion ${{ steps.version.outputs.VERSION }}
 
       # Create archive for macOS
       - name: Create macOS archive
