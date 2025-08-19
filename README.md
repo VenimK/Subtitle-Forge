@@ -1,4 +1,4 @@
-# Subtitle Forge v1.6.9a
+# Subtitle Forge v1.6.9b
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -39,6 +39,12 @@ This project provides two applications:
    sudo ./install_dependencies.sh
    ```
 4. Launch the application
+
+## What's New in v1.6.9b
+
+- **Enhanced Log Output**: Redesigned the logging format for a more attractive and consistent user experience.
+- **Styled Log Messages**: Implemented icons and a clear, structured format for info, success, errors, and conversion steps.
+- **Improved Readability**: Log messages are now easier to read and understand at a glance.
 
 ## What's New in v1.6.9a
 
