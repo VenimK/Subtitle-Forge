@@ -95,7 +95,7 @@ if [ -d "build" ]; then
     rm -rf build
 fi
 
-# Create fresh build directory
+# Create fresh build directory      
 echo "Creating build directory..."
 mkdir -p build
 
