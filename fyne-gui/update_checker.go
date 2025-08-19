@@ -19,8 +19,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// Current application version
-const AppVersion = "v1.6.9b"
+// Current application version - injected at build time
+var AppVersion = "v1.6.9b" // Default value for development
 
 // ReleaseInfo stores information about a GitHub release
 type ReleaseInfo struct {
@@ -118,7 +118,8 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 			if asset.Name == "Subtitle-Forge-macOS.zip" {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
-				break
+				// Found exact match, no need to check other assets
+				goto FOUND_ASSET
 			} else if strings.Contains(asset.Name, "macos") || strings.Contains(asset.Name, "darwin") {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
@@ -141,6 +142,7 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 	}
 
 	// If no appropriate asset was found, use the tarball or zipball URL
+FOUND_ASSET:
 	if downloadURL == "" {
 		if runtime.GOOS == "windows" && releaseInfo.ZipballUrl != "" {
 			downloadURL = releaseInfo.ZipballUrl

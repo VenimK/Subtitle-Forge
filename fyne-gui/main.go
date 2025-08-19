@@ -68,14 +68,14 @@ func findHomebrewPath() (string, error) {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "Homebrew not found in PATH: %v\n", err)
 		}
-		
+
 		// Check common installation paths
 		commonPaths := []string{
-			"/opt/homebrew/bin/brew",    // Apple Silicon Macs
-			"/usr/local/bin/brew",      // Intel Macs
+			"/opt/homebrew/bin/brew", // Apple Silicon Macs
+			"/usr/local/bin/brew",    // Intel Macs
 			"/usr/bin/brew",
 		}
-		
+
 		// Get home directory for user-specific paths
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
@@ -87,14 +87,14 @@ func findHomebrewPath() (string, error) {
 			}
 			commonPaths = append(commonPaths, userPaths...)
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if fileInfo, err := os.Stat(path); err == nil {
 				// Check if executable
 				perm := fileInfo.Mode().Perm()
 				isExecutable := (perm & 0111) != 0
-				
+
 				if isExecutable {
 					fmt.Println("[DEBUG] Homebrew found at", path)
 					if debugLogger != nil {
@@ -104,7 +104,7 @@ func findHomebrewPath() (string, error) {
 				}
 			}
 		}
-		
+
 		// If we get here, Homebrew was not found
 		fmt.Println("[DEBUG] Homebrew not found in any common locations")
 		if debugLogger != nil {
@@ -146,7 +146,7 @@ func checkDependencies() map[string]bool {
 			fmt.Fprintf(logFile, "Working Directory: %s\n", getCurrentDir())
 			fmt.Fprintf(logFile, "Executable Path: %s\n", getExecutablePath())
 			fmt.Fprintf(logFile, "Environment PATH: %s\n\n", os.Getenv("PATH"))
-			
+
 			// Set up a global debug logger that can be used by dependency check functions
 			debugLogger = logFile
 		}
@@ -168,7 +168,7 @@ func checkDependencies() map[string]bool {
 func checkFfmpeg() bool {
 	ffmpegFound := false
 	fmt.Println("[DEBUG] Checking for ffmpeg...")
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "=== Checking for FFmpeg ===\n")
@@ -187,14 +187,14 @@ func checkFfmpeg() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "ffmpeg not found in PATH: %v\n", err)
 		}
-		
+
 		// Check common installation paths
 		commonPaths := []string{
 			"/opt/homebrew/bin/ffmpeg",
 			"/usr/local/bin/ffmpeg",
 			"/usr/bin/ffmpeg",
 		}
-		
+
 		// Get home directory for user-specific paths
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
@@ -206,14 +206,14 @@ func checkFfmpeg() bool {
 			}
 			commonPaths = append(commonPaths, userPaths...)
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if fileInfo, err := os.Stat(path); err == nil {
 				// Check if executable
 				perm := fileInfo.Mode().Perm()
 				isExecutable := (perm & 0111) != 0
-				
+
 				if isExecutable {
 					fmt.Println("[DEBUG] ffmpeg found at", path)
 					if debugLogger != nil {
@@ -284,14 +284,14 @@ func checkVobsub2srt() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "vobsub2srt not found in PATH: %v\n", err)
 		}
-		
+
 		// Check common installation paths
 		commonPaths := []string{
 			"/usr/local/bin/vobsub2srt",
 			"/usr/bin/vobsub2srt",
 			"/opt/homebrew/bin/vobsub2srt",
 		}
-		
+
 		// Get home directory for user-specific paths
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
@@ -301,14 +301,14 @@ func checkVobsub2srt() bool {
 			}
 			commonPaths = append(commonPaths, userPaths...)
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if fileInfo, err := os.Stat(path); err == nil {
 				// Check if executable
 				perm := fileInfo.Mode().Perm()
 				isExecutable := (perm & 0111) != 0
-				
+
 				if isExecutable {
 					fmt.Println("[DEBUG] vobsub2srt found at", path)
 					if debugLogger != nil {
@@ -327,7 +327,7 @@ func checkVobsub2srt() bool {
 			fmt.Fprintf(debugLogger, "vobsub2srt not found in any common paths\n")
 		}
 	}
-	
+
 	// Try standard path using which command
 	if !vobsub2srtFound {
 		fmt.Println("[DEBUG] Trying to find vobsub2srt in PATH using 'which'")
@@ -364,12 +364,12 @@ var mkvmergeBinaryPath string
 func checkMkvmerge() bool {
 	fmt.Println("[DEBUG] Checking for MKVMerge...")
 	mkvmergeFound := false
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "=== Checking for MKVMerge ===\n")
 	}
-	
+
 	// First try using exec.LookPath to find mkvmerge in PATH
 	mkvmergePath, err := exec.LookPath("mkvmerge")
 	if err == nil {
@@ -377,12 +377,12 @@ func checkMkvmerge() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "mkvmerge found in PATH at: %s\n", mkvmergePath)
 		}
-		
+
 		// Verify by running the command
 		mkvmergeCmd := exec.Command(mkvmergePath, "--version")
 		mkvmergeOutput, err := mkvmergeCmd.CombinedOutput()
 		mkvmergeFound = err == nil && len(mkvmergeOutput) > 0
-		
+
 		if mkvmergeFound {
 			fmt.Println("[DEBUG] MKVMerge found:", strings.TrimSpace(string(mkvmergeOutput)))
 			if debugLogger != nil {
@@ -398,7 +398,7 @@ func checkMkvmerge() bool {
 		}
 	} else {
 		fmt.Println("[DEBUG] mkvmerge not found in PATH:", err)
-		
+
 		// Check common installation paths
 		commonPaths := []string{
 			"/opt/homebrew/bin/mkvmerge",
@@ -406,12 +406,12 @@ func checkMkvmerge() bool {
 			"/usr/bin/mkvmerge",
 			"/Applications/MKVToolNix.app/Contents/MacOS/mkvmerge",
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
 				fmt.Println("[DEBUG] mkvmerge found at", path)
-				
+
 				// Verify by running the command
 				mkvmergeCmd := exec.Command(path, "--version")
 				mkvmergeOutput, err := mkvmergeCmd.CombinedOutput()
@@ -437,12 +437,12 @@ var mkvextractBinaryPath string
 func checkMkvextract() bool {
 	fmt.Println("[DEBUG] Checking for MKVExtract...")
 	mkvextractFound := false
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "=== Checking for MKVExtract ===\n")
 	}
-	
+
 	// First try using exec.LookPath to find mkvextract in PATH
 	mkvextractPath, err := exec.LookPath("mkvextract")
 	if err == nil {
@@ -450,12 +450,12 @@ func checkMkvextract() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "mkvextract found in PATH at: %s\n", mkvextractPath)
 		}
-		
+
 		// Verify by running the command
 		mkvextractCmd := exec.Command(mkvextractPath, "--version")
 		mkvextractOutput, err := mkvextractCmd.CombinedOutput()
 		mkvextractFound = err == nil && len(mkvextractOutput) > 0
-		
+
 		if mkvextractFound {
 			fmt.Println("[DEBUG] MKVExtract found:", strings.TrimSpace(string(mkvextractOutput)))
 			if debugLogger != nil {
@@ -474,7 +474,7 @@ func checkMkvextract() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "mkvextract not found in PATH: %v\n", err)
 		}
-		
+
 		// Check common installation paths
 		commonPaths := []string{
 			"/opt/homebrew/bin/mkvextract",
@@ -482,7 +482,7 @@ func checkMkvextract() bool {
 			"/usr/bin/mkvextract",
 			"/Applications/MKVToolNix.app/Contents/MacOS/mkvextract",
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
@@ -490,7 +490,7 @@ func checkMkvextract() bool {
 				if debugLogger != nil {
 					fmt.Fprintf(debugLogger, "mkvextract found at: %s\n", path)
 				}
-				
+
 				// Verify by running the command
 				mkvextractCmd := exec.Command(path, "--version")
 				mkvextractOutput, err := mkvextractCmd.CombinedOutput()
@@ -526,12 +526,12 @@ var denoBinaryPath string
 func checkDeno() bool {
 	fmt.Println("[DEBUG] Checking for Deno...")
 	denoFound := false
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "=== Checking for Deno ===\n")
 	}
-	
+
 	// First try using exec.LookPath to find deno in PATH
 	denoPath, err := exec.LookPath("deno")
 	if err == nil {
@@ -539,12 +539,12 @@ func checkDeno() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "deno found in PATH at: %s\n", denoPath)
 		}
-		
+
 		// Verify by running the command
 		denoCmd := exec.Command(denoPath, "--version")
 		denoOutput, err := denoCmd.CombinedOutput()
 		denoFound = err == nil && len(denoOutput) > 0
-		
+
 		if denoFound {
 			fmt.Println("[DEBUG] Deno found:", strings.TrimSpace(string(denoOutput)))
 			if debugLogger != nil {
@@ -563,7 +563,7 @@ func checkDeno() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "deno not found in PATH: %v\n", err)
 		}
-		
+
 		// Check common installation paths
 		commonPaths := []string{
 			"/usr/local/bin/deno",
@@ -572,7 +572,7 @@ func checkDeno() bool {
 			"/bin/deno",
 			filepath.Join(os.Getenv("HOME"), ".deno", "bin", "deno"),
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
@@ -580,7 +580,7 @@ func checkDeno() bool {
 				if debugLogger != nil {
 					fmt.Fprintf(debugLogger, "deno found at: %s\n", path)
 				}
-				
+
 				// Verify by running the command
 				denoCmd := exec.Command(path, "--version")
 				denoOutput, err := denoCmd.CombinedOutput()
@@ -616,12 +616,12 @@ func checkDeno() bool {
 func checkTesseract() bool {
 	fmt.Println("[DEBUG] Checking for Tesseract...")
 	tesseractFound := false
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "=== Checking for Tesseract ===\n")
 	}
-	
+
 	// First try using exec.LookPath to find tesseract in PATH
 	tesseractPath, err := exec.LookPath("tesseract")
 	if err == nil {
@@ -629,12 +629,12 @@ func checkTesseract() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "tesseract found in PATH at: %s\n", tesseractPath)
 		}
-		
+
 		// Verify by running the command
 		tesseractCmd := exec.Command(tesseractPath, "--version")
 		tesseractOutput, err := tesseractCmd.CombinedOutput()
 		tesseractFound = err == nil && len(tesseractOutput) > 0
-		
+
 		if tesseractFound {
 			fmt.Println("[DEBUG] Tesseract found:", strings.TrimSpace(string(tesseractOutput)))
 			if debugLogger != nil {
@@ -651,7 +651,7 @@ func checkTesseract() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "tesseract not found in PATH: %v\n", err)
 		}
-		
+
 		// Check common installation paths
 		commonPaths := []string{
 			"/usr/local/bin/tesseract",
@@ -659,7 +659,7 @@ func checkTesseract() bool {
 			"/usr/bin/tesseract",
 			"/bin/tesseract",
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
@@ -667,7 +667,7 @@ func checkTesseract() bool {
 				if debugLogger != nil {
 					fmt.Fprintf(debugLogger, "tesseract found at: %s\n", path)
 				}
-				
+
 				// Verify by running the command
 				tesseractCmd := exec.Command(path, "--version")
 				tesseractOutput, err := tesseractCmd.CombinedOutput()
@@ -704,12 +704,12 @@ var pgsToSrtScriptPath = filepath.Join(os.Getenv("HOME"), "pgs-to-srt", "pgs-to-
 func checkGo() bool {
 	fmt.Println("[DEBUG] Checking for Go...")
 	goFound := false
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "=== Checking for Go ===\n")
 	}
-	
+
 	// First try using exec.LookPath to find go in PATH
 	goPath, err := exec.LookPath("go")
 	if err == nil {
@@ -717,12 +717,12 @@ func checkGo() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "go found in PATH at: %s\n", goPath)
 		}
-		
+
 		// Verify by running the command
 		goCmd := exec.Command(goPath, "version")
 		goOutput, err := goCmd.CombinedOutput()
 		goFound = err == nil && len(goOutput) > 0
-		
+
 		if goFound {
 			fmt.Println("[DEBUG] Go found:", strings.TrimSpace(string(goOutput)))
 			if debugLogger != nil {
@@ -739,7 +739,7 @@ func checkGo() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "go not found in PATH: %v\n", err)
 		}
-		
+
 		// Check common installation paths
 		commonPaths := []string{
 			"/usr/local/go/bin/go",
@@ -749,7 +749,7 @@ func checkGo() bool {
 			"/bin/go",
 			filepath.Join(os.Getenv("HOME"), "go", "bin", "go"),
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if fileInfo, err := os.Stat(path); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
@@ -757,7 +757,7 @@ func checkGo() bool {
 				if debugLogger != nil {
 					fmt.Fprintf(debugLogger, "go found at: %s\n", path)
 				}
-				
+
 				// Verify by running the command
 				goCmd := exec.Command(path, "version")
 				goOutput, err := goCmd.CombinedOutput()
@@ -791,7 +791,7 @@ func checkGo() bool {
 func checkPgsToSrt() bool {
 	fmt.Println("[DEBUG] Checking for PGS to SRT script...")
 	scriptFound := false
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "=== Checking for PGS to SRT script ===\n")
@@ -827,7 +827,7 @@ func checkPgsToSrt() bool {
 		if debugLogger != nil {
 			fmt.Fprintf(debugLogger, "PGS to SRT script not found at configured path: %v\n", err)
 		}
-		
+
 		// Check common installation paths
 		commonPaths := []string{
 			"/usr/local/bin/pgs-to-srt.js",
@@ -835,7 +835,7 @@ func checkPgsToSrt() bool {
 			filepath.Join(os.Getenv("HOME"), ".deno", "bin", "pgs-to-srt.js"),
 			filepath.Join(os.Getenv("HOME"), ".deno", "bin", "pgs-to-srt"),
 		}
-		
+
 		// Check each path
 		for _, path := range commonPaths {
 			if _, err := os.Stat(path); err == nil {
@@ -845,7 +845,7 @@ func checkPgsToSrt() bool {
 				}
 				scriptFound = true
 				pgsToSrtScriptPath = path // Update the global path variable
-				
+
 				// Check if Deno is available to run the script
 				denoAvailable := checkDeno()
 				if !denoAvailable {
@@ -913,7 +913,7 @@ func installDependency(w fyne.Window, tool string) {
 										// Create the installation command
 										// Use a more reliable approach to run the Homebrew installation script
 										tempScript := filepath.Join(os.TempDir(), "homebrew_install.sh")
-										
+
 										// Download the script first
 										downloadCmd := exec.Command("curl", "-fsSL", "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh", "-o", tempScript)
 										downloadErr := downloadCmd.Run()
@@ -926,21 +926,21 @@ func installDependency(w fyne.Window, tool string) {
 											})
 											return
 										}
-										
+
 										// Make the script executable
 										os.Chmod(tempScript, 0755)
-										
+
 										// Run the installation script
 										cmd := exec.Command("/bin/bash", tempScript)
-										
+
 										// Run the command
 										err := cmd.Run()
-										
+
 										// Update UI on main thread
 										fyne.Do(func() {
 											// Hide progress dialog
 											brewProgress.Hide()
-											
+
 											if err != nil {
 												// Show error if installation failed
 												dialog.ShowError(
@@ -974,7 +974,7 @@ func installDependency(w fyne.Window, tool string) {
 				// Set up command and description based on tool
 				// Using a case-insensitive approach to handle various tool name formats
 				toolLower := strings.ToLower(tool)
-				
+
 				// Store the Homebrew path for use in commands
 				var brewCommand string
 				if tool != "vobsub2srt" { // Skip for vobsub2srt as it uses custom script
@@ -982,7 +982,7 @@ func installDependency(w fyne.Window, tool string) {
 				} else {
 					brewCommand = "brew" // Fallback, though this shouldn't be reached for vobsub2srt
 				}
-				
+
 				switch toolLower {
 				case "mkvmerge", "mkvextract", "mkvm":
 					// Install MKVToolNix via Homebrew
@@ -1444,7 +1444,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 			}
 
 			mkvFileLabel.SetText(filePath)
-			utilitiesResult.SetText(setLogMessage(LogInfo, "MKV File Selected", "Selected MKV file: " + filePath))
+			utilitiesResult.SetText(setLogMessage(LogInfo, "MKV File Selected", "Selected MKV file: "+filePath))
 		}, fyne.CurrentApp().Driver().AllWindows()[0])
 		fd.SetFilter(storage.NewExtensionFileFilter([]string{".mkv"}))
 		fd.Show()
@@ -1469,7 +1469,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 			}
 
 			srtFileLabel.SetText(filePath)
-			utilitiesResult.SetText(setLogMessage(LogInfo, "SRT File Selected", "Selected SRT file: " + filePath))
+			utilitiesResult.SetText(setLogMessage(LogInfo, "SRT File Selected", "Selected SRT file: "+filePath))
 		}, fyne.CurrentApp().Driver().AllWindows()[0])
 		fd.SetFilter(storage.NewExtensionFileFilter([]string{".srt"}))
 		fd.Show()
@@ -1494,7 +1494,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 				// Get the directory of mkvextract and use it for mkvinfo
 				mkvToolsDir := filepath.Dir(mkvextractBinaryPath)
 				mkvinfoPath := filepath.Join(mkvToolsDir, "mkvinfo")
-				
+
 				// Check if mkvinfo exists at the expected path
 				if _, err := os.Stat(mkvinfoPath); err == nil {
 					cmd = exec.Command(mkvinfoPath, mkvPath)
@@ -1517,7 +1517,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 					return
 				}
 
-				utilitiesResult.SetText(setLogMessage(LogSuccess, "MKV Information", "MKV Information for: " + mkvPath + "\n\n" + string(output)))
+				utilitiesResult.SetText(setLogMessage(LogSuccess, "MKV Information", "MKV Information for: "+mkvPath+"\n\n"+string(output)))
 			})
 		}()
 	})
@@ -1535,7 +1535,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 		baseName = strings.TrimSuffix(baseName, filepath.Ext(baseName))
 		outputPath := filepath.Join(dir, baseName+"_chapters.txt")
 
-		utilitiesResult.SetText(setLogMessage(LogInfo, "Extracting Chapters", "Extracting chapters to: " + outputPath + "\n"))
+		utilitiesResult.SetText(setLogMessage(LogInfo, "Extracting Chapters", "Extracting chapters to: "+outputPath+"\n"))
 
 		// Run mkvextract command for chapters
 		go func() {
@@ -1557,7 +1557,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 					return
 				}
 
-				utilitiesResult.SetText(setLogMessage(LogSuccess, "Chapters Extracted", utilitiesResult.Text + "\nChapters extracted successfully to: " + outputPath + "\n" + string(output)))
+				utilitiesResult.SetText(setLogMessage(LogSuccess, "Chapters Extracted", utilitiesResult.Text+"\nChapters extracted successfully to: "+outputPath+"\n"+string(output)))
 			})
 		}()
 	})
@@ -1599,7 +1599,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 					return
 				}
 
-				utilitiesResult.SetText(setLogMessage(LogSuccess, "SRT Encoding Fixed", utilitiesResult.Text + "\nSRT encoding fixed successfully.\nOriginal backup saved to: " + backupPath + "\n" + string(output)))
+				utilitiesResult.SetText(setLogMessage(LogSuccess, "SRT Encoding Fixed", utilitiesResult.Text+"\nSRT encoding fixed successfully.\nOriginal backup saved to: "+backupPath+"\n"+string(output)))
 			})
 		}()
 	})
@@ -1626,7 +1626,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 				}
 
 				offset := offsetEntry.Text
-				utilitiesResult.SetText(setLogMessage(LogInfo, "Adjusting SRT Timing", "Adjusting SRT timing with offset: " + offset + " seconds...\n"))
+				utilitiesResult.SetText(setLogMessage(LogInfo, "Adjusting SRT Timing", "Adjusting SRT timing with offset: "+offset+" seconds...\n"))
 
 				go func() {
 					// Create a backup of the original file
@@ -1668,7 +1668,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 					}
 
 					fyne.Do(func() {
-						utilitiesResult.SetText(setLogMessage(LogSuccess, "SRT Timing Adjusted", utilitiesResult.Text + "\nSRT timing adjusted successfully.\nOriginal backup saved to: " + backupPath))
+						utilitiesResult.SetText(setLogMessage(LogSuccess, "SRT Timing Adjusted", utilitiesResult.Text+"\nSRT timing adjusted successfully.\nOriginal backup saved to: "+backupPath))
 					})
 				}()
 			},
@@ -1724,7 +1724,6 @@ func copyFile(src, dst string) error {
 }
 
 // Helper function to adjust SRT timing
-
 
 func adjustSRTTiming(content string, offsetSeconds float64) string {
 	lines := strings.Split(content, "\n")
@@ -2234,7 +2233,7 @@ func main() {
 			cmd = exec.Command("mkvmerge", "-J", mkvPath)
 			fmt.Println("[DEBUG] No stored mkvmerge path, using default PATH lookup")
 		}
-		
+
 		output, err := cmd.Output()
 		if err != nil {
 			dialog.ShowError(fmt.Errorf("Error running mkvmerge: %v (path: %s)", err, mkvmergeBinaryPath), w)
@@ -2790,7 +2789,7 @@ func main() {
 						// Run the conversion tool with Deno - using shell to enable output redirection
 						var denoCmd string
 						if denoBinaryPath != "" {
-							denoCmd = fmt.Sprintf("%s run --allow-read --allow-write \"%s\" \"%s\" \"%s\" > \"%s\"", 
+							denoCmd = fmt.Sprintf("%s run --allow-read --allow-write \"%s\" \"%s\" \"%s\" > \"%s\"",
 								denoBinaryPath, pgsToSrtScript, trainedDataPath, absInputPath, tmpOutputPath)
 							logger.Printf("Using stored Deno path: %s\n", denoBinaryPath)
 						} else {
@@ -4049,13 +4048,13 @@ func main() {
 
 	// Create custom language code dropdown with improved readability
 	selectedLangCode := "eng"
-	
+
 	// Create the dropdown with explicit text color
 	customLangDropdown := widget.NewSelect(langCodes, func(selected string) {
 		selectedLangCode = selected
 	})
 	customLangDropdown.SetSelected("eng")
-	
+
 	// Create a high-contrast container for the dropdown
 	padded := container.NewPadded(customLangDropdown)
 	langCodeContainer := container.NewMax(
@@ -4064,10 +4063,10 @@ func main() {
 		// Add the dropdown directly
 		padded,
 	)
-	
+
 	// Create a card with the high-contrast container
 	langCodeCard := widget.NewCard("", "", langCodeContainer)
-	
+
 	// Initially hide both elements
 	customLangDropdown.Hide()
 	langCodeCard.Hide()
@@ -4267,7 +4266,7 @@ func main() {
 	)
 	languageTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
 	languageTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
-	
+
 	trackOptionsTitleContainer := container.NewMax(
 		// Light background for contrast
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
@@ -4276,7 +4275,7 @@ func main() {
 	)
 	trackOptionsTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
 	trackOptionsTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
-	
+
 	// Create separator for visual distinction
 	languageSeparator := widget.NewSeparator()
 	trackOptionsSeparator := widget.NewSeparator()
@@ -4290,19 +4289,19 @@ func main() {
 		canvas.NewText("Language:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	languageLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
-	
+
 	langCodeLabelContainer := container.NewMax(
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
 		canvas.NewText("Language Code:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	langCodeLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
-	
+
 	trackNameLabelContainer := container.NewMax(
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
 		canvas.NewText("Track Name:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	trackNameLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
-	
+
 	// Create a high-contrast container for the track name entry
 	trackNamePadded := container.NewPadded(trackNameEntry)
 	trackNameContainer := container.NewMax(
@@ -4311,10 +4310,10 @@ func main() {
 		// Add the entry directly
 		trackNamePadded,
 	)
-	
+
 	// Create a card with the high-contrast container
 	trackNameCard := widget.NewCard("", "", trackNameContainer)
-	
+
 	// Create form layout with high-contrast labels
 	languageForm := container.New(layout.NewFormLayout(),
 		languageLabelContainer,
@@ -4324,7 +4323,7 @@ func main() {
 		trackNameLabelContainer,
 		trackNameCard,
 	)
-	
+
 	// Create a container for the language section with title, separator, and form
 	languageSection := container.NewVBox(
 		languageTitleContainer,
@@ -4343,7 +4342,7 @@ func main() {
 
 	// Group subtitle options with improved organization and readability
 	subtitleOptionsGroup := widget.NewCard("Subtitle Options", "", container.NewVBox(
-		container.NewPadded(languageSection), // Using our new language section with title and separator
+		container.NewPadded(languageSection),       // Using our new language section with title and separator
 		container.NewPadded(trackOptionsContainer), // Track options already include title and separator
 	))
 
@@ -4360,10 +4359,10 @@ func main() {
 	)
 	outputTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
 	outputTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
-	
+
 	// Create a separator for visual distinction
 	outputSeparator := widget.NewSeparator()
-	
+
 	// Create output filename label with explicit styling for guaranteed readability
 	outputFilenameLabelContainer := container.NewMax(
 		// Light background for contrast
@@ -4372,7 +4371,7 @@ func main() {
 		canvas.NewText("Output Filename:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	outputFilenameLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
-	
+
 	// Create a high-contrast container for the output filename entry
 	outputNamePadded := container.NewPadded(outputNameEntry)
 	outputNameContainer := container.NewMax(
@@ -4381,16 +4380,16 @@ func main() {
 		// Add the entry directly
 		outputNamePadded,
 	)
-	
+
 	// Create a card with the high-contrast container
 	outputNameCard := widget.NewCard("", "", outputNameContainer)
-	
+
 	// Create form layout for better alignment with high-contrast labels
 	outputForm := container.New(layout.NewFormLayout(),
 		outputFilenameLabelContainer,
 		outputNameCard,
 	)
-	
+
 	// Create a container for the output section with title and separator
 	outputSection := container.NewVBox(
 		outputTitleContainer,
@@ -4450,7 +4449,7 @@ func main() {
 	themeSelector := widget.NewSelect(themeOptions, func(selected string) {
 		// Save the theme preference
 		a.Preferences().SetString("theme", selected)
-		
+
 		switch selected {
 		case "Light Theme":
 			// Use our predefined light theme
@@ -4492,7 +4491,7 @@ func main() {
 			a.Settings().SetTheme(theme.DefaultTheme())
 		}
 	})
-	
+
 	// Load saved theme preference or default to Dark Theme
 	selectedTheme := a.Preferences().StringWithFallback("theme", "Dark Theme")
 	themeSelector.SetSelected(selectedTheme)
@@ -4515,10 +4514,10 @@ func main() {
 	applyThemeBtn := widget.NewButtonWithIcon("Apply Theme", theme.ConfirmIcon(), func() {
 		// Get the currently selected theme
 		selected := themeSelector.Selected
-		
+
 		// Save the theme preference
 		a.Preferences().SetString("theme", selected)
-		
+
 		// Apply the theme based on selection
 		switch selected {
 		case "Light Theme":
@@ -4539,7 +4538,7 @@ func main() {
 		default:
 			a.Settings().SetTheme(theme.DefaultTheme())
 		}
-		
+
 		dialog.ShowInformation("Theme Applied", "Application theme has been updated and saved.", w)
 	})
 	applyThemeBtn.Importance = widget.HighImportance
@@ -4557,7 +4556,7 @@ func main() {
 
 	// App information
 	versionInfo := widget.NewRichText(
-		&widget.TextSegment{Text: "Subtitle Forge v1.6.9\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Text: "Subtitle Forge " + AppVersion + "\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
 		&widget.TextSegment{Text: "A tool for extracting and converting subtitles from MKV files.\n\n"},
 		&widget.TextSegment{Text: " 2025 VenimK@David Software\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Italic: true}}},
 	)
@@ -4702,7 +4701,7 @@ func main() {
 	extractScroll := container.NewScroll(extractTabContent)
 	insertScroll := container.NewScroll(insertTabContent)
 	settingsScroll := container.NewScroll(settingsTabContent)
-	
+
 	// Create tabs with scrollable content
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Extract Subtitles", extractScroll),

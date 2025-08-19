@@ -3,9 +3,20 @@
 
 # Parse command line arguments
 BUILD_ALL=false
-if [ "$1" == "--all" ]; then
-    BUILD_ALL=true
-fi
+VERSION="v1.6.9b"
+
+for arg in "$@"; do
+    case $arg in
+        --all)
+            BUILD_ALL=true
+            ;;
+        --version=*)
+            VERSION="${arg#*=}"
+            ;;
+    esac
+done
+
+echo "Building version: $VERSION"
 
 # Function to check if a command exists
 check_dependency() {
@@ -90,7 +101,7 @@ mkdir -p build
 
 # Build for macOS
 echo "Building for macOS..."
-go build -o build/subtitle-forge-mac
+go build -ldflags="-X 'main.AppVersion=$VERSION'" -o build/subtitle-forge-mac
 if [ $? -eq 0 ]; then
     echo "✅ macOS build successful"
 else
@@ -105,7 +116,7 @@ echo "Windows build disabled"
 if [ "$BUILD_ALL" = true ]; then
     # Build for Linux (requires CGO)
     echo "Building for Linux..."
-    GOOS=linux GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-linux-musl-gcc go build -o build/subtitle-forge-linux
+    GOOS=linux GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-linux-musl-gcc go build -ldflags="-X 'main.AppVersion=$VERSION'" -o build/subtitle-forge-linux
     if [ $? -eq 0 ]; then
         echo "✅ Linux build successful"
     else
