@@ -1444,7 +1444,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 			}
 
 			mkvFileLabel.SetText(filePath)
-			utilitiesResult.SetText("MKV file selected: " + filePath)
+			utilitiesResult.SetText(setLogMessage(LogInfo, "MKV File Selected", "Selected MKV file: " + filePath))
 		}, fyne.CurrentApp().Driver().AllWindows()[0])
 		fd.SetFilter(storage.NewExtensionFileFilter([]string{".mkv"}))
 		fd.Show()
@@ -1469,7 +1469,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 			}
 
 			srtFileLabel.SetText(filePath)
-			utilitiesResult.SetText("SRT file selected: " + filePath)
+			utilitiesResult.SetText(setLogMessage(LogInfo, "SRT File Selected", "Selected SRT file: " + filePath))
 		}, fyne.CurrentApp().Driver().AllWindows()[0])
 		fd.SetFilter(storage.NewExtensionFileFilter([]string{".srt"}))
 		fd.Show()
@@ -1483,7 +1483,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 			return
 		}
 
-		utilitiesResult.SetText("Getting MKV information...\n")
+		utilitiesResult.SetText(setLogMessage(LogInfo, "Getting MKV Information", "Getting MKV information...\n"))
 
 		// Run mkvinfo command
 		go func() {
@@ -1517,7 +1517,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 					return
 				}
 
-				utilitiesResult.SetText("MKV Information for: " + mkvPath + "\n\n" + string(output))
+				utilitiesResult.SetText(setLogMessage(LogSuccess, "MKV Information", "MKV Information for: " + mkvPath + "\n\n" + string(output)))
 			})
 		}()
 	})
@@ -1535,7 +1535,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 		baseName = strings.TrimSuffix(baseName, filepath.Ext(baseName))
 		outputPath := filepath.Join(dir, baseName+"_chapters.txt")
 
-		utilitiesResult.SetText("Extracting chapters to: " + outputPath + "\n")
+		utilitiesResult.SetText(setLogMessage(LogInfo, "Extracting Chapters", "Extracting chapters to: " + outputPath + "\n"))
 
 		// Run mkvextract command for chapters
 		go func() {
@@ -1557,7 +1557,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 					return
 				}
 
-				utilitiesResult.SetText(utilitiesResult.Text + "\nChapters extracted successfully to: " + outputPath + "\n" + string(output))
+				utilitiesResult.SetText(setLogMessage(LogSuccess, "Chapters Extracted", utilitiesResult.Text + "\nChapters extracted successfully to: " + outputPath + "\n" + string(output)))
 			})
 		}()
 	})
@@ -1570,7 +1570,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 			return
 		}
 
-		utilitiesResult.SetText("Fixing SRT encoding...\n")
+		utilitiesResult.SetText(setLogMessage(LogInfo, "Fixing SRT Encoding", "Fixing SRT encoding...\n"))
 
 		// Run iconv command to fix encoding
 		go func() {
@@ -1599,7 +1599,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 					return
 				}
 
-				utilitiesResult.SetText(utilitiesResult.Text + "\nSRT encoding fixed successfully.\nOriginal backup saved to: " + backupPath + "\n" + string(output))
+				utilitiesResult.SetText(setLogMessage(LogSuccess, "SRT Encoding Fixed", utilitiesResult.Text + "\nSRT encoding fixed successfully.\nOriginal backup saved to: " + backupPath + "\n" + string(output)))
 			})
 		}()
 	})
@@ -1626,7 +1626,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 				}
 
 				offset := offsetEntry.Text
-				utilitiesResult.SetText("Adjusting SRT timing with offset: " + offset + " seconds...\n")
+				utilitiesResult.SetText(setLogMessage(LogInfo, "Adjusting SRT Timing", "Adjusting SRT timing with offset: " + offset + " seconds...\n"))
 
 				go func() {
 					// Create a backup of the original file
@@ -1668,7 +1668,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 					}
 
 					fyne.Do(func() {
-						utilitiesResult.SetText(utilitiesResult.Text + "\nSRT timing adjusted successfully.\nOriginal backup saved to: " + backupPath)
+						utilitiesResult.SetText(setLogMessage(LogSuccess, "SRT Timing Adjusted", utilitiesResult.Text + "\nSRT timing adjusted successfully.\nOriginal backup saved to: " + backupPath))
 					})
 				}()
 			},
@@ -1798,6 +1798,35 @@ func adjustSRTTiming(content string, offsetSeconds float64) string {
 	}
 
 	return strings.Join(result, "\n")
+}
+
+// Log types for styling the output
+const (
+	LogInfo    = "INFO"
+	LogSuccess = "SUCCESS"
+	LogError   = "ERROR"
+	LogExtract = "EXTRACT"
+	LogConvert = "CONVERT"
+)
+
+// setLogMessage formats a log message with an icon and title.
+func setLogMessage(logType, title, message string) string {
+	var icon string
+	switch logType {
+	case LogInfo:
+		icon = "ℹ️"
+	case LogSuccess:
+		icon = "✅"
+	case LogError:
+		icon = "❌"
+	case LogExtract:
+		icon = "🎬"
+	case LogConvert:
+		icon = "🔄"
+	default:
+		icon = "➡️"
+	}
+	return fmt.Sprintf("%s %s\n%s", icon, title, message)
 }
 
 func main() {
@@ -1974,7 +2003,7 @@ func main() {
 				trackList.Objects = nil
 				trackList.Refresh()
 
-				result.SetText("MKV file dropped and loaded. Output directory automatically set to MKV location. Click 'Load Tracks' to analyze the MKV file.")
+				result.SetText(setLogMessage(LogInfo, "MKV File Loaded", "MKV file dropped and loaded. Output directory automatically set to MKV location. Click 'Load Tracks' to analyze the MKV file."))
 			} else {
 				a.SendNotification(&fyne.Notification{
 					Title:   "Invalid File",
@@ -2168,7 +2197,7 @@ func main() {
 			trackList.Objects = nil
 			trackList.Refresh()
 
-			result.SetText("MKV file loaded. Output directory automatically set to MKV location. Click 'Load Tracks' to analyze the MKV file.")
+			result.SetText(setLogMessage(LogInfo, "MKV File Loaded", "MKV file loaded. Output directory automatically set to MKV location. Click 'Load Tracks' to analyze the MKV file."))
 		}, w)
 
 		fd.SetFilter(filter)
@@ -2366,7 +2395,7 @@ func main() {
 		}
 		trackList.Refresh()
 
-		result.SetText("Tracks loaded. Select the tracks you want to extract, then click 'Start Extraction'")
+		result.SetText(setLogMessage(LogSuccess, "Tracks Loaded", "Tracks loaded. Select the tracks you want to extract, then click 'Start Extraction'"))
 	})
 
 	// Button to start extraction of selected tracks
@@ -2394,7 +2423,7 @@ func main() {
 
 			// Set up progress bar
 			fyne.Do(func() {
-				result.SetText("Extracting selected tracks...")
+				result.SetText(setLogMessage(LogInfo, "Extraction Started", "Extracting selected tracks..."))
 				progress.Max = float64(len(selected))
 				progress.SetValue(0)
 			})
@@ -2406,7 +2435,7 @@ func main() {
 			for i, t := range selected {
 				// Update UI on main thread
 				fyne.Do(func() {
-					currentTrackLabel.SetText(fmt.Sprintf("Extracting track %d of %d: %s (%s) %s", i+1, len(selected), t.Lang, t.Codec, t.Name))
+					currentTrackLabel.SetText(setLogMessage(LogExtract, fmt.Sprintf("Extracting Track %d/%d", i+1, len(selected)), t.Name))
 				})
 
 				// Extract the subtitle track
@@ -2420,7 +2449,7 @@ func main() {
 				if t.ConvertOCR != nil && t.ConvertOCR.Checked && (t.Codec == "hdmv_pgs_subtitle" || t.Codec == "HDMV PGS") {
 					// First extract as PGS
 					fyne.Do(func() {
-						result.SetText(result.Text + "\n\n[DEBUG] Starting PGS extraction process")
+						result.SetText(setLogMessage(LogConvert, "PGS to SRT Conversion", "Starting PGS extraction process..."))
 					})
 					tempPgsFile := fmt.Sprintf("%s.track%d_%s.sup", mkvBaseName, t.Num, t.Lang)
 					outFile = fmt.Sprintf("%s.track%d_%s.srt", mkvBaseName, t.Num, t.Lang) // Final output will be SRT
@@ -3113,7 +3142,7 @@ func main() {
 				} else if t.ConvertOCR != nil && t.ConvertOCR.Checked && (strings.Contains(strings.ToLower(t.Codec), "ass") || strings.Contains(strings.ToLower(t.Codec), "ssa") || strings.Contains(strings.ToLower(t.Codec), "substation") || strings.Contains(strings.ToLower(t.Codec), "sub station")) {
 					// ASS/SSA to SRT conversion
 					fyne.Do(func() {
-						result.SetText(result.Text + "\n\n[DEBUG] Starting ASS/SSA to SRT conversion process")
+						result.SetText(setLogMessage(LogConvert, "ASS/SSA to SRT Conversion", "Starting ASS/SSA to SRT conversion process..."))
 					})
 					tempAssFile := fmt.Sprintf("%s.track%d_%s.ass", mkvBaseName, t.Num, t.Lang)
 					outFile = fmt.Sprintf("%s.track%d_%s.srt", mkvBaseName, t.Num, t.Lang) // Final output will be SRT
@@ -3309,7 +3338,7 @@ func main() {
 				} else if t.ConvertOCR != nil && t.ConvertOCR.Checked && (t.Codec == "vobsub" || t.Codec == "VobSub") {
 					// VobSub to SRT conversion
 					fyne.Do(func() {
-						result.SetText(result.Text + "\n\n[DEBUG] Starting VobSub to SRT conversion process")
+						result.SetText(setLogMessage(LogConvert, "VobSub to SRT Conversion", "Starting VobSub to SRT conversion process..."))
 					})
 
 					// For VobSub, we extract both .idx and .sub files
@@ -3677,12 +3706,21 @@ func main() {
 				fyne.Do(func() {
 					if err != nil {
 						t.State = "Error"
-						t.Status.SetText(fmt.Sprintf("[!] Track %d: %s (%s) %s - Error", t.Num, t.Lang, t.Codec, t.Name))
-						result.SetText(string(output) + "\nExtraction failed: " + err.Error())
+						t.Status.SetText(setLogMessage(LogError, fmt.Sprintf("Error Extracting Track %s", t.Name), err.Error()))
+						if t.ConvertOCR != nil && t.ConvertOCR.Checked {
+							result.SetText(result.Text + setLogMessage(LogError, "Conversion Failed", err.Error()))
+						} else {
+							result.SetText(result.Text + setLogMessage(LogError, "Extraction Failed", err.Error()))
+						}
 					} else {
 						t.State = "Done"
-						t.Status.SetText(fmt.Sprintf("[✓] Track %d: %s (%s) %s - Done", t.Num, t.Lang, t.Codec, t.Name))
-						progress.SetValue(float64(tracksDone + 1))
+						if t.ConvertOCR != nil && t.ConvertOCR.Checked {
+							t.Status.SetText("Converted")
+							result.SetText(result.Text + setLogMessage(LogSuccess, "Conversion Complete", fmt.Sprintf("Successfully converted %s to SRT.", t.Name)))
+						} else {
+							t.Status.SetText("Extracted")
+							result.SetText(result.Text + setLogMessage(LogSuccess, "Track Extracted", t.Name))
+						}
 					}
 
 					// Update track list
@@ -3711,7 +3749,7 @@ func main() {
 			fyne.Do(func() {
 				currentTrackLabel.SetText("")
 				if tracksDone == len(selected) {
-					result.SetText("Extraction complete!")
+					result.SetText(setLogMessage(LogSuccess, "Extraction Complete", "All selected tracks have been processed."))
 					progress.SetValue(progress.Max)
 				} else {
 					result.SetText(fmt.Sprintf("Extraction stopped after %d of %d tracks", tracksDone, len(selected)))
@@ -3721,7 +3759,7 @@ func main() {
 	})
 
 	// Create Support button with improved UX
-	supportBtn := widget.NewButton("Donate ☕", func() {
+	supportBtn := widget.NewButton("Donate ", func() {
 		// Show a confirmation dialog with information about the donation
 		confirm := dialog.NewConfirm(
 			"Support Subtitle Forge",
