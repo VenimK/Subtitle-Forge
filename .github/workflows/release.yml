@@ -44,7 +44,12 @@ jobs:
 
       # Install Fyne CLI (works on all platforms)
       - name: Install Fyne CLI
-        run: go install fyne.io/tools/cmd/fyne@latest
+        run: |
+          # Install both versions to ensure compatibility
+          go install fyne.io/fyne/v2/cmd/fyne@latest
+          go install fyne.io/tools/cmd/fyne@latest
+          # Add Go bin to PATH
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
       # Create build directory (platform-specific commands)
       - name: Create build directory (Unix)
@@ -71,7 +76,21 @@ jobs:
 
       - name: Package application
         working-directory: ./fyne-gui
-        run: ${{ matrix.package_cmd }} --appVersion ${{ steps.version.outputs.VERSION }}
+        run: |
+          # For macOS and Linux
+          if [[ "${{ runner.os }}" == "macOS" || "${{ runner.os }}" == "Linux" ]]; then
+            VERSION="${{ steps.version.outputs.VERSION }}"
+            # Try different parameter formats
+            fyne package -os ${{ runner.os == 'macOS' && 'darwin' || 'linux' }} -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --app-version "$VERSION" || \
+            fyne package -os ${{ runner.os == 'macOS' && 'darwin' || 'linux' }} -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --appVersion "$VERSION"
+          fi
+          
+          # For Windows
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            VERSION="${{ steps.version.outputs.VERSION }}"
+            powershell -Command "fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name \"Subtitle Forge\" -exe build/${{ matrix.output_name }} --app-version \"$VERSION\"" || \
+            powershell -Command "fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name \"Subtitle Forge\" -exe build/${{ matrix.output_name }} --appVersion \"$VERSION\""
+          fi
 
       # Create archive for macOS
       - name: Create macOS archive
