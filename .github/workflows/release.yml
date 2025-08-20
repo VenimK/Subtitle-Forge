@@ -74,23 +74,29 @@ jobs:
         shell: bash
         run: echo "VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')" >> $GITHUB_OUTPUT
 
-      - name: Package application
+      # Package application (macOS and Linux)
+      - name: Package application (macOS and Linux)
+        if: matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest'
         working-directory: ./fyne-gui
         run: |
-          # For macOS and Linux
-          if [[ "${{ runner.os }}" == "macOS" || "${{ runner.os }}" == "Linux" ]]; then
-            VERSION="${{ steps.version.outputs.VERSION }}"
-            # Try different parameter formats
-            fyne package -os ${{ runner.os == 'macOS' && 'darwin' || 'linux' }} -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --app-version "$VERSION" || \
-            fyne package -os ${{ runner.os == 'macOS' && 'darwin' || 'linux' }} -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --appVersion "$VERSION"
-          fi
-          
-          # For Windows
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            VERSION="${{ steps.version.outputs.VERSION }}"
-            powershell -Command "fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name \"Subtitle Forge\" -exe build/${{ matrix.output_name }} --app-version \"$VERSION\"" || \
-            powershell -Command "fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name \"Subtitle Forge\" -exe build/${{ matrix.output_name }} --appVersion \"$VERSION\""
-          fi
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          # Try different parameter formats
+          fyne package -os ${{ matrix.os == 'macos-latest' && 'darwin' || 'linux' }} -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --app-version "$VERSION" || \
+          fyne package -os ${{ matrix.os == 'macos-latest' && 'darwin' || 'linux' }} -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --appVersion "$VERSION"
+
+      # Package application (Windows)
+      - name: Package application (Windows)
+        if: matrix.os == 'windows-latest'
+        working-directory: ./fyne-gui
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          # Try different parameter formats
+          try {
+            fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --app-version $version
+          } catch {
+            fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --appVersion $version
+          }
 
       # Create archive for macOS
       - name: Create macOS archive
