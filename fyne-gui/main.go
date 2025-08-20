@@ -3788,7 +3788,7 @@ func main() {
 
 	// Use a more efficient layout with container.NewBorder for better performance
 	// Create app title with version
-	titleLabel := widget.NewLabel("Subtitle Forge")
+	titleLabel := widget.NewLabel(fmt.Sprintf("Subtitle Forge %s", AppVersion))
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 	topContent := container.NewVBox(

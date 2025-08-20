@@ -20,7 +20,7 @@ import (
 )
 
 // Current application version - injected at build time
-var AppVersion = "v1.6.9b" // Default value for development
+var AppVersion = "v1.7.0" // Default value for development
 
 // ReleaseInfo stores information about a GitHub release
 type ReleaseInfo struct {
