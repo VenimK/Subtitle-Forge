@@ -364,6 +364,8 @@ func RestoreThemePreferencesFromBackup(backupFilename string) error {
 	return nil
 }
 
+// Note: copyFile function is now defined in main.go
+
 // ListThemeBackups returns a list of available theme preference backups
 func ListThemeBackups() ([]string, error) {
 	prefsDir, err := getThemePreferencesDir()

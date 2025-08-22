@@ -160,6 +160,7 @@ func checkDependencies() map[string]bool {
 	dependencyResults["Tesseract"] = checkTesseract()
 	dependencyResults["Go"] = checkGo()
 	dependencyResults["PGStoSRT"] = checkPgsToSrt()
+	dependencyResults["pgsrip"] = checkPgsrip()
 
 	return dependencyResults
 }
@@ -2612,8 +2613,7 @@ func main() {
 							trackList.Refresh()
 						})
 
-						// Use the configured PGS-to-SRT script with Deno
-						pgsToSrtScript := pgsToSrtScriptPath
+						// Try to use pgsrip first, fall back to pgs-to-srt if not available
 						// Get language from user selection or use track language as default
 						langCode := "eng" // Default to English
 						if t.Lang != "" {
@@ -2677,13 +2677,47 @@ func main() {
 							}
 						}
 
-						// Define the path to the trained data file with the selected language
-						trainedDataPath := filepath.Join(filepath.Dir(pgsToSrtScript), "tessdata_fast", langCode+".traineddata")
-
 						// Get absolute paths for input and output
 						absInputPath := filepath.Join(outDir, tempPgsFile)
 						absOutputPath := filepath.Join(outDir, outFile)
-
+						
+						// Check if pgsrip is available and use it if possible
+						pgsripAvailable := checkPgsrip()
+						if pgsripAvailable {
+							fyne.Do(func() {
+								result.SetText(result.Text + "\n\n=== Using pgsrip for conversion ===\n")
+								statusLabel.SetText("Starting pgsrip conversion...")
+							})
+							
+							// Set up conversion settings - simplified
+							convSettings := PgsConversionSettings{
+								Verbose: true, // Enable verbose logging
+							}
+							
+							// Call our pgsrip conversion function
+							err = convertPgsWithPgsrip(absInputPath, absOutputPath, langCode, result, statusLabel, conversionProgress, convSettings)
+							if err == nil {
+								fyne.Do(func() {
+									result.SetText(result.Text + "\n\n✅ PGS to SRT conversion with pgsrip completed successfully!")
+									statusLabel.SetText("Conversion complete!")
+									conversionProgress.SetValue(100)
+								})
+								return
+							} else {
+								fyne.Do(func() {
+									result.SetText(result.Text + "\n⚠️ pgsrip conversion failed: " + err.Error() + "\nFalling back to pgs-to-srt...")
+								})
+								// Fall back to pgs-to-srt
+							}
+						}
+						
+						// Fall back to pgs-to-srt if pgsrip not available or failed
+						// Use the configured PGS-to-SRT script with Deno
+						pgsToSrtScript := pgsToSrtScriptPath
+						
+						// Define the path to the trained data file with the selected language
+						trainedDataPath := filepath.Join(filepath.Dir(pgsToSrtScript), "tessdata_fast", langCode+".traineddata")
+						
 						// Check if the script exists
 						fyne.Do(func() {
 							result.SetText(result.Text + fmt.Sprintf("\n\n[DEBUG] Checking if script exists at: %s", pgsToSrtScript))
