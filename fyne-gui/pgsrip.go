@@ -33,7 +33,43 @@ func checkPgsrip() bool {
 		fmt.Fprintf(debugLogger, "=== Checking for pgsrip ===\n")
 	}
 
-	// Try to find pgsrip in PATH
+	// Extend PATH with common Go binary locations to help find pgsrip when launched from Applications
+	currentPath := os.Getenv("PATH")
+	homeDir, _ := os.UserHomeDir()
+	gopathBin := filepath.Join(homeDir, "go", "bin")
+	homebrewBin := "/opt/homebrew/bin"
+	userLocalBin := "/usr/local/bin"
+	
+	// Add these directories to PATH if they're not already there
+	newPath := currentPath
+	if !strings.Contains(newPath, gopathBin) {
+		newPath += ":" + gopathBin
+	}
+	if !strings.Contains(newPath, homebrewBin) {
+		newPath += ":" + homebrewBin
+	}
+	if !strings.Contains(newPath, userLocalBin) {
+		newPath += ":" + userLocalBin
+	}
+	
+	// Set the updated PATH
+	os.Setenv("PATH", newPath)
+	
+	// Set TESSDATA_PREFIX to point to tessdata_best in user's home directory
+	tessdataPath := filepath.Join(homeDir, "tessdata_best")
+	os.Setenv("TESSDATA_PREFIX", tessdataPath)
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Set TESSDATA_PREFIX to: %s\n", tessdataPath)
+	}
+	fmt.Println("[DEBUG] Set TESSDATA_PREFIX to:", tessdataPath)
+	
+	// Debug the PATH
+	fmt.Println("[DEBUG] Extended PATH: " + newPath)
+	if debugLogger != nil {
+		fmt.Fprintf(debugLogger, "Extended PATH: %s\n", newPath)
+	}
+	
+	// Try to find pgsrip in the updated PATH
 	if pgsripPath, err := exec.LookPath("pgsrip"); err == nil {
 		fmt.Println("[DEBUG] pgsrip found in PATH:", pgsripPath)
 		if debugLogger != nil {
