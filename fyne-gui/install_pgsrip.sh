@@ -2,35 +2,46 @@
 
 echo "Installing pgsrip..."
 
-# Try to install with homebrew first (macOS)
-if command -v brew &> /dev/null; then
-    echo "Attempting to install pgsrip with Homebrew..."
-    brew install pgsrip
-    if [ $? -eq 0 ]; then
-        echo "pgsrip successfully installed with Homebrew"
-        exit 0
-    else
-        echo "Homebrew installation failed, trying Go install method..."
-    fi
+# Find Python installation
+PYTHON_CMD=""
+
+# Check for Python in common locations
+if [ -f "/opt/homebrew/bin/python3" ]; then
+    PYTHON_CMD="/opt/homebrew/bin/python3"
+    echo "Found Python 3 at /opt/homebrew/bin/python3"
+elif [ -f "/opt/homebrew/bin/python" ]; then
+    PYTHON_CMD="/opt/homebrew/bin/python"
+    echo "Found Python at /opt/homebrew/bin/python"
+elif [ -f "/usr/local/bin/python3" ]; then
+    PYTHON_CMD="/usr/local/bin/python3"
+    echo "Found Python 3 at /usr/local/bin/python3"
+elif [ -f "/usr/local/bin/python" ]; then
+    PYTHON_CMD="/usr/local/bin/python"
+    echo "Found Python at /usr/local/bin/python"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+    echo "Found Python 3 in PATH"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+    echo "Found Python in PATH"
 fi
 
-# Try to install with go install
-if command -v go &> /dev/null; then
-    echo "Installing pgsrip with Go..."
-    go install github.com/wader/pgsrip/cmd/pgsrip@latest
+# Install with pip if Python is found
+if [ -n "$PYTHON_CMD" ]; then
+    echo "Attempting to install pgsrip with $PYTHON_CMD..."
+    $PYTHON_CMD -m pip install --break-system-packages --ignore-installed pgsrip
     if [ $? -eq 0 ]; then
-        echo "pgsrip successfully installed with Go"
-        # Make sure PATH includes Go bin directory
-        export PATH="$PATH:$(go env GOPATH)/bin"
-        echo "You may need to add $(go env GOPATH)/bin to your PATH"
+        echo "pgsrip successfully installed with $PYTHON_CMD"
         exit 0
     else
-        echo "Go installation failed"
+        echo "pip installation failed with $PYTHON_CMD"
     fi
+else
+    echo "No Python installation found"
 fi
 
-# If we get here, both methods failed
-echo "Failed to install pgsrip. Please install it manually:"
-echo "Option 1: brew install pgsrip"
-echo "Option 2: go install github.com/wader/pgsrip/cmd/pgsrip@latest"
+
+# If we get here, all methods failed
+echo "Failed to install pgsrip. Please install it manually using:"
+echo "$PYTHON_CMD -m pip install --break-system-packages --ignore-installed pgsrip"
 exit 1

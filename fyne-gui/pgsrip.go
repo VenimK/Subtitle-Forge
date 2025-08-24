@@ -226,15 +226,26 @@ func convertPgsWithPgsrip(pgsFilePath, outFilePath, langCode string, result *wid
 	}
 
 	// Regular expressions to extract progress information from the output
-	frameProgressRegex := regexp.MustCompile("Processing frame (\\d+)/(\\d+)")
-	statusUpdateRegex := regexp.MustCompile("Status: (.+)")
+	frameProgressRegex := regexp.MustCompile(`Processing frame (\d+)/(\d+)`)
+	statusUpdateRegex := regexp.MustCompile(`Status: (.+)`)
 
 	// Copy stdout and stderr to the writers in a buffered way to reduce UI updates
 	go func() {
 		bufReader := bufio.NewReaderSize(stdoutPipe, 4096) // Use larger buffer
 		scanner := bufio.NewScanner(bufReader)
 		for scanner.Scan() {
-			line := scanner.Text() + "\n"
+			line := scanner.Text()
+
+			if strings.HasPrefix(line, "Progress: ") {
+				// Parse progress percentage
+				progMatch := regexp.MustCompile(`Progress: ([0-9.]+)%`).FindStringSubmatch(line)
+				if len(progMatch) == 2 {
+					prog, _ := strconv.ParseFloat(progMatch[1], 64)
+					fyne.Do(func() {
+						progressBar.SetValue(prog / 100)
+					})
+				}
+			}
 
 			// Check for progress information in the output
 			if matches := frameProgressRegex.FindStringSubmatch(line); len(matches) == 3 {

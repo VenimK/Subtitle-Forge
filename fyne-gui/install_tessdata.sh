@@ -21,7 +21,7 @@ else
     cd "$TESSDATA_DIR"
     
     # Common language models
-    langs=("eng" "fra" "deu" "spa" "ita" "jpn" "kor" "chi_sim" "chi_tra" "rus")
+    langs=("eng" "fra" "deu" "spa" "ita" "nld")
     
     for lang in "${langs[@]}"; do
         echo "Downloading $lang.traineddata..."
