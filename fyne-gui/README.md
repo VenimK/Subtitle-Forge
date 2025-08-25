@@ -1,4 +1,4 @@
-# Subtitle Forge v1.6.9b
+# Subtitle Forge v1.7.0
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -39,6 +39,14 @@ This project provides two applications:
    sudo ./install_dependencies.sh
    ```
 4. Launch the application
+
+## What's New in v1.7.0
+
+- **Enhanced Progress Reporting**: Added detailed time tracking with elapsed time and ETA calculations for both extraction and conversion processes
+- **Improved Installation Scripts**: Fixed pip installation issues with the `--ignore-installed` flag to avoid uninstall errors with system packages
+- **Progress Feedback**: Added intermediate progress updates during file processing with percentage completion
+- **Utility Enhancements**: Added time formatting utilities to display human-readable duration information
+- **Streamlined Dependencies**: Removed unnecessary dependency on Go installation for PGSRip
 
 ## What's New in v1.6.9b
 
