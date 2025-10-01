@@ -63,52 +63,62 @@ jobs:
         shell: pwsh
         run: New-Item -ItemType Directory -Force -Path build
 
-      # Build application
-      - name: Build application
-        working-directory: ./fyne-gui
-        run: go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/${{ matrix.output_name }}
-
-      # Package application
-      - name: Extract version without v prefix
-        id: version
-        shell: bash
-        run: echo "VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')" >> $GITHUB_OUTPUT
-
-      # Package application (macOS and Linux)
-      - name: Package application (macOS and Linux)
-        if: matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest'
+      # Build and package using our enhanced build system
+      - name: Build and package application (macOS)
+        if: matrix.os == 'macos-latest'
         working-directory: ./fyne-gui
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          # Try different parameter formats
-          fyne package -os ${{ matrix.os == 'macos-latest' && 'darwin' || 'linux' }} -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --app-version "$VERSION" || \
-          fyne package -os ${{ matrix.os == 'macos-latest' && 'darwin' || 'linux' }} -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --appVersion "$VERSION"
+          chmod +x build.sh
+          ./build.sh --version=${{ github.ref_name }}
 
-      # Package application (Windows)
-      - name: Package application (Windows)
+      # Build and package application (Linux) 
+      - name: Build and package application (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: ./fyne-gui
+        run: |
+          chmod +x build.sh bundle_linux_deps.sh
+          # Create Linux binary manually since cross-compilation may fail
+          go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-linux
+          # Create both standard and bundled packages
+          ./build.sh --version=${{ github.ref_name }}
+          # Also create bundled version if possible
+          ./bundle_linux_deps.sh || echo "Bundle creation failed, continuing with standard package"
+
+      # Build application (Windows)
+      - name: Build application (Windows)
         if: matrix.os == 'windows-latest'
         working-directory: ./fyne-gui
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.VERSION }}"
-          # Try different parameter formats
-          try {
-            fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --app-version $version
-          } catch {
-            fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }} --appVersion $version
-          }
+          go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/${{ matrix.output_name }}
+          # Use fyne package for Windows
+          fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }}
 
-      # Create archive for macOS
+      # Create archive for macOS (use existing package from build.sh)
       - name: Create macOS archive
         if: matrix.os == 'macos-latest'
         working-directory: ./fyne-gui
-        run: zip -r ${{ matrix.artifact_name }}.zip "Subtitle Forge.app"
+        run: |
+          # Use the package created by build.sh
+          if [ -f "build/subtitle-forge-macos.tar.gz" ]; then
+            cp build/subtitle-forge-macos.tar.gz ${{ matrix.artifact_name }}.zip
+          else
+            # Fallback: create from app bundle
+            zip -r ${{ matrix.artifact_name }}.zip "Subtitle Forge.app"
+          fi
 
-      # Create archive for Linux
+      # Create archive for Linux (use packages from build.sh)
       - name: Create Linux archive
         if: matrix.os == 'ubuntu-latest'
         working-directory: ./fyne-gui
-        run: tar -czf ${{ matrix.artifact_name }}.tar.gz build/${{ matrix.output_name }}
+        run: |
+          # Use the packages created by build.sh
+          if [ -f "build/subtitle-forge-linux.tar.gz" ]; then
+            cp build/subtitle-forge-linux.tar.gz ${{ matrix.artifact_name }}.tar.gz
+          else
+            # Fallback: create basic package
+            tar -czf ${{ matrix.artifact_name }}.tar.gz build/${{ matrix.output_name }}
+          fi
 
       # Create archive for Windows
       - name: Create Windows archive
