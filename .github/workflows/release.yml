@@ -77,12 +77,32 @@ jobs:
         working-directory: ./fyne-gui
         run: |
           chmod +x build.sh bundle_linux_deps.sh
-          # Create Linux binary manually since cross-compilation may fail
+          # Build Linux binary directly (no cross-compilation needed on Linux)
+          echo "Building Linux binary..."
           go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-linux
-          # Create both standard and bundled packages
+          
+          # Verify binary was created
+          if [ ! -f "build/subtitle-forge-linux" ]; then
+            echo "Error: Failed to create Linux binary"
+            exit 1
+          fi
+          
+          echo "Linux binary created successfully"
+          ls -la build/
+          
+          # Create packages using build.sh
           ./build.sh --version=${{ github.ref_name }}
-          # Also create bundled version if possible
-          ./bundle_linux_deps.sh || echo "Bundle creation failed, continuing with standard package"
+          
+          # Try to create bundled version
+          if ./bundle_linux_deps.sh; then
+            echo "Bundle creation successful"
+          else
+            echo "Bundle creation failed, continuing with standard package"
+          fi
+          
+          # List all created packages
+          echo "Created packages:"
+          ls -la build/*.tar.gz 2>/dev/null || echo "No tar.gz packages found"
 
       # Build application (Windows)
       - name: Build application (Windows)
@@ -112,13 +132,23 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         working-directory: ./fyne-gui
         run: |
+          echo "Looking for Linux packages..."
+          ls -la build/ || echo "Build directory not found"
+          
           # Use the packages created by build.sh
           if [ -f "build/subtitle-forge-linux.tar.gz" ]; then
+            echo "Using build.sh created package"
             cp build/subtitle-forge-linux.tar.gz ${{ matrix.artifact_name }}.tar.gz
+          elif [ -f "build/subtitle-forge-linux" ]; then
+            echo "Creating basic package from binary"
+            tar -czf ${{ matrix.artifact_name }}.tar.gz build/subtitle-forge-linux
           else
-            # Fallback: create basic package
-            tar -czf ${{ matrix.artifact_name }}.tar.gz build/${{ matrix.output_name }}
+            echo "Error: No Linux binary or package found"
+            exit 1
           fi
+          
+          echo "Final package created:"
+          ls -la ${{ matrix.artifact_name }}.tar.gz
 
       # Create archive for Windows
       - name: Create Windows archive
