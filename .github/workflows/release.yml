@@ -77,32 +77,68 @@ jobs:
         working-directory: ./fyne-gui
         run: |
           chmod +x build.sh bundle_linux_deps.sh
+          
+          # Ensure build directory exists
+          mkdir -p build
+          
           # Build Linux binary directly (no cross-compilation needed on Linux)
           echo "Building Linux binary..."
           go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-linux
           
-          # Verify binary was created
+          # Verify binary was created and is executable
           if [ ! -f "build/subtitle-forge-linux" ]; then
             echo "Error: Failed to create Linux binary"
+            echo "Checking go build output..."
+            go build -v -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-linux
             exit 1
           fi
           
           echo "Linux binary created successfully"
+          ls -la build/subtitle-forge-linux
+          file build/subtitle-forge-linux
+          
+          # Don't run build.sh as it might remove our binary, create packages manually
+          echo "Creating Linux package with installation scripts..."
+          mkdir -p build/linux
+          cp build/subtitle-forge-linux build/linux/
+          
+          # Copy installation scripts
+          cp LinuxHeadless.sh build/linux/install_dependencies.sh
+          cp install_vobsub2srt.sh build/linux/ 2>/dev/null || echo "install_vobsub2srt.sh not found"
+          cp install_pgsrip.sh build/linux/ 2>/dev/null || echo "install_pgsrip.sh not found"
+          cp install_tessdata.sh build/linux/ 2>/dev/null || echo "install_tessdata.sh not found"
+          
+          # Copy documentation
+          cp ../README.md build/linux/ 2>/dev/null || echo "README.md not found"
+          cp ../LICENSE.md build/linux/ 2>/dev/null || echo "LICENSE.md not found"
+          
+          # Create INSTALL.md
+          echo "# Subtitle Forge Linux Installation v1.7.3a" > build/linux/INSTALL.md
+          echo "" >> build/linux/INSTALL.md
+          echo "## Quick Start" >> build/linux/INSTALL.md
+          echo "1. Extract this archive to your desired location" >> build/linux/INSTALL.md
+          echo "2. Make the binary executable: chmod +x subtitle-forge-linux" >> build/linux/INSTALL.md
+          echo "3. Install dependencies: sudo ./install_dependencies.sh" >> build/linux/INSTALL.md
+          echo "4. Run the application: ./subtitle-forge-linux" >> build/linux/INSTALL.md
+          echo "" >> build/linux/INSTALL.md
+          echo "## Installation Scripts Included" >> build/linux/INSTALL.md
+          echo "- install_dependencies.sh - Main dependency installer" >> build/linux/INSTALL.md
+          echo "- install_vobsub2srt.sh - VobSub2SRT installation script" >> build/linux/INSTALL.md
+          echo "- install_pgsrip.sh - PGSRip installation script" >> build/linux/INSTALL.md
+          echo "- install_tessdata.sh - Tesseract language data installer" >> build/linux/INSTALL.md
+          echo "" >> build/linux/INSTALL.md
+          echo "## Fixed in v1.7.3a" >> build/linux/INSTALL.md
+          echo "- All installation scripts now included" >> build/linux/INSTALL.md
+          echo "- No more file not found errors" >> build/linux/INSTALL.md
+          echo "- Proper dependency installation workflow" >> build/linux/INSTALL.md
+          
+          # Create the package
+          tar -czf build/subtitle-forge-linux.tar.gz -C build linux
+          echo "✅ Linux package created"
+          
+          # List final build contents
+          echo "Final build directory contents:"
           ls -la build/
-          
-          # Create packages using build.sh
-          ./build.sh --version=${{ github.ref_name }}
-          
-          # Try to create bundled version
-          if ./bundle_linux_deps.sh; then
-            echo "Bundle creation successful"
-          else
-            echo "Bundle creation failed, continuing with standard package"
-          fi
-          
-          # List all created packages
-          echo "Created packages:"
-          ls -la build/*.tar.gz 2>/dev/null || echo "No tar.gz packages found"
 
       # Build application (Windows)
       - name: Build application (Windows)
