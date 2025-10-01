@@ -63,13 +63,27 @@ jobs:
         shell: pwsh
         run: New-Item -ItemType Directory -Force -Path build
 
-      # Build and package using our enhanced build system
+      # Build and package application (macOS)
       - name: Build and package application (macOS)
         if: matrix.os == 'macos-latest'
         working-directory: ./fyne-gui
         run: |
-          chmod +x build.sh
-          ./build.sh --version=${{ github.ref_name }}
+          # Build the binary first
+          echo "Building macOS binary..."
+          go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-mac
+          
+          # Create the .app bundle using fyne package
+          echo "Creating macOS app bundle..."
+          fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac
+          
+          # Verify the app bundle was created
+          if [ -d "Subtitle Forge.app" ]; then
+            echo "✅ macOS app bundle created successfully"
+            ls -la "Subtitle Forge.app"
+          else
+            echo "❌ Failed to create macOS app bundle"
+            exit 1
+          fi
 
       # Build and package application (Linux) 
       - name: Build and package application (Linux)
@@ -150,17 +164,20 @@ jobs:
           # Use fyne package for Windows
           fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }}
 
-      # Create archive for macOS (use existing package from build.sh)
+      # Create archive for macOS
       - name: Create macOS archive
         if: matrix.os == 'macos-latest'
         working-directory: ./fyne-gui
         run: |
-          # Use the package created by build.sh
-          if [ -f "build/subtitle-forge-macos.tar.gz" ]; then
-            cp build/subtitle-forge-macos.tar.gz ${{ matrix.artifact_name }}.zip
-          else
-            # Fallback: create from app bundle
+          # Create zip archive from the app bundle
+          if [ -d "Subtitle Forge.app" ]; then
+            echo "Creating macOS archive from app bundle..."
             zip -r ${{ matrix.artifact_name }}.zip "Subtitle Forge.app"
+            echo "✅ macOS archive created"
+            ls -la ${{ matrix.artifact_name }}.zip
+          else
+            echo "❌ App bundle not found, cannot create archive"
+            exit 1
           fi
 
       # Create archive for Linux (use packages from build.sh)
