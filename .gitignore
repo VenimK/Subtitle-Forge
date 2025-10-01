@@ -50,3 +50,6 @@ Thumbs.db
 # Backup files
 *.backup
 fyne-gui/main.go.backup
+fyne-gui/test-build
+fyne-gui/demo_subtitle.srt
+fyne-gui/demo_subtitle.vtt

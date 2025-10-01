@@ -1,4 +1,4 @@
-# Subtitle Forge v1.7.0
+# Subtitle Forge v1.8.0
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -12,7 +12,11 @@ A tool for extracting and converting subtitles from MKV files, available in both
 
 This project provides two applications:
 1. **CLI Version** - Command-line tool for extracting subtitles from MKV files
-2. **GUI Version** - Fyne-based graphical application with enhanced features including PGS to SRT conversion and seasonal dark themes
+2. **GUI Version** - Fyne-based graphical application with enhanced features including:
+   - **Extract Subtitles** - Extract from MKV files with PGS to SRT conversion
+   - **Insert Subtitles** - Insert subtitles into video files
+   - **Convert Subtitles** - Universal subtitle format converter with advanced options
+   - **Settings** - Dependency management and seasonal dark themes
 
 ## Installation
 
@@ -39,6 +43,28 @@ This project provides two applications:
    sudo ./install_dependencies.sh
    ```
 4. Launch the application
+
+## What's New in v1.8.0
+
+### 🆕 Convert Subtitles Tab - Major New Feature!
+- **Universal Subtitle Converter**: New dedicated tab for converting between subtitle formats
+- **Supported Input Formats**: SRT, ASS, SSA, VTT, VobSub (.sub/.idx), PGS (.sup), TXT
+- **Supported Output Formats**: SRT, ASS, SSA, VTT, SUB (MicroDVD), TXT
+- **Smart Format Detection**: Automatic detection of subtitle format based on file extension and content analysis
+- **Advanced Conversion Options**:
+  - **Frame Rate Selection**: Custom frame rates for SUB format (23.976, 24, 25, 29.97, 30, 50, 59.94, 60 FPS)
+  - **Time Offset Adjustment**: Shift all subtitle timing by specified seconds (+/- values supported)
+  - **Text Processing**: Remove formatting tags, case conversion (UPPERCASE, lowercase, Title Case)
+  - **ASS/SSA Styling**: Custom font family, size, color, margins, and style templates
+- **Drag & Drop Support**: Full drag-and-drop functionality for all supported subtitle formats
+- **Progress Tracking**: Real-time progress updates with detailed status information
+- **Professional Output**: Format-specific optimizations for maximum compatibility
+
+### 🔧 Technical Improvements
+- **Enhanced UI Organization**: Organized conversion options into logical groups for better usability
+- **Thread-Safe Operations**: Proper UI updates using fyne.Do() for goroutine safety
+- **Comprehensive Error Handling**: Detailed error messages and validation for all conversion operations
+- **Format Parsers**: Robust parsing engines for SRT, ASS/SSA, and VTT formats with proper timestamp handling
 
 ## What's New in v1.7.0
 
