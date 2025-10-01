@@ -1,4 +1,4 @@
-# Subtitle Forge v1.7.0
+# Subtitle Forge v1.7.3a
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -32,13 +32,36 @@ This project provides two applications:
 4. Launch the application
 
 ### Linux
-1. Download the latest release for Linux
-2. Unzip the file
-3. For headless servers, use the included `install_dependencies.sh` script to install dependencies:
-   ```
+1. Download the latest release for Linux (choose from two options):
+   - **Standard Package**: `subtitle-forge-linux.tar.gz` - Includes installation scripts
+   - **Self-Contained Bundle**: `subtitle-forge-linux-bundle.tar.gz` - Includes bundled dependencies
+2. Extract the archive: `tar -xzf subtitle-forge-linux*.tar.gz`
+3. **For Standard Package**: Install dependencies using the included script:
+   ```bash
    sudo ./install_dependencies.sh
    ```
-4. Launch the application
+   **For Self-Contained Bundle**: Use the launcher script:
+   ```bash
+   ./subtitle-forge.sh
+   ```
+4. Make the binary executable: `chmod +x subtitle-forge-linux` (if needed)
+5. Launch the application: `./subtitle-forge-linux`
+
+#### What's Included in Linux Packages
+- **Standard Package**: Binary + installation scripts for all dependencies
+- **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
+- Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
+- Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v1.7.3a
+
+- **Complete Linux Packaging Overhaul**: Fixed all Linux packaging issues from v1.7.2
+- **Self-Contained Linux Bundle**: New option to bundle dependencies directly with the application
+- **Resolved Missing Installation Scripts**: All installation scripts now properly included in packages
+- **Enhanced Build System**: Added `--bundle-deps` flag for creating self-contained packages
+- **Two Linux Package Types**: Standard (with install scripts) and Bundle (with dependencies)
+- **Better Installation Experience**: Comprehensive `INSTALL.md` guide included in all packages
+- **Fixed Dependency Installation**: No more "file not found" errors when installing dependencies
 
 ## What's New in v1.7.0
 

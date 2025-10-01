@@ -3,12 +3,16 @@
 
 # Parse command line arguments
 BUILD_ALL=false
-VERSION="v1.6.9b"
+BUNDLE_DEPS=false
+VERSION="v1.7.3a"
 
 for arg in "$@"; do
     case $arg in
         --all)
             BUILD_ALL=true
+            ;;
+        --bundle-deps)
+            BUNDLE_DEPS=true
             ;;
         --version=*)
             VERSION="${arg#*=}"
@@ -180,30 +184,127 @@ if [ -f "build/subtitle-forge-linux" ]; then
     mkdir -p build/linux
     cp build/subtitle-forge-linux build/linux/
     
-    # Copy scripts if they exist
-    if [ -d "../scripts" ]; then
-        cp -r ../scripts build/linux/
-    elif [ -d "scripts" ]; then
-        cp -r scripts build/linux/
-    else
-        echo "Warning: scripts directory not found"
+    # Copy all installation scripts
+    echo "Copying installation scripts..."
+    if [ -f "LinuxHeadless.sh" ]; then
+        cp LinuxHeadless.sh build/linux/install_dependencies.sh
+        echo "✅ Copied LinuxHeadless.sh as install_dependencies.sh"
     fi
+    
+    if [ -f "install_vobsub2srt.sh" ]; then
+        cp install_vobsub2srt.sh build/linux/
+        echo "✅ Copied install_vobsub2srt.sh"
+    fi
+    
+    if [ -f "install_pgsrip.sh" ]; then
+        cp install_pgsrip.sh build/linux/
+        echo "✅ Copied install_pgsrip.sh"
+    fi
+    
+    if [ -f "install_tessdata.sh" ]; then
+        cp install_tessdata.sh build/linux/
+        echo "✅ Copied install_tessdata.sh"
+    fi
+    
+    if [ -f "WindowsAIOInstaller.ps1" ]; then
+        cp WindowsAIOInstaller.ps1 build/linux/
+        echo "✅ Copied WindowsAIOInstaller.ps1 (for reference)"
+    fi
+    
+    # Copy PGS-to-SRT script if it exists
+    if [ -f "PGStoSRT.sh" ]; then
+        cp PGStoSRT.sh build/linux/
+        echo "✅ Copied PGStoSRT.sh"
+    fi
+    
+    # Create a scripts directory for better organization
+    mkdir -p build/linux/scripts
+    
+    # Copy any additional shell scripts
+    for script in *.sh; do
+        if [ -f "$script" ] && [ "$script" != "build.sh" ]; then
+            cp "$script" build/linux/scripts/
+        fi
+    done
     
     # Copy README and LICENSE if they exist
     if [ -n "$README_PATH" ]; then
         cp "$README_PATH" build/linux/
+        echo "✅ Copied README"
     fi
     
-    if [ -f "../LICENSE" ]; then
+    if [ -f "../LICENSE.md" ]; then
+        cp ../LICENSE.md build/linux/
+        echo "✅ Copied LICENSE.md"
+    elif [ -f "LICENSE.md" ]; then
+        cp LICENSE.md build/linux/
+        echo "✅ Copied LICENSE.md"
+    elif [ -f "../LICENSE" ]; then
         cp ../LICENSE build/linux/
+        echo "✅ Copied LICENSE"
     elif [ -f "LICENSE" ]; then
         cp LICENSE build/linux/
+        echo "✅ Copied LICENSE"
     else
         echo "Warning: LICENSE file not found"
     fi
     
+    # Create installation instructions
+    cat > build/linux/INSTALL.md << 'EOF'
+# Subtitle Forge Linux Installation
+
+## Quick Start
+1. Extract this archive to your desired location
+2. Make the binary executable: `chmod +x subtitle-forge-linux`
+3. Install dependencies: `sudo ./install_dependencies.sh`
+4. Run the application: `./subtitle-forge-linux`
+
+## Installation Scripts Included
+- `install_dependencies.sh` - Main dependency installer for headless servers
+- `install_vobsub2srt.sh` - VobSub2SRT installation script
+- `install_pgsrip.sh` - PGSRip installation script  
+- `install_tessdata.sh` - Tesseract language data installer
+
+## Manual Dependency Installation
+If the automatic installation fails, install these packages manually:
+- mkvtoolnix (provides mkvmerge and mkvextract)
+- ffmpeg
+- tesseract-ocr
+- deno
+- golang (optional, for development)
+
+## Supported Distributions
+- Debian/Ubuntu (apt)
+- Fedora/RHEL (dnf)
+- CentOS (yum)
+- Arch Linux (pacman)
+
+For other distributions, install the dependencies manually using your package manager.
+EOF
+    
     tar -czf build/subtitle-forge-linux.tar.gz -C build linux
-    echo "✅ Linux package created"
+    echo "✅ Linux package created with all installation scripts"
+    
+    # Create bundled version if requested
+    if [ "$BUNDLE_DEPS" = true ]; then
+        echo ""
+        echo "Creating self-contained bundle with dependencies..."
+        if [ -f "bundle_linux_deps.sh" ]; then
+            chmod +x bundle_linux_deps.sh
+            ./bundle_linux_deps.sh
+        else
+            echo "⚠️  bundle_linux_deps.sh not found, skipping bundle creation"
+        fi
+    fi
 fi
 
+echo ""
 echo "Build process completed. Check the 'build' directory for binaries and packages."
+echo ""
+echo "Available packages:"
+ls -la build/*.tar.gz 2>/dev/null || echo "No packages created"
+echo ""
+echo "Usage:"
+echo "  Standard build: ./build.sh --version=v1.7.2"
+echo "  All platforms: ./build.sh --all --version=v1.7.2"  
+echo "  With bundled deps: ./build.sh --all --bundle-deps --version=v1.7.2"
