@@ -2145,6 +2145,8 @@ func parseHexColor(hexColor string, defaultColor int) int {
 		r := (color >> 16) & 0xFF
 		g := (color >> 8) & 0xFF
 		b := color & 0xFF
+		// ASS format uses BGR (Blue-Green-Red) instead of RGB
+		// So we swap R and B positions: BGR = B<<16 | G<<8 | R
 		return int(b<<16 | g<<8 | r)
 	}
 	
@@ -2152,7 +2154,7 @@ func parseHexColor(hexColor string, defaultColor int) int {
 }
 
 func parseHexColorSSA(hexColor string, defaultColor int) int {
-	// SSA uses RGB format directly
+	// SSA also uses BGR format like ASS
 	if !strings.HasPrefix(hexColor, "#") {
 		return defaultColor
 	}
@@ -2163,7 +2165,13 @@ func parseHexColorSSA(hexColor string, defaultColor int) int {
 	}
 	
 	if color, err := strconv.ParseInt(hexColor, 16, 64); err == nil {
-		return int(color)
+		// Convert RGB to BGR for SSA format (same as ASS)
+		r := (color >> 16) & 0xFF
+		g := (color >> 8) & 0xFF
+		b := color & 0xFF
+		// SSA format uses BGR (Blue-Green-Red) instead of RGB
+		// So we swap R and B positions: BGR = B<<16 | G<<8 | R
+		return int(b<<16 | g<<8 | r)
 	}
 	
 	return defaultColor
@@ -2184,6 +2192,29 @@ func getStyleTemplate(template string) (bold, italic, outline, shadow int) {
 	default: // "Default"
 		return 0, 0, 2, 0
 	}
+}
+
+// parseHexColorSimple parses a hex color string to NRGBA
+func parseHexColorSimple(hexColor string) (color.NRGBA, bool) {
+	var col color.NRGBA
+	
+	// Remove the # prefix if present
+	if len(hexColor) > 0 && hexColor[0] == '#' {
+		hexColor = hexColor[1:]
+	}
+	
+	// Parse RGB format (6 characters)
+	if len(hexColor) == 6 {
+		r, err1 := strconv.ParseUint(hexColor[0:2], 16, 8)
+		g, err2 := strconv.ParseUint(hexColor[2:4], 16, 8)
+		b, err3 := strconv.ParseUint(hexColor[4:6], 16, 8)
+		if err1 == nil && err2 == nil && err3 == nil {
+			col = color.NRGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}
+			return col, true
+		}
+	}
+	
+	return col, false
 }
 
 // convertToTXT converts to plain text format
@@ -2461,17 +2492,73 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 	caseSelect.SetSelected("Keep Original")
 
 	// ASS/SSA specific options
-	fontFamilyEntry := widget.NewEntry()
-	fontFamilyEntry.SetPlaceHolder("Arial")
-	fontFamilyEntry.SetText("Arial")
+	fontFamilySelect := widget.NewSelect([]string{
+		"Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", 
+		"Tahoma", "Trebuchet MS", "Comic Sans MS", "Impact", "Lucida Console",
+		"Courier New", "Palatino", "Garamond", "Bookman", "Avant Garde",
+		"Century Gothic", "Franklin Gothic", "Optima", "Futura", "Calibri",
+		"Segoe UI", "Open Sans", "Roboto", "Lato", "Montserrat", "Custom...",
+	}, nil)
+	fontFamilySelect.SetSelected("Arial")
+	
+	// Set up custom font callback after creation
+	fontFamilySelect.OnChanged = func(selected string) {
+		// Handle custom font selection
+		if selected == "Custom..." {
+			// Show entry dialog for custom font
+			customEntry := widget.NewEntry()
+			customEntry.SetPlaceHolder("Enter custom font name")
+			
+			dialog.ShowForm("Custom Font", "OK", "Cancel", []*widget.FormItem{
+				widget.NewFormItem("Font Name", customEntry),
+			}, func(submitted bool) {
+				if submitted && customEntry.Text != "" {
+					// Add custom font to the list and select it
+					options := fontFamilySelect.Options
+					customFont := customEntry.Text
+					// Remove "Custom..." temporarily
+					options = options[:len(options)-1]
+					// Add custom font and "Custom..." back
+					options = append(options, customFont, "Custom...")
+					fontFamilySelect.Options = options
+					fontFamilySelect.SetSelected(customFont)
+					fontFamilySelect.Refresh()
+				}
+			}, w)
+		}
+	}
 
 	fontSizeEntry := widget.NewEntry()
 	fontSizeEntry.SetPlaceHolder("20")
 	fontSizeEntry.SetText("20")
 
-	fontColorEntry := widget.NewEntry()
-	fontColorEntry.SetPlaceHolder("#FFFFFF")
-	fontColorEntry.SetText("#FFFFFF")
+	// Color picker for font color
+	var selectedFontColor = "#FFFFFF"
+	fontColorPreview := canvas.NewRectangle(color.NRGBA{R: 255, G: 255, B: 255, A: 255})
+	fontColorPreview.SetMinSize(fyne.NewSize(30, 25))
+	
+	fontColorLabel := widget.NewLabel("#FFFFFF")
+	fontColorLabel.TextStyle = fyne.TextStyle{Monospace: true}
+	
+	fontColorButton := widget.NewButton("Choose Color", func() {
+		// Parse current color
+		currentColor := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
+		if col, ok := parseHexColorSimple(selectedFontColor); ok {
+			currentColor = col
+		}
+		
+		// Create color picker dialog
+		colorPicker := NewColorPicker(currentColor, func(newColor color.NRGBA) {
+			// Update preview and label
+			fontColorPreview.FillColor = newColor
+			fontColorPreview.Refresh()
+			selectedFontColor = fmt.Sprintf("#%02X%02X%02X", newColor.R, newColor.G, newColor.B)
+			fontColorLabel.SetText(selectedFontColor)
+		})
+		
+		// Show color picker in dialog
+		dialog.ShowCustom("Choose Font Color", "OK", colorPicker, w)
+	})
 
 	marginLeftEntry := widget.NewEntry()
 	marginLeftEntry.SetPlaceHolder("10")
@@ -2525,9 +2612,9 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 				TimeOffset:        parseFloat(timeOffsetEntry.Text, 0.0),
 				RemoveFormatting:  removeFormattingCheck.Checked,
 				TextCase:          caseSelect.Selected,
-				FontFamily:        fontFamilyEntry.Text,
+				FontFamily:        fontFamilySelect.Selected,
 				FontSize:          parseInt(fontSizeEntry.Text, 20),
-				FontColor:         fontColorEntry.Text,
+				FontColor:         selectedFontColor,
 				MarginLeft:        parseInt(marginLeftEntry.Text, 10),
 				MarginRight:       parseInt(marginRightEntry.Text, 10),
 				MarginVertical:    parseInt(marginVerticalEntry.Text, 10),
@@ -2587,12 +2674,16 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 	))
 
 	styleOptionsGroup := widget.NewCard("ASS/SSA Style Options", "", container.NewVBox(
+		widget.NewLabel("Font Family:"),
+		fontFamilySelect,
 		container.NewHBox(
-			widget.NewLabel("Font:"), fontFamilyEntry,
 			widget.NewLabel("Size:"), fontSizeEntry,
 		),
+		widget.NewLabel("Font Color:"),
 		container.NewHBox(
-			widget.NewLabel("Color:"), fontColorEntry,
+			fontColorPreview,
+			fontColorLabel,
+			fontColorButton,
 		),
 		container.NewHBox(
 			widget.NewLabel("L:"), marginLeftEntry,

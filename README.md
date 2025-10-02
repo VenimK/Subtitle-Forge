@@ -1,4 +1,4 @@
-# Subtitle Forge v1.8.0
+# Subtitle Forge v1.8.5
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -56,6 +56,36 @@ This project provides two applications:
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v1.8.5
+
+### 🎨 Enhanced Visual Color Picker - Major UI Improvement!
+- **Professional Color Selection**: Comprehensive visual color picker for ASS/SSA subtitle styling
+- **Live Color Preview**: 30x25px color preview rectangle with real-time updates
+- **Hex Code Display**: Monospace label showing current hex color code (#FFFFFF format)
+- **Advanced Color Dialog**: Full-featured color picker with RGB sliders, alpha control, and preset colors
+- **8 Preset Colors**: Quick selection buttons (Red, Green, Blue, Yellow, Magenta, Cyan, White, Black)
+- **Custom Color Input**: Direct hex color code entry with validation
+- **Real-time Synchronization**: All controls update simultaneously when any value changes
+
+### 🔤 Smart Font Selection System
+- **25+ Popular Fonts**: Dropdown with Arial, Helvetica, Times New Roman, Georgia, Verdana, and more
+- **Cross-Platform Fonts**: Includes system fonts and modern web fonts (Open Sans, Roboto, Lato)
+- **Custom Font Support**: "Custom..." option opens dialog for entering any font name
+- **Dynamic Font List**: Custom fonts are added to dropdown for future use
+- **Professional Typography**: Includes serif, sans-serif, monospace, and display fonts
+
+### 🐛 Critical Color Format Fixes
+- **ASS Format**: Correct RGB to BGR color conversion for proper color display
+- **SSA Format**: Fixed color conversion to match ASS format (both use BGR)
+- **Color Accuracy**: Red now displays as red, blue as blue (no more color swapping)
+- **Format Compatibility**: Proper color handling for both ASS and SSA subtitle formats
+
+### 🎯 User Experience Enhancements
+- **Intuitive Interface**: Visual color selection replaces technical hex code typing
+- **Professional Workflow**: Color picker → Preview → Apply workflow
+- **Accessibility**: Both visual preview and text representation available
+- **Better Organization**: Font and color options get dedicated UI space
 
 ## What's New in v1.8.0
 
