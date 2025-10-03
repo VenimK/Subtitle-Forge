@@ -1,4 +1,4 @@
-# Subtitle Forge v1.8.5
+# Subtitle Forge v1.9.0
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -56,6 +56,43 @@ This project provides two applications:
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v1.9.0
+
+### 🚀 Batch Processing Revolution - Major Productivity Enhancement!
+- **Batch Subtitle Extraction**: Process multiple MKV files simultaneously with intelligent batch processing
+- **Batch Subtitle Conversion**: Convert multiple subtitle files at once with consistent settings
+- **Smart File Management**: Add/remove files individually with visual file list display
+- **Progress Tracking**: Real-time batch progress with "Processing file X/Y" status updates
+- **Unified Workflow**: Same professional interface for both single and batch operations
+
+### 📁 Enhanced File Selection & Management
+- **Multiple File Selection**: "Select Multiple Files (Batch)" button for folder-based file selection
+- **Drag & Drop Batch Support**: Drop multiple files to automatically enable batch mode
+- **Visual File Lists**: Scrollable file lists showing format detection and individual remove buttons
+- **Smart Mode Switching**: Seamlessly switch between single file and batch processing modes
+- **Clear All Function**: One-click to clear all selected files and return to single file mode
+
+### 🎬 Universal Format Support in Insert Subtitles
+- **Multi-Format Insert**: Insert Subtitles tab now supports ALL subtitle formats (not just SRT)
+- **Supported Formats**: SRT, ASS, SSA, VTT, SUB, SUP (PGS), TXT - complete format compatibility
+- **Smart Format Detection**: Automatic format validation with helpful error messages
+- **Enhanced UI**: Updated labels, buttons, and drop areas to reflect multi-format support
+- **mkvmerge Integration**: Native format support through mkvmerge for quality preservation
+
+### 🔄 Batch Conversion Features
+- **Intelligent Processing**: Batch conversion with per-file format detection
+- **Progress Visualization**: Progress bar showing current file and overall completion
+- **Success Tracking**: "Batch conversion completed: X/Y files successfully converted" reporting
+- **Error Resilience**: Continues processing even if individual files fail
+- **Consistent Styling**: Apply same conversion settings to entire batch
+
+### 🎯 User Experience Enhancements
+- **Professional Workflow**: Batch processing rivals professional video editing software
+- **Time Efficiency**: Process dozens of files with single click instead of one-by-one
+- **Visual Feedback**: Clear file lists, progress indicators, and completion statistics
+- **Flexible Operations**: Mix and match single file and batch operations as needed
+- **Format Consistency**: Same comprehensive format support across all three tabs
 
 ## What's New in v1.8.5
 
@@ -202,11 +239,13 @@ This project provides two applications:
 
 ### GUI Version
 - User-friendly graphical interface with four main tabs:
-  - **Extract Subtitles**: Extract and convert subtitle tracks from MKV files
-  - **Insert Subtitles**: Add external SRT subtitle files into MKV files
-  - **Convert Subtitles**: Universal subtitle format converter with advanced options
+  - **Extract Subtitles**: Extract and convert subtitle tracks from MKV files with batch processing support
+  - **Insert Subtitles**: Add external subtitle files (all formats) into MKV files
+  - **Convert Subtitles**: Universal subtitle format converter with advanced options and batch processing
   - **Settings**: Dependency management and theme customization
-- Full drag and drop support in all tabs for easy file selection
+- **Batch Processing**: Process multiple files simultaneously in Extract and Convert tabs
+- **Universal Format Support**: All tabs support SRT, ASS, SSA, VTT, SUB, SUP (PGS), TXT formats
+- Full drag and drop support in all tabs for easy file selection (single and multiple files)
 - **Subtitle Format Conversion**:
   - Convert PGS/SUP subtitles to SRT format using OCR
   - Convert VobSub (.idx/.sub) subtitles to SRT format using OCR

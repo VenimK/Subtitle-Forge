@@ -39,6 +39,7 @@ type TrackItem struct {
 	Codec      string
 	Name       string
 	State      string
+	FilePath   string        // Source MKV file path (for batch processing)
 	Check      *widget.Check
 	Status     *widget.Label
 	ConvertOCR *widget.Check  // Option to convert PGS to SRT using OCR
@@ -431,9 +432,8 @@ func checkMkvmerge() bool {
 	return mkvmergeFound
 }
 
-// Global variable to store the path to mkvextract
-var mkvextractBinaryPath string
-
+	// Global variable to store the path to mkvextract
+	var mkvextractBinaryPath string
 // Check for MKVExtract installation
 func checkMkvextract() bool {
 	fmt.Println("[DEBUG] Checking for MKVExtract...")
@@ -1596,6 +1596,8 @@ func parseSubtitleFile(content, format string) ([]SubtitleEntry, error) {
 		return parseASS(content)
 	case "VTT":
 		return parseVTT(content)
+	case "PGS":
+		return nil, fmt.Errorf("PGS format detected - OCR conversion will be applied automatically")
 	default:
 		return nil, fmt.Errorf("unsupported input format: %s", format)
 	}
@@ -2297,13 +2299,87 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 		result.SetText("🔄 Parsing subtitle format...")
 	})
 	
-	// Parse input format
-	subtitles, err := parseSubtitleFile(string(inputData), inputFormat)
-	if err != nil {
+	// Handle PGS format with OCR conversion
+	var subtitles []SubtitleEntry
+	if strings.ToUpper(inputFormat) == "PGS" {
 		fyne.Do(func() {
-			result.SetText(fmt.Sprintf("❌ Error parsing %s format: %v", inputFormat, err))
+			result.SetText("🔍 Converting PGS to SRT using OCR...")
 		})
-		return false
+		
+		// Convert PGS to SRT using the same method as Extract Subtitles tab
+		tempSrtPath := strings.TrimSuffix(inputPath, filepath.Ext(inputPath)) + "_temp.srt"
+		
+		// Try pgsrip first if available
+		var cmd *exec.Cmd
+		var conversionMethod string
+		
+		// Ensure pgsrip is checked if path is empty
+		if pgsripBinaryPath == "" {
+			checkPgsrip() // This should set pgsripBinaryPath
+		}
+		
+		if pgsripBinaryPath != "" {
+			// Use pgsrip if available (same format as Extract Subtitles tab)
+			cmd = exec.Command(pgsripBinaryPath, inputPath, tempSrtPath, "--verbose")
+			conversionMethod = "pgsrip"
+		} else if pgsToSrtScriptPath != "" && checkDeno() {
+			// Fall back to Deno-based PGS to SRT script
+			cmd = exec.Command("deno", "run", "--allow-read", "--allow-write", pgsToSrtScriptPath, inputPath, tempSrtPath)
+			conversionMethod = "pgs-to-srt script"
+		} else {
+			fyne.Do(func() {
+				result.SetText("❌ No PGS conversion tool available.\n\nPlease install either:\n1. pgsrip (recommended)\n2. PGS-to-SRT script with Deno\n\nCheck the Utilities tab for installation options.")
+			})
+			return false
+		}
+		
+		fyne.Do(func() {
+			result.SetText(fmt.Sprintf("🔍 Converting PGS using %s...\nCommand: %s %s %s --verbose", conversionMethod, pgsripBinaryPath, inputPath, tempSrtPath))
+		})
+		
+		err := cmd.Run()
+		if err != nil {
+			fyne.Do(func() {
+				result.SetText(fmt.Sprintf("❌ Error converting PGS with %s: %v\n\nTry using the Extract Subtitles tab for PGS conversion, or check the Utilities tab for installation help.", conversionMethod, err))
+			})
+			return false
+		}
+		
+		// Read the converted SRT file
+		srtData, err := os.ReadFile(tempSrtPath)
+		if err != nil {
+			fyne.Do(func() {
+				result.SetText(fmt.Sprintf("❌ Error reading converted SRT: %v", err))
+			})
+			return false
+		}
+		
+		// Parse the SRT content
+		subtitles, err = parseSRT(string(srtData))
+		if err != nil {
+			fyne.Do(func() {
+				result.SetText(fmt.Sprintf("❌ Error parsing converted SRT: %v", err))
+			})
+			os.Remove(tempSrtPath) // Clean up
+			return false
+		}
+		
+		// Clean up temporary file
+		os.Remove(tempSrtPath)
+		
+		fyne.Do(func() {
+			result.SetText("✅ PGS successfully converted using OCR")
+		})
+	} else {
+		// Parse input format normally
+		var err error
+		subtitles, err = parseSubtitleFile(string(inputData), inputFormat)
+		if err != nil {
+			fyne.Do(func() {
+				result.SetText(fmt.Sprintf("❌ Error parsing %s format: %v", inputFormat, err))
+			})
+			return false
+		}
 	}
 	
 	fyne.Do(func() {
@@ -2420,18 +2496,76 @@ func convertToFormatAdvanced(entries []SubtitleEntry, format string, options Con
 	}
 }
 
-func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
+func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), func([]string)) {
 	// Title
 	convertTitle := widget.NewLabel("Convert Subtitles")
 	convertTitle.TextStyle = fyne.TextStyle{Bold: true}
 	convertTitle.Alignment = fyne.TextAlignCenter
 
-	// Input file selection
+	// Input file selection - support both single and batch
 	var inputFile string
 	var inputFormat string
+	var convertFiles []string
+	var convertBatchMode bool
+	
 	inputLabel := widget.NewLabel("No file selected")
 	inputLabel.Wrapping = fyne.TextWrapWord
 	
+	// File list for batch mode (declare early)
+	convertFileList := container.NewVBox()
+	convertFileListScroll := container.NewScroll(convertFileList)
+	convertFileListScroll.SetMinSize(fyne.NewSize(0, 150))
+	
+	// Function to update file list display (declare early)
+	updateConvertFileList := func() {
+		convertFileList.Objects = nil
+		for i, filePath := range convertFiles {
+			fileName := filepath.Base(filePath)
+			format := detectSubtitleFormat(filePath)
+			
+			// Create remove button for each file
+			removeBtn := widget.NewButton("Remove", nil)
+			fileIndex := i // Capture index for closure
+			removeBtn.OnTapped = func() {
+				// Remove file from list
+				if fileIndex < len(convertFiles) {
+					convertFiles = append(convertFiles[:fileIndex], convertFiles[fileIndex+1:]...)
+					// Refresh the list by clearing and rebuilding
+					convertFileList.Objects = nil
+					for j, filePath := range convertFiles {
+						fileName := filepath.Base(filePath)
+						format := detectSubtitleFormat(filePath)
+						
+						// Create new remove button
+						newRemoveBtn := widget.NewButton("Remove", nil)
+						newFileIndex := j
+						newRemoveBtn.OnTapped = func() {
+							// Simple removal without recursive calls
+							if newFileIndex < len(convertFiles) {
+								convertFiles = append(convertFiles[:newFileIndex], convertFiles[newFileIndex+1:]...)
+								inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch conversion", len(convertFiles)))
+							}
+						}
+						newRemoveBtn.Importance = widget.LowImportance
+						
+						fileRow := container.NewBorder(nil, nil, nil, newRemoveBtn,
+							widget.NewLabel(fmt.Sprintf("%s (%s)", fileName, format)))
+						convertFileList.Add(fileRow)
+					}
+					convertFileList.Refresh()
+					inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch conversion", len(convertFiles)))
+				}
+			}
+			removeBtn.Importance = widget.LowImportance
+			
+			fileRow := container.NewBorder(nil, nil, nil, removeBtn,
+				widget.NewLabel(fmt.Sprintf("%s (%s)", fileName, format)))
+			convertFileList.Add(fileRow)
+		}
+		convertFileList.Refresh()
+	}
+	
+	// Single file selection button
 	inputBtn := widget.NewButton("Select Subtitle File", func() {
 		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil || reader == nil {
@@ -2439,14 +2573,85 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 			}
 			defer reader.Close()
 			
+			// Switch to single file mode
+			convertBatchMode = false
+			convertFiles = nil
+			convertFileList.Objects = nil
+			convertFileList.Refresh()
+			
 			inputFile = reader.URI().Path()
 			fileName := filepath.Base(inputFile)
 			inputFormat = detectSubtitleFormat(inputFile)
 			
-			inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s", fileName, inputFormat))
+			if strings.ToUpper(inputFormat) == "PGS" {
+				// Determine which conversion method will be used
+				var conversionInfo string
+				if pgsripBinaryPath != "" {
+					conversionInfo = "This will be converted using OCR (pgsrip)."
+				} else if pgsToSrtScriptPath != "" && checkDeno() {
+					conversionInfo = "This will be converted using OCR (pgs-to-srt script with Deno)."
+				} else {
+					conversionInfo = "⚠️ No PGS conversion tool available. Please install pgsrip or PGS-to-SRT script."
+				}
+				
+				inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s\n\n🔍 PGS format detected! %s", fileName, inputFormat, conversionInfo))
+			} else {
+				inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s", fileName, inputFormat))
+			}
 		}, w)
 	})
 	inputBtn.Importance = widget.MediumImportance
+	
+	// Batch file selection button
+	batchBtn := widget.NewButton("Select Multiple Files (Batch)", func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+			
+			// Switch to batch mode
+			convertBatchMode = true
+			inputFile = ""
+			inputFormat = ""
+			
+			// Find all subtitle files in the directory
+			convertFiles = []string{}
+			supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt"}
+			
+			filepath.Walk(uri.Path(), func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil
+				}
+				if !info.IsDir() {
+					ext := strings.ToLower(filepath.Ext(path))
+					for _, supportedExt := range supportedExts {
+						if ext == supportedExt {
+							convertFiles = append(convertFiles, path)
+							break
+						}
+					}
+				}
+				return nil
+			})
+			
+			// Update UI
+			updateConvertFileList()
+			inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch conversion", len(convertFiles)))
+		}, w)
+	})
+	batchBtn.Importance = widget.MediumImportance
+	
+	// Clear files button
+	clearBtn := widget.NewButton("Clear Files", func() {
+		convertBatchMode = false
+		convertFiles = nil
+		inputFile = ""
+		inputFormat = ""
+		convertFileList.Objects = nil
+		convertFileList.Refresh()
+		inputLabel.SetText("No file selected")
+	})
+	clearBtn.Importance = widget.LowImportance
 
 	// Format selection
 	outputFormats := []string{"SRT", "ASS", "SSA", "VTT", "SUB", "TXT"}
@@ -2586,8 +2791,13 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 
 	// Convert button
 	convertBtn := widget.NewButton("Convert Subtitle", func() {
-		if inputFile == "" {
+		// Check if we have files to convert
+		if !convertBatchMode && inputFile == "" {
 			convertResult.SetText("❌ Please select an input file first")
+			return
+		}
+		if convertBatchMode && len(convertFiles) == 0 {
+			convertResult.SetText("❌ Please select files for batch conversion first")
 			return
 		}
 		
@@ -2599,7 +2809,12 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 
 		// Show progress
 		convertProgress.Show()
-		convertResult.SetText("🔄 Converting subtitle file...")
+		
+		if convertBatchMode {
+			convertResult.SetText(fmt.Sprintf("🔄 Converting %d subtitle files...", len(convertFiles)))
+		} else {
+			convertResult.SetText("🔄 Converting subtitle file...")
+		}
 		
 		// Perform conversion in goroutine
 		go func() {
@@ -2621,24 +2836,56 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 				StyleTemplate:     styleTemplateSelect.Selected,
 			}
 			
-			success := convertSubtitleFileAdvanced(inputFile, inputFormat, outputFormat, outputDir, 
-				options, convertProgress, convertResult)
-			
-			fyne.Do(func() {
-				convertProgress.Hide()
-				if success {
-					convertResult.SetText(fmt.Sprintf("✅ Successfully converted %s to %s format", 
-						filepath.Base(inputFile), strings.ToUpper(outputFormat)))
+			if convertBatchMode {
+				// Batch conversion
+				successCount := 0
+				totalFiles := len(convertFiles)
+				
+				for i, filePath := range convertFiles {
+					fileFormat := detectSubtitleFormat(filePath)
+					fileName := filepath.Base(filePath)
+					
+					fyne.Do(func() {
+						convertProgress.SetValue(float64(i) / float64(totalFiles))
+						convertResult.SetText(fmt.Sprintf("🔄 Converting file %d/%d: %s", i+1, totalFiles, fileName))
+					})
+					
+					success := convertSubtitleFileAdvanced(filePath, fileFormat, outputFormat, outputDir, 
+						options, convertProgress, convertResult)
+					
+					if success {
+						successCount++
+					}
 				}
-			})
+				
+				fyne.Do(func() {
+					convertProgress.SetValue(1.0)
+					convertProgress.Hide()
+					convertResult.SetText(fmt.Sprintf("✅ Batch conversion completed: %d/%d files successfully converted to %s format", 
+						successCount, totalFiles, strings.ToUpper(outputFormat)))
+				})
+			} else {
+				// Single file conversion
+				success := convertSubtitleFileAdvanced(inputFile, inputFormat, outputFormat, outputDir, 
+					options, convertProgress, convertResult)
+				
+				fyne.Do(func() {
+					convertProgress.Hide()
+					if success {
+						convertResult.SetText(fmt.Sprintf("✅ Successfully converted %s to %s format", 
+							filepath.Base(inputFile), strings.ToUpper(outputFormat)))
+					}
+				})
+			}
 		}()
 	})
 	convertBtn.Importance = widget.HighImportance
 
 	// Layout
-	fileSelectionGroup := widget.NewCard("Input File", "", container.NewVBox(
-		inputBtn,
+	fileSelectionGroup := widget.NewCard("Input Files", "", container.NewVBox(
+		container.NewHBox(inputBtn, batchBtn, clearBtn),
 		inputLabel,
+		convertFileListScroll,
 	))
 
 	formatGroup := widget.NewCard("Output Format", "", container.NewVBox(
@@ -2703,10 +2950,60 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 
 	// Create a function to handle drag & drop file loading
 	loadDroppedFile := func(filePath string) {
+		// Switch to single file mode
+		convertBatchMode = false
+		convertFiles = nil
+		convertFileList.Objects = nil
+		convertFileList.Refresh()
+		
 		inputFile = filePath
 		fileName := filepath.Base(inputFile)
 		inputFormat = detectSubtitleFormat(inputFile)
-		inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s", fileName, inputFormat))
+		
+		if strings.ToUpper(inputFormat) == "PGS" {
+			// Determine which conversion method will be used
+			var conversionInfo string
+			if pgsripBinaryPath != "" {
+				conversionInfo = "This will be converted using OCR (pgsrip)."
+			} else if pgsToSrtScriptPath != "" && checkDeno() {
+				conversionInfo = "This will be converted using OCR (pgs-to-srt script with Deno)."
+			} else {
+				conversionInfo = "⚠️ No PGS conversion tool available. Please install pgsrip or PGS-to-SRT script."
+			}
+			
+			inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s\n\n🔍 PGS format detected! %s", fileName, inputFormat, conversionInfo))
+			convertResult.SetText("📝 PGS (Presentation Graphics Stream) is a bitmap subtitle format.\n\nThis format will be automatically converted to text using OCR when you click 'Convert Subtitle'.\n\nThe same conversion tools used in the Extract Subtitles tab will be used here.")
+		} else {
+			inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s", fileName, inputFormat))
+			convertResult.SetText("File loaded successfully. Select output format and click 'Convert Subtitle' to begin.")
+		}
+	}
+	
+	// Create a function to handle multiple file drops for batch mode
+	loadDroppedFiles := func(filePaths []string) {
+		// Switch to batch mode
+		convertBatchMode = true
+		inputFile = ""
+		inputFormat = ""
+		
+		// Filter for supported subtitle files
+		convertFiles = []string{}
+		supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt"}
+		
+		for _, filePath := range filePaths {
+			ext := strings.ToLower(filepath.Ext(filePath))
+			for _, supportedExt := range supportedExts {
+				if ext == supportedExt {
+					convertFiles = append(convertFiles, filePath)
+					break
+				}
+			}
+		}
+		
+		// Update UI
+		updateConvertFileList()
+		inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch conversion", len(convertFiles)))
+		convertResult.SetText("Multiple files loaded for batch conversion. Select output format and click 'Convert Subtitle' to begin.")
 	}
 
 	convertTabContent := container.NewVBox(
@@ -2721,7 +3018,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string)) {
 		resultsGroup,
 	)
 
-	return convertTabContent, loadDroppedFile
+	return convertTabContent, loadDroppedFile, loadDroppedFiles
 }
 
 func createUtilitiesTab(result *widget.Label) *fyne.Container {
@@ -3029,6 +3326,109 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
+// loadTracksForFile loads tracks for a specific MKV file (for batch processing)
+func loadTracksForFile(mkvPath string) bool {
+	var cmd *exec.Cmd
+	if mkvmergeBinaryPath != "" {
+		cmd = exec.Command(mkvmergeBinaryPath, "-J", mkvPath)
+	} else {
+		cmd = exec.Command("mkvmerge", "-J", mkvPath)
+	}
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	
+	// Parse JSON output (simplified - just check if we have tracks)
+	return len(output) > 0 && strings.Contains(string(output), "tracks")
+}
+
+// extractAllSubtitleTracks extracts all subtitle tracks from an MKV file (for batch processing)
+func extractAllSubtitleTracks(mkvPath, outDir string) bool {
+	// Get track info first
+	var cmd *exec.Cmd
+	if mkvmergeBinaryPath != "" {
+		cmd = exec.Command(mkvmergeBinaryPath, "-J", mkvPath)
+	} else {
+		cmd = exec.Command("mkvmerge", "-J", mkvPath)
+	}
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	
+	// Parse JSON to find subtitle tracks
+	var mkvInfo struct {
+		Tracks []struct {
+			ID         int    `json:"id"`
+			Type       string `json:"type"`
+			Codec      string `json:"codec"`
+			Properties struct {
+				Language string `json:"language"`
+				TrackName string `json:"track_name"`
+			} `json:"properties"`
+		} `json:"tracks"`
+	}
+	
+	err = json.Unmarshal(output, &mkvInfo)
+	if err != nil {
+		return false
+	}
+	
+	// Extract subtitle tracks
+	mkvBaseName := filepath.Base(mkvPath)
+	mkvBaseName = strings.TrimSuffix(mkvBaseName, filepath.Ext(mkvBaseName))
+	
+	successCount := 0
+	for _, track := range mkvInfo.Tracks {
+		if track.Type == "subtitles" {
+			// Determine file extension based on codec
+			var ext string
+			// Determine extension based on codec with comprehensive matching
+			codecLower := strings.ToLower(track.Codec)
+			switch {
+			case strings.Contains(codecLower, "subrip") || strings.Contains(codecLower, "srt"):
+				ext = "srt"
+			case strings.Contains(codecLower, "pgs") || strings.Contains(codecLower, "hdmv"):
+				ext = "sup"
+			case strings.Contains(codecLower, "vobsub"):
+				ext = "sub"
+			case strings.Contains(codecLower, "ass") || strings.Contains(codecLower, "substation") || strings.Contains(codecLower, "advanced substation"):
+				ext = "ass"
+			case strings.Contains(codecLower, "ssa"):
+				ext = "ssa"
+			default:
+				ext = "srt" // Default to SRT
+			}
+			
+			lang := track.Properties.Language
+			if lang == "" {
+				lang = "und"
+			}
+			
+			outFile := fmt.Sprintf("%s.track%d_%s.%s", mkvBaseName, track.ID, lang, ext)
+			
+			// Extract the track
+			var extractCmd *exec.Cmd
+			if mkvextractBinaryPath != "" {
+				extractCmd = exec.Command(mkvextractBinaryPath, "tracks", mkvPath, fmt.Sprintf("%d:%s", track.ID, outFile))
+			} else {
+				extractCmd = exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", track.ID, outFile))
+			}
+			extractCmd.Dir = outDir
+			
+			_, err := extractCmd.CombinedOutput()
+			if err == nil {
+				successCount++
+			}
+		}
+	}
+	
+	return successCount > 0
+}
+
 // Helper function to adjust SRT timing
 
 func adjustSRTTiming(content string, offsetSeconds float64) string {
@@ -3270,6 +3670,10 @@ func main() {
 	var outDir string
 	var trackItems []*TrackItem
 
+	// Global variables for batch processing
+	var mkvFiles []string
+	var batchMode bool
+
 	selectedFile := widget.NewLabel("No MKV file selected.")
 	selectedDir := widget.NewLabel("No output directory selected.")
 	result := widget.NewLabel("Results will appear here...")
@@ -3470,8 +3874,49 @@ func main() {
 
 	currentTrackLabel := widget.NewLabel("")
 
-	// Button to select MKV file
-	fileBtn := widget.NewButton("Select MKV File (or Drag & Drop)", func() {
+	// Create file list widget for batch processing
+	var fileList *widget.List
+	fileList = widget.NewList(
+		func() int { return len(mkvFiles) },
+		func() fyne.CanvasObject {
+			return container.NewHBox(
+				widget.NewLabel(""),
+				widget.NewButton("Remove", nil),
+			)
+		},
+		func(id widget.ListItemID, item fyne.CanvasObject) {
+			if id >= len(mkvFiles) {
+				return
+			}
+			container := item.(*fyne.Container)
+			label := container.Objects[0].(*widget.Label)
+			removeBtn := container.Objects[1].(*widget.Button)
+			
+			label.SetText(filepath.Base(mkvFiles[id]))
+			removeBtn.OnTapped = func() {
+				// Remove file from list
+				mkvFiles = append(mkvFiles[:id], mkvFiles[id+1:]...)
+				fileList.Refresh()
+				if len(mkvFiles) == 0 {
+					batchMode = false
+					selectedFile.SetText("No files selected")
+				} else {
+					selectedFile.SetText(fmt.Sprintf("%d MKV files selected for batch processing", len(mkvFiles)))
+				}
+			}
+		},
+	)
+
+	// Create file list container with scroll
+	fileListContainer := container.NewBorder(
+		widget.NewLabel("Selected Files:"),
+		nil, nil, nil,
+		container.NewScroll(fileList),
+	)
+	fileListContainer.Hide() // Initially hidden
+
+	// Button to select single MKV file
+	fileBtn := widget.NewButton("Select Single MKV File", func() {
 		// Create a file filter for MKV files
 		filter := storage.NewExtensionFileFilter([]string{".mkv"})
 
@@ -3490,6 +3935,12 @@ func main() {
 				return
 			}
 
+			// Reset to single file mode
+			batchMode = false
+			mkvFiles = []string{}
+			fileList.Refresh()
+			fileListContainer.Hide()
+			
 			mkvPath = filePath
 			selectedFile.SetText(mkvPath)
 
@@ -3509,6 +3960,74 @@ func main() {
 		fd.Show()
 	})
 
+	// Button to select multiple MKV files for batch processing
+	batchBtn := widget.NewButton("Select Multiple MKV Files (Batch)", func() {
+		// Use folder selection for batch processing
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil || uri == nil {
+				return
+			}
+
+			folderPath := uri.Path()
+			
+			// Find all MKV files in the selected folder
+			var foundFiles []string
+			err = filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil // Continue walking
+				}
+				if !info.IsDir() && strings.ToLower(filepath.Ext(path)) == ".mkv" {
+					foundFiles = append(foundFiles, path)
+				}
+				return nil
+			})
+
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("Error scanning folder: %v", err), w)
+				return
+			}
+
+			if len(foundFiles) == 0 {
+				dialog.ShowInformation("No MKV Files", "No MKV files found in the selected folder.", w)
+				return
+			}
+
+			// Set batch mode
+			batchMode = true
+			mkvFiles = foundFiles
+			fileList.Refresh()
+			fileListContainer.Show()
+
+			// Set output directory to the selected folder
+			outDir = folderPath
+			selectedDir.SetText(outDir)
+
+			// Clear previous tracks
+			trackItems = []*TrackItem{}
+			trackList.Objects = nil
+			trackList.Refresh()
+
+			selectedFile.SetText(fmt.Sprintf("%d MKV files selected for batch processing", len(mkvFiles)))
+			result.SetText(setLogMessage(LogInfo, "Batch Mode Enabled", fmt.Sprintf("Found %d MKV files. Click 'Start Extraction' to process all files.", len(mkvFiles))))
+			
+		}, w)
+	})
+
+	// Button to clear file selection
+	clearBtn := widget.NewButton("Clear Selection", func() {
+		batchMode = false
+		mkvFiles = []string{}
+		mkvPath = ""
+		fileList.Refresh()
+		fileListContainer.Hide()
+		selectedFile.SetText("No files selected")
+		selectedDir.SetText("No output directory selected")
+		trackItems = []*TrackItem{}
+		trackList.Objects = nil
+		trackList.Refresh()
+		result.SetText("Select MKV file(s) to begin.")
+	})
+
 	// Button to select output directory (optional, as it's auto-set)
 	dirBtn := widget.NewButton("Change Output Directory", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
@@ -3523,6 +4042,135 @@ func main() {
 
 	// Button to load tracks from MKV file
 	loadTracksBtn := widget.NewButton("Load Tracks", func() {
+		if batchMode {
+			// In batch mode, load tracks from all files for user selection
+			if len(mkvFiles) == 0 {
+				dialog.ShowError(fmt.Errorf("Please select MKV files for batch processing first."), w)
+				return
+			}
+			
+			// Load tracks from all MKV files
+			go func() {
+				fyne.Do(func() {
+					result.SetText(setLogMessage(LogInfo, "Loading Batch Tracks", "Analyzing all MKV files for subtitle tracks..."))
+					progress.Max = float64(len(mkvFiles))
+					progress.SetValue(0)
+				})
+				
+				// Clear previous tracks
+				trackItems = []*TrackItem{}
+				
+				totalTracks := 0
+				for fileIndex, mkvFile := range mkvFiles {
+					fyne.Do(func() {
+						currentTrackLabel.SetText(fmt.Sprintf("Analyzing file %d/%d: %s", fileIndex+1, len(mkvFiles), filepath.Base(mkvFile)))
+						progress.SetValue(float64(fileIndex))
+					})
+					
+					// Get track info for this file
+					var cmd *exec.Cmd
+					if mkvmergeBinaryPath != "" {
+						cmd = exec.Command(mkvmergeBinaryPath, "-J", mkvFile)
+					} else {
+						cmd = exec.Command("mkvmerge", "-J", mkvFile)
+					}
+					
+					output, err := cmd.Output()
+					if err != nil {
+						fyne.Do(func() {
+							result.SetText(result.Text + fmt.Sprintf("\n❌ Failed to analyze: %s", filepath.Base(mkvFile)))
+						})
+						continue
+					}
+					
+					// Parse JSON output
+					var mkvInfo struct {
+						Tracks []struct {
+							ID         int    `json:"id"`
+							Type       string `json:"type"`
+							Codec      string `json:"codec"`
+							Properties struct {
+								Language  string `json:"language"`
+								TrackName string `json:"track_name"`
+							} `json:"properties"`
+						} `json:"tracks"`
+					}
+					
+					err = json.Unmarshal(output, &mkvInfo)
+					if err != nil {
+						fyne.Do(func() {
+							result.SetText(result.Text + fmt.Sprintf("\n❌ Failed to parse: %s", filepath.Base(mkvFile)))
+						})
+						continue
+					}
+					
+					// Add subtitle tracks to the list
+					for _, track := range mkvInfo.Tracks {
+						if track.Type == "subtitles" {
+							lang := track.Properties.Language
+							if lang == "" {
+								lang = "und"
+							}
+							
+							trackName := track.Properties.TrackName
+							if trackName == "" {
+								trackName = "Untitled"
+							}
+							
+							// Create track item with file info
+							trackItem := &TrackItem{
+								Num:      track.ID,
+								Lang:     lang,
+								Codec:    track.Codec,
+								Name:     trackName,
+								FilePath: mkvFile, // Store source file path
+								Check:    widget.NewCheck("", nil),
+								Status:   widget.NewLabel("Ready"),
+							}
+							
+							// Handle PGS subtitles with OCR option
+							if track.Codec == "hdmv_pgs_subtitle" {
+								trackItem.ConvertOCR = widget.NewCheck("", nil)
+							}
+							
+							trackItems = append(trackItems, trackItem)
+							totalTracks++
+						}
+					}
+				}
+				
+				// Update UI with all tracks
+				fyne.Do(func() {
+					progress.SetValue(float64(len(mkvFiles)))
+					currentTrackLabel.SetText(fmt.Sprintf("Found %d subtitle tracks across %d files", totalTracks, len(mkvFiles)))
+					
+					// Update track list
+					trackList.Objects = nil
+					for _, tt := range trackItems {
+						// Show file name + track info
+						fileName := filepath.Base(tt.FilePath)
+						trackInfo := widget.NewLabel(fmt.Sprintf("%s - Track %d: %s (%s) %s", fileName, tt.Num, tt.Lang, tt.Codec, tt.Name))
+						
+						if tt.ConvertOCR != nil {
+							// For PGS subtitles, show OCR option
+							ocrLabel := widget.NewLabel("Convert to SRT")
+							row := container.NewHBox(tt.Check, tt.Status, trackInfo, tt.ConvertOCR, ocrLabel)
+							trackList.Add(row)
+						} else {
+							// For other subtitle formats
+							row := container.NewHBox(tt.Check, tt.Status, trackInfo)
+							trackList.Add(row)
+						}
+					}
+					trackList.Refresh()
+					
+					result.SetText(setLogMessage(LogSuccess, "Batch Tracks Loaded", fmt.Sprintf("Found %d subtitle tracks across %d MKV files. Select the tracks you want to extract, then click 'Start Extraction'.", totalTracks, len(mkvFiles))))
+				})
+			}()
+			return
+		}
+		
+		// Single file mode
 		if mkvPath == "" {
 			dialog.ShowError(fmt.Errorf("Please select or drag & drop an MKV file first."), w)
 			return
@@ -3705,6 +4353,142 @@ func main() {
 
 	// Button to start extraction of selected tracks
 	startExtractBtn := widget.NewButton("Start Extraction", func() {
+		if batchMode {
+			// Batch processing mode
+			if len(mkvFiles) == 0 || outDir == "" {
+				dialog.ShowError(fmt.Errorf("Please select MKV files and output directory for batch processing."), w)
+				return
+			}
+			
+			// Start batch processing
+			go func() {
+				totalFiles := len(mkvFiles)
+				successCount := 0
+				failureCount := 0
+				
+				fyne.Do(func() {
+					result.SetText(setLogMessage(LogInfo, "Batch Processing Started", fmt.Sprintf("Processing %d MKV files...", totalFiles)))
+					progress.Max = float64(totalFiles)
+					progress.SetValue(0)
+				})
+				
+				for fileIndex, currentMkvPath := range mkvFiles {
+					mkvPath = currentMkvPath // Set current file for processing
+					
+					fyne.Do(func() {
+						currentTrackLabel.SetText(fmt.Sprintf("Processing file %d/%d: %s", fileIndex+1, totalFiles, filepath.Base(currentMkvPath)))
+						progress.SetValue(float64(fileIndex))
+					})
+					
+					// Load tracks for current file (simplified check)
+					if !loadTracksForFile(currentMkvPath) {
+						failureCount++
+						fyne.Do(func() {
+							result.SetText(result.Text + fmt.Sprintf("\n❌ Failed to load tracks for: %s", filepath.Base(currentMkvPath)))
+						})
+						continue
+					}
+					
+					// Extract selected tracks for this file
+					selectedTracksForFile := []*TrackItem{}
+					for _, t := range trackItems {
+						if t.Check.Checked && t.FilePath == currentMkvPath {
+							selectedTracksForFile = append(selectedTracksForFile, t)
+						}
+					}
+					
+					if len(selectedTracksForFile) == 0 {
+						fyne.Do(func() {
+							result.SetText(result.Text + fmt.Sprintf("\n⏭️ Skipped (no tracks selected): %s", filepath.Base(currentMkvPath)))
+						})
+						continue
+					}
+					
+					// Extract selected tracks
+					fileSuccess := true
+					for _, track := range selectedTracksForFile {
+						fyne.Do(func() {
+							track.Status.SetText("Extracting...")
+						})
+						
+						// Determine file extension based on codec with comprehensive matching
+						var ext string
+						codecLower := strings.ToLower(track.Codec)
+						switch {
+						case strings.Contains(codecLower, "subrip") || strings.Contains(codecLower, "srt"):
+							ext = "srt"
+						case strings.Contains(codecLower, "pgs") || strings.Contains(codecLower, "hdmv"):
+							if track.ConvertOCR != nil && track.ConvertOCR.Checked {
+								ext = "srt" // Convert PGS to SRT
+							} else {
+								ext = "sup"
+							}
+						case strings.Contains(codecLower, "vobsub"):
+							ext = "sub"
+						case strings.Contains(codecLower, "ass") || strings.Contains(codecLower, "substation") || strings.Contains(codecLower, "advanced substation"):
+							ext = "ass"
+						case strings.Contains(codecLower, "ssa"):
+							ext = "ssa"
+						default:
+							ext = "srt"
+						}
+						
+						mkvBaseName := filepath.Base(currentMkvPath)
+						mkvBaseName = strings.TrimSuffix(mkvBaseName, filepath.Ext(mkvBaseName))
+						outFile := fmt.Sprintf("%s.track%d_%s.%s", mkvBaseName, track.Num, track.Lang, ext)
+						
+						// Extract the track
+						var extractCmd *exec.Cmd
+						if mkvextractBinaryPath != "" {
+							extractCmd = exec.Command(mkvextractBinaryPath, "tracks", currentMkvPath, fmt.Sprintf("%d:%s", track.Num, outFile))
+						} else {
+							extractCmd = exec.Command("mkvextract", "tracks", currentMkvPath, fmt.Sprintf("%d:%s", track.Num, outFile))
+						}
+						extractCmd.Dir = outDir
+						
+						_, err := extractCmd.CombinedOutput()
+						if err != nil {
+							fileSuccess = false
+							fyne.Do(func() {
+								track.Status.SetText("Failed")
+							})
+						} else {
+							fyne.Do(func() {
+								track.Status.SetText("Done")
+							})
+						}
+					}
+					
+					if fileSuccess {
+						successCount++
+						fyne.Do(func() {
+							result.SetText(result.Text + fmt.Sprintf("\n✅ Successfully processed: %s (%d tracks)", filepath.Base(currentMkvPath), len(selectedTracksForFile)))
+						})
+					} else {
+						failureCount++
+						fyne.Do(func() {
+							result.SetText(result.Text + fmt.Sprintf("\n❌ Partially failed: %s", filepath.Base(currentMkvPath)))
+						})
+					}
+				}
+				
+				// Final batch processing results
+				fyne.Do(func() {
+					progress.SetValue(float64(totalFiles))
+					currentTrackLabel.SetText("Batch processing completed")
+					result.SetText(result.Text + fmt.Sprintf("\n\n🎬 Batch Processing Complete\n✅ Success: %d files\n❌ Failed: %d files\n📁 Output: %s", successCount, failureCount, outDir))
+				})
+				
+				// Show completion notification
+				fyne.CurrentApp().SendNotification(&fyne.Notification{
+					Title:   "Batch Processing Complete",
+					Content: fmt.Sprintf("Processed %d files. %d successful, %d failed.", totalFiles, successCount, failureCount),
+				})
+			}()
+			return
+		}
+		
+		// Single file processing mode
 		if mkvPath == "" || outDir == "" {
 			dialog.ShowError(fmt.Errorf("Please select both MKV file and output directory."), w)
 			return
@@ -4985,17 +5769,20 @@ func main() {
 					// Use proper file extension based on codec
 					var fileExt string
 
-					// Handle special case for "SubRip/SRT" format
-					if strings.Contains(t.Codec, "SubRip") || strings.Contains(t.Codec, "subrip") || strings.Contains(t.Codec, "SRT") || strings.Contains(t.Codec, "srt") {
+					// Determine extension based on codec with comprehensive matching
+					codecLower := strings.ToLower(t.Codec)
+					if strings.Contains(codecLower, "subrip") || strings.Contains(codecLower, "srt") {
 						fileExt = "srt"
 						fyne.Do(func() {
 							result.SetText(result.Text + "\nDetected SRT format, using .srt extension")
 						})
-					} else if t.Codec == "hdmv_pgs_subtitle" || t.Codec == "HDMV PGS" {
+					} else if strings.Contains(codecLower, "pgs") || strings.Contains(codecLower, "hdmv") {
 						fileExt = "sup"
-					} else if t.Codec == "ass" || t.Codec == "ssa" || t.Codec == "ASS" || t.Codec == "SSA" {
+					} else if strings.Contains(codecLower, "ass") || strings.Contains(codecLower, "substation") || strings.Contains(codecLower, "advanced substation") {
 						fileExt = "ass"
-					} else if t.Codec == "vobsub" || t.Codec == "VobSub" {
+					} else if strings.Contains(codecLower, "ssa") {
+						fileExt = "ssa"
+					} else if strings.Contains(codecLower, "vobsub") {
 						fileExt = "idx"
 					} else {
 						// Use lowercase codec name as fallback but remove any slashes
@@ -5130,10 +5917,18 @@ func main() {
 	titleLabel := widget.NewLabel(fmt.Sprintf("Subtitle Forge %s", AppVersion))
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 
+	// Create file selection button row
+	fileButtonRow := container.NewHBox(
+		fileBtn,
+		batchBtn,
+		clearBtn,
+	)
+
 	topContent := container.NewVBox(
 		titleLabel,
-		fileBtn,
+		fileButtonRow,
 		selectedFile,
+		fileListContainer,
 		dirBtn,
 		selectedDir,
 		buttonRow,
@@ -5276,7 +6071,7 @@ func main() {
 	// Create tab for subtitle insertion
 	// Create file selection widgets for subtitle insertion
 	insertMkvFileLabel := widget.NewLabel("No MKV file selected")
-	insertSrtFileLabel := widget.NewLabel("No SRT file selected")
+	insertSubtitleFileLabel := widget.NewLabel("No subtitle file selected")
 
 	selectInsertMkvBtn := widget.NewButton("Select MKV File", func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
@@ -5300,7 +6095,7 @@ func main() {
 		fd.Show()
 	})
 
-	selectInsertSrtBtn := widget.NewButton("Select SRT File", func() {
+	selectInsertSubtitleBtn := widget.NewButton("Select Subtitle File", func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, w)
@@ -5311,15 +6106,26 @@ func main() {
 			}
 
 			filePath := reader.URI().Path()
-			if !strings.HasSuffix(strings.ToLower(filePath), ".srt") {
-				dialog.ShowInformation("Invalid File", "Please select an SRT file", w)
+			// Check if it's a supported subtitle format
+			supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt"}
+			fileExt := strings.ToLower(filepath.Ext(filePath))
+			isSupported := false
+			for _, ext := range supportedExts {
+				if fileExt == ext {
+					isSupported = true
+					break
+				}
+			}
+			
+			if !isSupported {
+				dialog.ShowInformation("Invalid File", "Please select a subtitle file (.srt, .ass, .ssa, .vtt, .sub, .sup, .txt)", w)
 				return
 			}
 
-			insertSrtFileLabel.SetText(filePath)
-		}, w)
-		fd.SetFilter(storage.NewExtensionFileFilter([]string{".srt"}))
-		fd.Show()
+			insertSubtitleFileLabel.SetText(filePath)
+	}, w)
+	fd.SetFilter(storage.NewExtensionFileFilter([]string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt", ".smi", ".mpl", ".tmp"}))
+	fd.Show()
 	})
 
 	// Create language selection for subtitle insertion
@@ -5468,10 +6274,10 @@ func main() {
 	insertSubtitleBtn := widget.NewButton("Insert Subtitle", func() {
 		// Check if files are selected
 		mkvPath := insertMkvFileLabel.Text
-		srtPath := insertSrtFileLabel.Text
+		subtitlePath := insertSubtitleFileLabel.Text
 
-		if mkvPath == "No MKV file selected" || srtPath == "No SRT file selected" {
-			dialog.ShowInformation("Missing Files", "Please select both MKV and SRT files", w)
+		if mkvPath == "No MKV file selected" || subtitlePath == "No subtitle file selected" {
+			dialog.ShowInformation("Missing Files", "Please select both MKV and subtitle files", w)
 			return
 		}
 
@@ -5535,8 +6341,8 @@ func main() {
 			mkvmergeArgs = append(mkvmergeArgs, "--forced-track", "0:yes")
 		}
 
-		// Add SRT file at the end
-		mkvmergeArgs = append(mkvmergeArgs, srtPath)
+		// Add subtitle file at the end
+		mkvmergeArgs = append(mkvmergeArgs, subtitlePath)
 
 		// Run mkvmerge command to add subtitle
 		go func() {
@@ -5576,20 +6382,20 @@ func main() {
 	)
 	mkvDropContainer.Resize(fyne.NewSize(300, 60))
 
-	srtDropArea := canvas.NewRectangle(color.NRGBA{R: 200, G: 200, B: 200, A: 100})
-	srtDropLabel := widget.NewLabelWithStyle("Drop SRT File Here", fyne.TextAlignCenter, fyne.TextStyle{})
-	srtDropContainer := container.NewStack(
-		srtDropArea,
-		srtDropLabel,
+	subtitleDropArea := canvas.NewRectangle(color.NRGBA{R: 200, G: 200, B: 200, A: 100})
+	subtitleDropLabel := widget.NewLabelWithStyle("Drop Subtitle File Here", fyne.TextAlignCenter, fyne.TextStyle{})
+	subtitleDropContainer := container.NewStack(
+		subtitleDropArea,
+		subtitleDropLabel,
 	)
-	srtDropContainer.Resize(fyne.NewSize(300, 60))
+	subtitleDropContainer.Resize(fyne.NewSize(300, 60))
 
 	// Group file selection
 	fileSelectionGroup := widget.NewCard("File Selection", "", container.NewVBox(
 		container.NewHBox(selectInsertMkvBtn, insertMkvFileLabel),
 		mkvDropContainer,
-		container.NewHBox(selectInsertSrtBtn, insertSrtFileLabel),
-		srtDropContainer,
+		container.NewHBox(selectInsertSubtitleBtn, insertSubtitleFileLabel),
+		subtitleDropContainer,
 	))
 
 	// Group subtitle options
@@ -6037,7 +6843,7 @@ func main() {
 	updateDependencyStatus(w)
 
 	// Create convert subtitles tab content
-	convertTabContent, loadConvertFile := createConvertSubtitlesTab(w)
+	convertTabContent, loadConvertFile, loadConvertFiles := createConvertSubtitlesTab(w)
 
 	// Wrap each tab content in a scroll container to ensure proper resizability
 	extractScroll := container.NewScroll(extractTabContent)
@@ -6073,28 +6879,46 @@ func main() {
 							Title:   "File Dropped",
 							Content: "MKV file loaded: " + filepath.Base(filePath),
 						})
-					} else if fileExt == ".srt" {
-						// Handle SRT file drop
-						insertSrtFileLabel.SetText(filePath)
-						srtDropLabel.SetText(filepath.Base(filePath))
-						srtDropArea.FillColor = color.NRGBA{R: 100, G: 200, B: 100, A: 100}
-						srtDropArea.Refresh()
-						a.SendNotification(&fyne.Notification{
-							Title:   "File Dropped",
-							Content: "SRT file loaded: " + filepath.Base(filePath),
-						})
 					} else {
-						a.SendNotification(&fyne.Notification{
-							Title:   "Invalid File",
-							Content: "Please drop an MKV or SRT file only.",
-						})
+						// Check if it's a supported subtitle format
+						supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt"}
+						isSupported := false
+						for _, ext := range supportedExts {
+							if fileExt == ext {
+								isSupported = true
+								break
+							}
+						}
+						
+						if isSupported {
+							// Handle subtitle file drop
+							insertSubtitleFileLabel.SetText(filePath)
+							subtitleDropLabel.SetText(filepath.Base(filePath))
+							subtitleDropArea.FillColor = color.NRGBA{R: 100, G: 200, B: 100, A: 100}
+							subtitleDropArea.Refresh()
+							a.SendNotification(&fyne.Notification{
+								Title:   "File Dropped",
+								Content: "Subtitle file loaded: " + filepath.Base(filePath),
+							})
+						} else {
+							a.SendNotification(&fyne.Notification{
+								Title:   "Invalid File",
+								Content: "Please drop an MKV or subtitle file (.srt, .ass, .ssa, .vtt, .sub, .sup, .txt).",
+							})
+						}
 					}
 				}
 			})
 		} else if tab.Text == "Convert Subtitles" {
-			// Set up drag and drop for Convert Subtitles tab
+			// Enhanced drag and drop for Convert Subtitles tab (supports batch processing)
 			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
-				if len(uris) > 0 {
+				if len(uris) == 0 {
+					return
+				}
+				
+				// Check if it's a single file or multiple files
+				if len(uris) == 1 {
+					// Single file - use existing single file logic
 					filePath := uris[0].Path()
 					fileExt := strings.ToLower(filepath.Ext(filePath))
 					
@@ -6121,48 +6945,121 @@ func main() {
 							Content: "Please drop a subtitle file (.srt, .ass, .vtt, .sub, etc.)",
 						})
 					}
-				}
-			})
-		} else if tab.Text == "Extract Subtitles" {
-			// Restore original drag and drop for Extract Subtitles tab
-			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
-				if len(uris) > 0 {
-					filePath := uris[0].Path()
-					fileExt := strings.ToLower(filepath.Ext(filePath))
-
-					if fileExt == ".mkv" {
-						// Handle MKV file drop
-						mkvPath = filePath
+				} else {
+					// Multiple files - use batch mode
+					var subtitleFiles []string
+					supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx", ".sup", ".txt"}
+					
+					for _, uri := range uris {
+						filePath := uri.Path()
+						fileExt := strings.ToLower(filepath.Ext(filePath))
+						for _, ext := range supportedExts {
+							if fileExt == ext {
+								subtitleFiles = append(subtitleFiles, filePath)
+								break
+							}
+						}
+					}
+					
+					if len(subtitleFiles) > 0 {
+						// Load multiple files for batch conversion
+						loadConvertFiles(subtitleFiles)
 						a.SendNotification(&fyne.Notification{
-							Title:   "File Dropped",
-							Content: "MKV file loaded: " + filepath.Base(filePath),
+							Title:   "Batch Mode Enabled",
+							Content: fmt.Sprintf("Loaded %d subtitle files for batch conversion", len(subtitleFiles)),
 						})
-
-						// Update UI
-						selectedFile.SetText(mkvPath)
-
-						// Set output directory to the same directory as the MKV file
-						outDir = filepath.Dir(mkvPath)
-						selectedDir.SetText(outDir)
-
-						// Clear previous tracks
-						trackItems = []*TrackItem{}
-						trackList.Objects = nil
-						trackList.Refresh()
-
-						result.SetText("MKV file dropped and loaded. Output directory automatically set to MKV location. Click 'Load Tracks' to analyze the MKV file.")
 					} else {
 						a.SendNotification(&fyne.Notification{
-							Title:   "Invalid File",
-							Content: "Please drop an MKV file only.",
+							Title:   "No Valid Files",
+							Content: "Please drop subtitle files (.srt, .ass, .vtt, .sub, etc.)",
 						})
 					}
 				}
 			})
+		} else if tab.Text == "Extract Subtitles" {
+			// Enhanced drag and drop for Extract Subtitles tab (supports batch processing)
+			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
+				if len(uris) == 0 {
+					return
+				}
+
+				// Filter for MKV files only
+				var mkvUris []fyne.URI
+				for _, uri := range uris {
+					filePath := uri.Path()
+					fileExt := strings.ToLower(filepath.Ext(filePath))
+					if fileExt == ".mkv" {
+						mkvUris = append(mkvUris, uri)
+					}
+				}
+
+				if len(mkvUris) == 0 {
+					a.SendNotification(&fyne.Notification{
+						Title:   "Invalid Files",
+						Content: "Please drop MKV files only.",
+					})
+					return
+				}
+
+				if len(mkvUris) == 1 {
+					// Single file mode
+					filePath := mkvUris[0].Path()
+					batchMode = false
+					mkvFiles = []string{}
+					fileList.Refresh()
+					fileListContainer.Hide()
+
+					mkvPath = filePath
+					a.SendNotification(&fyne.Notification{
+						Title:   "Single MKV File Dropped",
+						Content: "MKV file loaded: " + filepath.Base(filePath),
+					})
+
+					// Update UI
+					selectedFile.SetText(mkvPath)
+
+					// Set output directory to the same directory as the MKV file
+					outDir = filepath.Dir(mkvPath)
+					selectedDir.SetText(outDir)
+
+					// Clear previous tracks
+					trackItems = []*TrackItem{}
+					trackList.Objects = nil
+					trackList.Refresh()
+
+					result.SetText(setLogMessage(LogInfo, "MKV File Loaded", "MKV file dropped and loaded. Output directory automatically set to MKV location. Click 'Load Tracks' to analyze the MKV file."))
+				} else {
+					// Multiple files - batch mode
+					batchMode = true
+					mkvFiles = []string{}
+					for _, uri := range mkvUris {
+						mkvFiles = append(mkvFiles, uri.Path())
+					}
+					fileList.Refresh()
+					fileListContainer.Show()
+
+					a.SendNotification(&fyne.Notification{
+						Title:   "Multiple MKV Files Dropped",
+						Content: fmt.Sprintf("%d MKV files loaded for batch processing", len(mkvFiles)),
+					})
+
+					// Set output directory to the directory of the first file
+					if len(mkvFiles) > 0 {
+						outDir = filepath.Dir(mkvFiles[0])
+						selectedDir.SetText(outDir)
+					}
+
+					// Clear previous tracks
+					trackItems = []*TrackItem{}
+					trackList.Objects = nil
+					trackList.Refresh()
+
+					selectedFile.SetText(fmt.Sprintf("%d MKV files selected for batch processing", len(mkvFiles)))
+					result.SetText(setLogMessage(LogInfo, "Batch Mode Enabled", fmt.Sprintf("Dropped %d MKV files. Click 'Load Tracks' to analyze all files and select which tracks to extract.", len(mkvFiles))))
+				}
+			})
 		}
 	}
-
-	// Set the tabs as the window content
 	w.SetContent(tabs)
 
 	// Trigger the OnChanged handler for the initial tab
