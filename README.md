@@ -1,4 +1,4 @@
-# Subtitle Forge v1.9.0
+# Subtitle Forge v1.9.1
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -56,6 +56,22 @@ This project provides two applications:
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v1.9.1
+
+### 🔍 Enhanced Track Filtering - Batch Processing Improvement!
+- **Filename Display in Filters**: Track filtering now shows filenames in batch mode for easy file identification
+- **Consistent Track Information**: Filtered tracks display same detailed info as unfiltered tracks
+- **Enhanced Filter Capabilities**: Can now filter by filename in addition to language, codec, name, and track number
+- **Smart Display Logic**: Shows `[filename.mkv]` in batch mode, clean display in single file mode
+- **Improved User Experience**: No more confusion about which file each track belongs to when filtering
+
+### 🎯 Technical Enhancements
+- **Conditional Filename Display**: Automatically detects batch vs single mode and adjusts display accordingly
+- **Comprehensive Search**: Filter searches across all track properties including filename
+- **Case-Insensitive Filtering**: All filtering works regardless of text case
+- **Updated UI Text**: Filter placeholder reflects new filename filtering capability
+- **Consistent Formatting**: Same track information format whether filtering or not
 
 ## What's New in v1.9.0
 

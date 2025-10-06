@@ -5951,7 +5951,7 @@ func main() {
 
 	// Track filter
 	filterEntry := widget.NewEntry()
-	filterEntry.SetPlaceHolder("Filter tracks by language, codec, or name...")
+	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, or filename...")
 
 	// Function to filter tracks based on search text
 	filterTracks := func(filterText string) {
@@ -5962,7 +5962,16 @@ func main() {
 		if filterText == "" {
 			for _, t := range trackItems {
 				// Create row for this track
-				trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name))
+				var trackInfoText string
+				if t.FilePath != "" {
+					// Include filename for batch processing
+					filename := filepath.Base(t.FilePath)
+					trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, t.Lang, t.Codec, t.Name, filename)
+				} else {
+					// Single file mode
+					trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name)
+				}
+				trackInfo := widget.NewLabel(trackInfoText)
 
 				var row *fyne.Container
 				if t.ConvertOCR != nil {
@@ -5994,11 +6003,21 @@ func main() {
 				matchesFilter := strings.Contains(strings.ToLower(t.Lang), lowerFilter) ||
 					strings.Contains(strings.ToLower(t.Codec), lowerFilter) ||
 					strings.Contains(strings.ToLower(t.Name), lowerFilter) ||
-					strings.Contains(strings.ToLower(fmt.Sprintf("Track %d", t.Num)), lowerFilter)
+					strings.Contains(strings.ToLower(fmt.Sprintf("Track %d", t.Num)), lowerFilter) ||
+					strings.Contains(strings.ToLower(filepath.Base(t.FilePath)), lowerFilter)
 
 				if matchesFilter {
 					// Create row for this track
-					trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name))
+					var trackInfoText string
+					if t.FilePath != "" {
+						// Include filename for batch processing
+						filename := filepath.Base(t.FilePath)
+						trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, t.Lang, t.Codec, t.Name, filename)
+					} else {
+						// Single file mode
+						trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name)
+					}
+					trackInfo := widget.NewLabel(trackInfoText)
 
 					var row *fyne.Container
 					if t.ConvertOCR != nil {
@@ -6033,7 +6052,7 @@ func main() {
 
 	// Track control container with buttons and filter
 	// Make the filter entry take more space by setting its placeholder to be longer
-	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, or track number...                                                 ")
+	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, filename, or track number...                                                 ")
 
 	// Using a grid layout to give the filter entry more space
 	filterBox := container.New(
