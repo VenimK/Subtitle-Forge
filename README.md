@@ -1,4 +1,4 @@
-# Subtitle Forge v1.9.1
+# Subtitle Forge v1.9.2
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -56,6 +56,29 @@ This project provides two applications:
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v1.9.2
+
+### 🎯 Advanced Track Sorting - Professional Track Management!
+- **Comprehensive Sorting Options**: Sort tracks by Filename, Language, Codec, or Track Number
+- **Multi-Level Sorting Logic**: Smart sorting with fallback criteria for consistent results
+- **Combined Filter + Sort**: Powerful track organization with filtering and sorting working together
+- **Batch Processing Optimized**: Perfect for managing large numbers of tracks from multiple MKV files
+- **Professional Workflow**: Organize tracks like professional video editing software
+
+### 🔧 Smart Sorting Features
+- **By Filename**: Groups tracks by source file, then by track number
+- **By Language**: Groups by language (English, Spanish, etc.), then filename, then track number
+- **By Codec**: Groups by subtitle format (SRT, ASS, PGS, etc.), then filename, then track number
+- **By Track Number**: Sorts by track ID, then filename for duplicate track numbers
+- **Default Order**: Original loading sequence from MKV files
+
+### 🚀 Enhanced User Experience
+- **Real-Time Sorting**: Changes apply immediately when selection changes
+- **Organized Workflow**: Easy to find specific tracks in large batch operations
+- **Flexible Organization**: Multiple sorting criteria for different use cases
+- **Consistent Display**: Maintains filename display logic from v1.9.1 filtering enhancement
+- **Memory Efficient**: Optimized sorting without modifying original track data
 
 ## What's New in v1.9.1
 

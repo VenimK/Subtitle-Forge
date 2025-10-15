@@ -1,4 +1,4 @@
-# Subtitle Forge v1.9.1
+# Subtitle Forge v1.9.2
 > Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -32,7 +32,7 @@ This project provides two applications:
 ### Windows
 1. Download the latest release for Windows
 2. Unzip the file
-3. Run the included `install_dependencies.ps1` script as administrator to install required dependencies
+3. Run the included `WindowsAIOInstaller.ps1` script as administrator to install required dependencies
 4. Launch the application
 
 ### Linux

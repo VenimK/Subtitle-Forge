@@ -5953,14 +5953,20 @@ func main() {
 	filterEntry := widget.NewEntry()
 	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, or filename...")
 
-	// Function to filter tracks based on search text
+	// Function to filter and sort tracks based on search text
 	filterTracks := func(filterText string) {
 		// Clear the track list UI
 		trackList.Objects = nil
 
+		// Create a copy of trackItems for sorting
+		tracksToShow := make([]*TrackItem, len(trackItems))
+		copy(tracksToShow, trackItems)
+
+		// Sorting will be implemented after sortSelect is created
+
 		// If no filter, show all tracks
 		if filterText == "" {
-			for _, t := range trackItems {
+			for _, t := range tracksToShow {
 				// Create row for this track
 				var trackInfoText string
 				if t.FilePath != "" {
@@ -6050,6 +6056,136 @@ func main() {
 		filterTracks(text)
 	}
 
+
+	// Track sorting dropdown
+	sortSelect := widget.NewSelect([]string{
+		"Default Order",
+		"By Filename",
+		"By Language",
+		"By Codec",
+		"By Track Number",
+	}, func(value string) {
+		// Re-apply current filter with new sort order
+		filterTracks(filterEntry.Text)
+	})
+	sortSelect.SetSelected("Default Order")
+
+	// Now update filterTracks to include sorting
+	filterTracks = func(filterText string) {
+		// Clear the track list UI
+		trackList.Objects = nil
+
+		// Get tracks to display (filtered or all)
+		var tracksToShow []*TrackItem
+		if filterText == "" {
+			// Show all tracks
+			tracksToShow = make([]*TrackItem, len(trackItems))
+			copy(tracksToShow, trackItems)
+		} else {
+			// Convert filter text to lowercase for case-insensitive comparison
+			lowerFilter := strings.ToLower(filterText)
+			
+			// Add only tracks that match the filter
+			for _, t := range trackItems {
+				// Check if the track matches the filter criteria
+				matchesFilter := strings.Contains(strings.ToLower(t.Lang), lowerFilter) ||
+					strings.Contains(strings.ToLower(t.Codec), lowerFilter) ||
+					strings.Contains(strings.ToLower(t.Name), lowerFilter) ||
+					strings.Contains(strings.ToLower(fmt.Sprintf("Track %d", t.Num)), lowerFilter) ||
+					strings.Contains(strings.ToLower(filepath.Base(t.FilePath)), lowerFilter)
+				
+				if matchesFilter {
+					tracksToShow = append(tracksToShow, t)
+				}
+			}
+		}
+		
+		// Apply sorting based on current selection
+		if sortSelect.Selected != "Default Order" {
+			switch sortSelect.Selected {
+			case "By Filename":
+				sort.Slice(tracksToShow, func(i, j int) bool {
+					filenameI := filepath.Base(tracksToShow[i].FilePath)
+					filenameJ := filepath.Base(tracksToShow[j].FilePath)
+					if filenameI == filenameJ {
+						return tracksToShow[i].Num < tracksToShow[j].Num
+					}
+					return filenameI < filenameJ
+				})
+			case "By Language":
+				sort.Slice(tracksToShow, func(i, j int) bool {
+					if tracksToShow[i].Lang == tracksToShow[j].Lang {
+						filenameI := filepath.Base(tracksToShow[i].FilePath)
+						filenameJ := filepath.Base(tracksToShow[j].FilePath)
+						if filenameI == filenameJ {
+							return tracksToShow[i].Num < tracksToShow[j].Num
+						}
+						return filenameI < filenameJ
+					}
+					return tracksToShow[i].Lang < tracksToShow[j].Lang
+				})
+			case "By Codec":
+				sort.Slice(tracksToShow, func(i, j int) bool {
+					if tracksToShow[i].Codec == tracksToShow[j].Codec {
+						filenameI := filepath.Base(tracksToShow[i].FilePath)
+						filenameJ := filepath.Base(tracksToShow[j].FilePath)
+						if filenameI == filenameJ {
+							return tracksToShow[i].Num < tracksToShow[j].Num
+						}
+						return filenameI < filenameJ
+					}
+					return tracksToShow[i].Codec < tracksToShow[j].Codec
+				})
+			case "By Track Number":
+				sort.Slice(tracksToShow, func(i, j int) bool {
+					if tracksToShow[i].Num == tracksToShow[j].Num {
+						filenameI := filepath.Base(tracksToShow[i].FilePath)
+						filenameJ := filepath.Base(tracksToShow[j].FilePath)
+						return filenameI < filenameJ
+					}
+					return tracksToShow[i].Num < tracksToShow[j].Num
+				})
+			}
+		}
+		
+		// Display the sorted/filtered tracks
+		for _, t := range tracksToShow {
+			// Create row for this track
+			var trackInfoText string
+			if t.FilePath != "" {
+				// Include filename for batch processing
+				filename := filepath.Base(t.FilePath)
+				trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, t.Lang, t.Codec, t.Name, filename)
+			} else {
+				// Single file mode
+				trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name)
+			}
+			trackInfo := widget.NewLabel(trackInfoText)
+
+			var row *fyne.Container
+			if t.ConvertOCR != nil {
+				// For PGS/VobSub subtitles, show OCR option and language selection
+				ocrLabel := widget.NewLabel("Convert to SRT")
+
+				if t.LangSelect != nil {
+					// Add language selection dropdown for OCR-based conversion
+					langLabel := widget.NewLabel("OCR Language:")
+					row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel, langLabel, t.LangSelect)
+				} else {
+					// For ASS/SSA conversion (no OCR language needed)
+					row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel)
+				}
+			} else {
+				// For other subtitle formats
+				row = container.NewHBox(t.Check, t.Status, trackInfo)
+			}
+
+			trackList.Add(row)
+		}
+
+		trackList.Refresh()
+	}
+
 	// Track control container with buttons and filter
 	// Make the filter entry take more space by setting its placeholder to be longer
 	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, filename, or track number...                                                 ")
@@ -6061,9 +6197,17 @@ func main() {
 		filterEntry,
 	)
 
+	// Sort box
+	sortBox := container.New(
+		layout.NewFormLayout(),
+		widget.NewLabel("Sort by:"),
+		sortSelect,
+	)
+
 	trackControlsContainer := container.NewVBox(
 		container.NewHBox(selectAllBtn, deselectAllBtn),
 		filterBox,
+		sortBox,
 	)
 
 	middleContent := container.NewVBox(
