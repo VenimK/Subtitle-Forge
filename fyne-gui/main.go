@@ -7014,11 +7014,15 @@ func main() {
 	convertScroll := container.NewScroll(convertTabContent)
 	settingsScroll := container.NewScroll(settingsTabContent)
 
+	// Create AI Translation tab
+	aiTranslationTab := createAITranslationTab(w)
+	
 	// Create tabs with scrollable content
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Extract Subtitles", extractScroll),
 		container.NewTabItem("Insert Subtitles", insertScroll),
 		container.NewTabItem("Convert Subtitles", convertScroll),
+		container.NewTabItem("🤖 AI Translate", aiTranslationTab),
 		container.NewTabItem("Settings", settingsScroll),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
@@ -7066,9 +7070,43 @@ func main() {
 						} else {
 							a.SendNotification(&fyne.Notification{
 								Title:   "Invalid File",
-								Content: "Please drop an MKV or subtitle file (.srt, .ass, .ssa, .vtt, .sub, .sup, .txt).",
+								Content: "Please drop an MKV file only.",
 							})
 						}
+					}
+				}
+			})
+		} else if tab.Text == "🤖 AI Translate" {
+			// Set up drag and drop for AI Translation tab
+			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
+				if len(uris) > 0 {
+					filePath := uris[0].Path()
+					fileExt := strings.ToLower(filepath.Ext(filePath))
+					
+					// Accept subtitle files for AI translation
+					subtitleExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub"}
+					isSubtitleFile := false
+					for _, ext := range subtitleExts {
+						if fileExt == ext {
+							isSubtitleFile = true
+							break
+						}
+					}
+
+					if isSubtitleFile {
+						// Handle subtitle file drop for AI translation
+						if aiTranslationAddFile != nil {
+							aiTranslationAddFile(filePath)
+						}
+						a.SendNotification(&fyne.Notification{
+							Title:   "Subtitle File Added",
+							Content: "Added to translation queue: " + filepath.Base(filePath),
+						})
+					} else {
+						a.SendNotification(&fyne.Notification{
+							Title:   "Invalid File",
+							Content: "Please drop a subtitle file (.srt, .ass, .ssa, .vtt, .sub) for AI translation.",
+						})
 					}
 				}
 			})

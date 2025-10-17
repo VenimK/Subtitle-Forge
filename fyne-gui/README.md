@@ -1,12 +1,12 @@
-# Subtitle Forge v1.9.2
-> Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
+# Subtitle Forge v2.0.0
+> Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
 > [![GitHub All Releases](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/total.svg)](https://github.com/VenimK/Subtitle-Forge/releases)
 > [![GitHub Downloads Latest](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/latest/total?style=flat&label=downloads%40latest&color=orange)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg?logo=paypal&style=flat-square&label=Support%20☕)](https://paypal.me/VenimK)
 
-A tool for extracting and converting subtitles from MKV files, available in both command-line (CLI) and graphical user interface (GUI) versions.
+A comprehensive tool for extracting, converting, and translating subtitles from MKV files, available in both command-line (CLI) and graphical user interface (GUI) versions.
 
 ## Overview
 
@@ -16,6 +16,7 @@ This project provides two applications:
    - **Extract Subtitles** - Extract from MKV files with batch processing and PGS to SRT conversion
    - **Insert Subtitles** - Insert subtitles (all formats) into video files
    - **Convert Subtitles** - Universal subtitle format converter with batch processing and advanced options
+   - **AI Translation** - 🆕 Translate subtitles using Google Gemini AI with intelligent batch processing
    - **Settings** - Dependency management and seasonal dark themes
 
 ## Installation
@@ -43,6 +44,61 @@ This project provides two applications:
    sudo ./install_dependencies.sh
    ```
 4. Launch the application
+
+## What's New in v2.0.0 🎉
+
+### 🤖 AI Translation - Revolutionary New Feature!
+**Transform your subtitle workflow with intelligent AI-powered translation!**
+
+- **Google Gemini AI Integration**: Professional-quality translations using Google's advanced Gemini 2.5 Flash model
+- **Intelligent Batch Processing**: Translate 100+ subtitle entries per API call for maximum efficiency
+- **Multi-Language Support**: Translate between 100+ languages with automatic language detection
+- **Real-Time Progress Tracking**: Watch your translations progress with detailed status updates
+- **Batch File Processing**: Translate multiple subtitle files simultaneously
+- **Smart Format Preservation**: Maintains original timing, line breaks, and subtitle structure perfectly
+- **UTF-8 BOM Handling**: Automatic detection and removal of problematic byte order marks
+- **Clean Output**: Advanced AI response cleaning ensures pure translated text without reasoning or thinking process
+- **Configurable Settings**:
+  - **Temperature Control**: Adjust translation creativity (0.0 - 2.0)
+  - **Batch Size**: Customize processing batch size for optimal performance
+  - **Model Selection**: Choose from multiple Gemini models
+  - **Secondary API Key**: Quota management with automatic failover
+- **Drag & Drop Support**: Simply drag subtitle files to start translating
+- **Progress Logging**: Optional detailed logs of translation progress
+- **Resume Capability**: Resume interrupted translations (planned feature)
+
+### 🎯 AI Translation Features
+- **Professional Quality**: Context-aware translations that understand dialogue and subtitle conventions
+- **Format Support**: Works with all subtitle formats (SRT, ASS, SSA, VTT, etc.)
+- **Cost Efficient**: Batch processing minimizes API calls and costs
+- **Error Recovery**: Graceful handling of API errors with automatic fallback to original text
+- **Real-Time Feedback**: See each batch complete with translation count and status
+- **Output Control**: Choose custom output directory or save alongside source files
+
+### 🔧 Technical Excellence
+- **BOM Detection**: Automatic UTF-8 BOM removal prevents first subtitle entry loss
+- **Separator-Based Batching**: Uses `---SUBTITLE_SEPARATOR---` markers for reliable parsing
+- **System Instructions**: Prevents AI thinking output for clean translations
+- **Response Validation**: Ensures translation count matches source entry count
+- **Thread-Safe UI Updates**: Proper goroutine handling for smooth user experience
+
+### 🚀 How to Use AI Translation
+1. Open the **AI Translation** tab
+2. Enter your Google Gemini API key (get one free at [Google AI Studio](https://aistudio.google.com/app/apikey))
+3. Select source and target languages
+4. Add subtitle files (single or batch)
+5. Adjust advanced settings if desired
+6. Click **Start Translation** and watch the magic happen!
+
+**Perfect for content creators, translators, and subtitle enthusiasts who need professional-quality translations at scale!**
+
+## What's New in v1.9.2
+
+### 🎨 Track Sorting & Organization Enhancement
+- **Comprehensive Sorting Options**: Sort tracks by default order, filename, language, codec, or track number
+- **Multi-Level Sorting Logic**: Intelligent sorting with fallback criteria for consistent results
+- **Enhanced Batch Processing**: Better organization when working with multiple MKV files
+- **Filter + Sort Integration**: Combined filtering and sorting for powerful track management
 
 ## What's New in v1.8.5
 

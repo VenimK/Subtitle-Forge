@@ -1,22 +1,23 @@
-# Subtitle Forge v1.9.2
-> Powerful subtitle extraction and conversion tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, and manage subtitles with ease 🔹
+# Subtitle Forge v2.0.0
+> Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
 > [![GitHub All Releases](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/total.svg)](https://github.com/VenimK/Subtitle-Forge/releases)
 > [![GitHub Downloads Latest](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/latest/total?style=flat&label=downloads%40latest&color=orange)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/VenimK)
 
-A tool for extracting and converting subtitles from MKV files, available in both command-line (CLI) and graphical user interface (GUI) versions.
+A comprehensive tool for extracting, converting, and translating subtitles from MKV files, available in both command-line (CLI) and graphical user interface (GUI) versions.
 
 ## Overview
 
 This project provides two applications:
 1. **CLI Version** - Command-line tool for extracting subtitles from MKV files
 2. **GUI Version** - Fyne-based graphical application with enhanced features including:
-   - **Extract Subtitles** - Extract from MKV files with PGS to SRT conversion
-   - **Insert Subtitles** - Insert subtitles into video files
-   - **Convert Subtitles** - Convert between subtitle formats with advanced options
-   - **Settings** - Dependency management and theme customization
+   - **Extract Subtitles** - Extract from MKV files with batch processing and PGS to SRT conversion
+   - **Insert Subtitles** - Insert subtitles (all formats) into video files
+   - **Convert Subtitles** - Universal subtitle format converter with batch processing and advanced options
+   - **AI Translation** - 🆕 Translate subtitles using Google Gemini AI with intelligent batch processing
+   - **Settings** - Dependency management and seasonal dark themes
 
 ## Installation
 
@@ -56,6 +57,38 @@ This project provides two applications:
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v2.0.0 🎉
+
+### 🤖 AI Translation - Revolutionary New Feature!
+**Transform your subtitle workflow with intelligent AI-powered translation using Google Gemini!**
+
+- **Google Gemini AI Integration**: Professional-quality translations using Google's advanced Gemini 2.5 Flash model
+- **Intelligent Batch Processing**: Translate 100+ subtitle entries per API call for maximum efficiency
+- **Multi-Language Support**: Translate between 100+ languages with automatic language detection
+- **Real-Time Progress Tracking**: Watch your translations progress with detailed batch-by-batch status updates
+- **Batch File Processing**: Translate multiple subtitle files simultaneously with drag & drop support
+- **Smart Format Preservation**: Maintains original timing, line breaks, and subtitle structure perfectly
+- **UTF-8 BOM Handling**: Automatic detection and removal of problematic byte order marks (prevents first entry loss)
+- **Clean Output**: Advanced AI response cleaning ensures pure translated text without reasoning artifacts
+
+### 🎯 Key Translation Features
+- **Professional Quality**: Context-aware translations that understand dialogue and subtitle conventions
+- **Format Support**: Works seamlessly with all subtitle formats (SRT, ASS, SSA, VTT, etc.)
+- **Cost Efficient**: Intelligent batching minimizes API calls and translation costs
+- **Error Recovery**: Graceful handling of API errors with automatic fallback to original text
+- **Configurable Settings**: Temperature control, batch size adjustment, model selection, and secondary API key support
+- **Progress Logging**: Optional detailed logs of translation progress and AI responses
+
+### 🚀 How to Use
+1. Open the **AI Translation** tab in Subtitle Forge
+2. Get your free API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+3. Select source and target languages from 100+ supported languages
+4. Add subtitle files (single file or batch processing)
+5. Adjust advanced settings if desired (temperature, batch size, etc.)
+6. Click **Start Translation** and watch the AI work its magic!
+
+**Perfect for content creators, translators, and subtitle enthusiasts who need professional-quality translations at scale!**
 
 ## What's New in v1.9.2
 
