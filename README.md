@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.0
+# Subtitle Forge v2.0.1
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -48,6 +48,22 @@ This project provides two applications:
    **For Self-Contained Bundle**: Use the launcher script:
    ```bash
    ./subtitle-forge.sh
+
+## What's New in v2.0.1 ✨
+
+### 🔥 Production Enhancements for AI Translation
+
+**v2.0.1** brings essential UX improvements and production-ready refinements:
+
+- **✨ Multiple File Drag-and-Drop**: Drag multiple subtitle files at once into AI Translate tab
+- **💾 Persistent API Key Storage**: "Remember API Keys" checkbox saves keys securely
+- **🪟 Fixed Window Resizing**: Window resizes freely in both width and height
+- **⛔ Working Stop Button**: Functional translation cancellation with graceful shutdown
+- **🧹 Production-Ready Code**: Removed debug statements for professional output
+- **🔌 Provider Clarity**: Clear labeling of supported vs coming soon providers
+- **💬 Improved Error Messages**: User-friendly validation with helpful links
+
+---
    ```
 4. Make the binary executable: `chmod +x subtitle-forge-linux` (if needed)
 5. Launch the application: `./subtitle-forge-linux`

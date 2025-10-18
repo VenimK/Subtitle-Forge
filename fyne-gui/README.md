@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.0
+# Subtitle Forge v2.0.1
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -44,6 +44,24 @@ This project provides two applications:
    sudo ./install_dependencies.sh
    ```
 4. Launch the application
+
+## What's New in v2.0.1 ✨
+
+### 🔥 Production Enhancements for AI Translation
+
+**v2.0.1** brings essential UX improvements and production-ready refinements to the AI Translation feature:
+
+- **✨ Multiple File Drag-and-Drop**: Drag multiple subtitle files at once into AI Translate tab for instant batch queue population
+- **💾 Persistent API Key Storage**: "Remember API Keys" checkbox saves your keys securely - no need to re-enter every session
+- **🪟 Fixed Window Resizing**: Window now resizes freely in both width and height for better workflow flexibility
+- **⛔ Working Stop Button**: Fully functional translation cancellation with graceful shutdown and completion statistics
+- **🧹 Production-Ready Code**: Removed all debug statements for clean, professional logging
+- **🔌 Provider Clarity**: Clear labeling showing which AI providers are supported vs coming soon
+- **💬 Improved Error Messages**: User-friendly validation and HTTP status-specific errors with helpful links to Google AI Studio
+
+**Perfect for:** Content creators who need a seamless, professional translation workflow with smart error handling!
+
+---
 
 ## What's New in v2.0.0 🎉
 
