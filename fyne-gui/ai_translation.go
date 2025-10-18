@@ -92,7 +92,7 @@ var activeTranslationJobs = make(map[string]*TranslationJob)
 var aiTranslationAddFile func(string) // Function to add files from drag & drop
 
 // createAITranslationTab creates the AI translation interface
-func createAITranslationTab(w fyne.Window) *fyne.Container {
+func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	// Title
 	title := widget.NewLabel("AI-Powered Subtitle Translation")
 	title.TextStyle = fyne.TextStyle{Bold: true}
@@ -113,6 +113,40 @@ func createAITranslationTab(w fyne.Window) *fyne.Container {
 
 	secondaryKeyEntry := widget.NewPasswordEntry()
 	secondaryKeyEntry.SetPlaceHolder("Optional: Secondary API key for more quota")
+
+	// Remember API Key checkbox
+	rememberAPIKeyCheck := widget.NewCheck("Remember API Keys (saved locally)", nil)
+	rememberAPIKeyCheck.Checked = a.Preferences().BoolWithFallback("ai_remember_api_key", false)
+
+	// Load saved API keys if "Remember" is enabled
+	if rememberAPIKeyCheck.Checked {
+		savedAPIKey := a.Preferences().StringWithFallback("ai_api_key", "")
+		savedSecondaryKey := a.Preferences().StringWithFallback("ai_secondary_api_key", "")
+		if savedAPIKey != "" {
+			apiKeyEntry.SetText(savedAPIKey)
+		}
+		if savedSecondaryKey != "" {
+			secondaryKeyEntry.SetText(savedSecondaryKey)
+		}
+	}
+
+	// Handler for Remember checkbox
+	rememberAPIKeyCheck.OnChanged = func(checked bool) {
+		a.Preferences().SetBool("ai_remember_api_key", checked)
+		if !checked {
+			// Clear saved keys if user unchecks "Remember"
+			a.Preferences().SetString("ai_api_key", "")
+			a.Preferences().SetString("ai_secondary_api_key", "")
+		} else {
+			// Save current keys if user checks "Remember"
+			if apiKeyEntry.Text != "" {
+				a.Preferences().SetString("ai_api_key", apiKeyEntry.Text)
+			}
+			if secondaryKeyEntry.Text != "" {
+				a.Preferences().SetString("ai_secondary_api_key", secondaryKeyEntry.Text)
+			}
+		}
+	}
 
 	// Model selection (dynamic based on provider)
 	modelSelect := widget.NewSelect([]string{
@@ -351,6 +385,14 @@ func createAITranslationTab(w fyne.Window) *fyne.Container {
 			return
 		}
 
+		// Save API keys if "Remember" is enabled
+		if rememberAPIKeyCheck.Checked {
+			a.Preferences().SetString("ai_api_key", apiKeyEntry.Text)
+			if secondaryKeyEntry.Text != "" {
+				a.Preferences().SetString("ai_secondary_api_key", secondaryKeyEntry.Text)
+			}
+		}
+
 		// Create translation config
 		config := AITranslationConfig{
 			Provider:        strings.ToLower(strings.Split(providerSelect.Selected, " ")[0]),
@@ -398,6 +440,7 @@ func createAITranslationTab(w fyne.Window) *fyne.Container {
 			widget.NewLabel("Provider:"), providerSelect,
 			widget.NewLabel("API Key:"), apiKeyEntry,
 			widget.NewLabel("Secondary Key:"), secondaryKeyEntry,
+			widget.NewLabel(""), rememberAPIKeyCheck,
 			widget.NewLabel("Model:"), modelSelect,
 		),
 		widget.NewSeparator(),

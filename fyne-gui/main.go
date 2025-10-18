@@ -7015,7 +7015,7 @@ func main() {
 	settingsScroll := container.NewScroll(settingsTabContent)
 
 	// Create AI Translation tab
-	aiTranslationTab := createAITranslationTab(w)
+	aiTranslationTab := createAITranslationTab(w, a)
 	
 	// Create tabs with scrollable content
 	tabs := container.NewAppTabs(
