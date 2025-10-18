@@ -7015,14 +7015,15 @@ func main() {
 	settingsScroll := container.NewScroll(settingsTabContent)
 
 	// Create AI Translation tab
-	aiTranslationTab := createAITranslationTab(w, a)
+	aiTranslationTabContent := createAITranslationTab(w, a)
+	aiTranslationScroll := container.NewScroll(aiTranslationTabContent)
 	
 	// Create tabs with scrollable content
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Extract Subtitles", extractScroll),
 		container.NewTabItem("Insert Subtitles", insertScroll),
 		container.NewTabItem("Convert Subtitles", convertScroll),
-		container.NewTabItem("🤖 AI Translate", aiTranslationTab),
+		container.NewTabItem("🤖 AI Translate", aiTranslationScroll),
 		container.NewTabItem("Settings", settingsScroll),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
