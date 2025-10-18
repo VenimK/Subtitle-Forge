@@ -90,6 +90,7 @@ type GeminiResponse struct {
 // Global variables for AI translation
 var activeTranslationJobs = make(map[string]*TranslationJob)
 var aiTranslationAddFile func(string) // Function to add files from drag & drop
+var cancelTranslation bool            // Flag to cancel ongoing translation
 
 // createAITranslationTab creates the AI translation interface
 func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
@@ -101,11 +102,20 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	// Provider selection
 	providerSelect := widget.NewSelect([]string{
 		"Google Gemini AI",
-		"OpenAI GPT",
-		"DeepL API",
-		"Azure Translator",
+		"OpenAI GPT (Coming Soon)",
+		"DeepL API (Coming Soon)",
+		"Azure Translator (Coming Soon)",
 	}, nil)
 	providerSelect.SetSelected("Google Gemini AI")
+
+	// Show info message when non-Gemini provider is selected
+	providerSelect.OnChanged = func(selected string) {
+		if selected != "Google Gemini AI" {
+			dialog.ShowInformation("Provider Not Available",
+				"Only Google Gemini AI is currently supported.\nOther providers are planned for future releases.", w)
+			providerSelect.SetSelected("Google Gemini AI")
+		}
+	}
 
 	// API Key configuration
 	apiKeyEntry := widget.NewPasswordEntry()
@@ -373,17 +383,34 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	resultScroll := container.NewScroll(resultArea)
 	resultScroll.SetMinSize(fyne.NewSize(600, 200))
 
-	// Action buttons
-	translateBtn := widget.NewButton("Start Translation", func() {
+	// Action buttons - declare first to avoid forward reference issues
+	var translateBtn, stopBtn *widget.Button
+	
+	translateBtn = widget.NewButton("Start Translation", nil)
+	stopBtn = widget.NewButton("Stop Translation", nil)
+	
+	// Set button callbacks after declaration
+	translateBtn.OnTapped = func() {
 		if len(inputFiles) == 0 {
 			dialog.ShowError(fmt.Errorf("please select subtitle files to translate"), w)
 			return
 		}
 
 		if apiKeyEntry.Text == "" {
-			dialog.ShowError(fmt.Errorf("please enter your API key"), w)
+			dialog.ShowError(fmt.Errorf("Please enter your Google Gemini API key.\n\nGet your free API key at:\nhttps://aistudio.google.com/app/apikey"), w)
 			return
 		}
+
+		// Validate API key format (basic check)
+		if len(apiKeyEntry.Text) < 20 || !strings.HasPrefix(apiKeyEntry.Text, "AI") {
+			dialog.ShowError(fmt.Errorf("Invalid API key format.\n\nGemini API keys should start with 'AI' and be at least 20 characters long."), w)
+			return
+		}
+
+		// Reset cancellation flag and enable stop button
+		cancelTranslation = false
+		stopBtn.Enable()
+		translateBtn.Disable()
 
 		// Save API keys if "Remember" is enabled
 		if rememberAPIKeyCheck.Checked {
@@ -412,14 +439,17 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 		// Start translation
 		startAITranslation(inputFiles, sourceLanguageSelect.Selected, targetLanguageSelect.Selected,
-			outputDir, config, progressBar, progressLabel, resultArea, w)
-	})
+			outputDir, config, progressBar, progressLabel, resultArea, translateBtn, stopBtn, w)
+	}
 	translateBtn.Importance = widget.HighImportance
 
-	stopBtn := widget.NewButton("Stop Translation", func() {
-		// TODO: Implement translation stopping
-		progressLabel.SetText("Translation stopped by user")
-	})
+	stopBtn.OnTapped = func() {
+		// Set cancellation flag
+		cancelTranslation = true
+		progressLabel.SetText("⛔ Stopping translation...")
+		stopBtn.Disable()
+	}
+	stopBtn.Disable() // Disabled until translation starts
 	stopBtn.Importance = widget.MediumImportance
 
 	clearBtn := widget.NewButton("Clear All", func() {
@@ -494,7 +524,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 // startAITranslation begins the translation process
 func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir string,
 	config AITranslationConfig, progressBar *widget.ProgressBar, progressLabel *widget.Label,
-	resultArea *widget.Entry, w fyne.Window) {
+	resultArea *widget.Entry, translateBtn, stopBtn *widget.Button, w fyne.Window) {
 
 	progressLabel.SetText("Starting AI translation...")
 	resultArea.SetText("🤖 Initializing AI translation...\n")
@@ -505,6 +535,17 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 		successCount := 0
 
 		for i, inputFile := range inputFiles {
+			// Check for cancellation
+			if cancelTranslation {
+				fyne.Do(func() {
+					progressLabel.SetText(fmt.Sprintf("⛔ Translation cancelled by user (%d/%d files completed)", successCount, totalFiles))
+					resultArea.SetText(resultArea.Text + fmt.Sprintf("\n\n⛔ Translation cancelled by user\n✅ Completed: %d files\n⏭️ Skipped: %d files", successCount, totalFiles-i))
+					translateBtn.Enable()
+					stopBtn.Disable()
+				})
+				return
+			}
+
 			fileName := filepath.Base(inputFile)
 
 			// Update progress
@@ -555,6 +596,8 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 			progressBar.SetValue(1.0)
 			progressLabel.SetText(fmt.Sprintf("Translation completed: %d/%d files successful", successCount, totalFiles))
 			resultArea.SetText(resultArea.Text + fmt.Sprintf("\n\n🎉 Batch translation completed!\n✅ Success: %d files\n❌ Failed: %d files", successCount, totalFiles-successCount))
+			translateBtn.Enable()
+			stopBtn.Disable()
 		})
 	}()
 }
@@ -596,14 +639,6 @@ func translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang
 	contentStr := string(content)
 	if len(contentStr) >= 3 && contentStr[0] == '\xef' && contentStr[1] == '\xbb' && contentStr[2] == '\xbf' {
 		contentStr = contentStr[3:]
-		fmt.Printf("DEBUG: Removed UTF-8 BOM from file\n")
-	}
-
-	// Debug: Show first 200 characters of file
-	if len(contentStr) > 200 {
-		fmt.Printf("DEBUG: First 200 chars of file: %q\n", contentStr[:200])
-	} else {
-		fmt.Printf("DEBUG: File content (first 200): %q\n", contentStr[:min(200, len(contentStr))])
 	}
 
 	// Parse SRT content
@@ -618,28 +653,6 @@ func translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang
 
 	if progressCallback != nil {
 		progressCallback(fmt.Sprintf("📊 Found %d subtitle entries", len(entries)))
-	}
-
-	// Debug: Print first few entries to check parsing
-	fmt.Printf("DEBUG: First 5 parsed entries:\n")
-	for i, entry := range entries {
-		if i >= 5 {
-			break
-		}
-		fmt.Printf("Entry %d: Index=%d, StartTime=%v, EndTime=%v, Text=%q\n",
-			i+1, entry.Index, entry.StartTime, entry.EndTime, entry.Text)
-	}
-
-	// Debug: Print last few entries to see if we're processing the right range
-	fmt.Printf("DEBUG: Last 3 parsed entries:\n")
-	start := len(entries) - 3
-	if start < 0 {
-		start = 0
-	}
-	for i := start; i < len(entries); i++ {
-		entry := entries[i]
-		fmt.Printf("Entry %d: Index=%d, StartTime=%v, EndTime=%v, Text=%q\n",
-			i+1, entry.Index, entry.StartTime, entry.EndTime, entry.Text)
 	}
 
 	// Translate in batches
@@ -664,22 +677,48 @@ func translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang
 			progressCallback(fmt.Sprintf("🔧 Processing batch %d: %d texts", batchNum, len(batch)))
 		}
 
+		// Check for cancellation
+		if cancelTranslation {
+			return false, fmt.Errorf("translation cancelled by user")
+		}
+
 		translatedBatch, err := translateBatch(batch, sourceLang, targetLang, config)
 		if err != nil {
 			fmt.Printf("Error translating batch %d: %v\n", batchNum, err)
 			if progressCallback != nil {
-				progressCallback(fmt.Sprintf("❌ Batch %d/%d failed: %s", batchNum, totalBatches, err.Error()))
+				// Provide more helpful error messages
+				errorMsg := err.Error()
+				if strings.Contains(errorMsg, "API error") {
+					if strings.Contains(errorMsg, "429") {
+						progressCallback(fmt.Sprintf("❌ Rate limit exceeded. Please wait a moment and try again."))
+					} else if strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "403") {
+						progressCallback(fmt.Sprintf("❌ Invalid API key. Please check your key at https://aistudio.google.com/app/apikey"))
+					} else if strings.Contains(errorMsg, "quota") {
+						progressCallback(fmt.Sprintf("❌ API quota exceeded. Check your usage at https://aistudio.google.com/"))
+					} else {
+						progressCallback(fmt.Sprintf("❌ Batch %d/%d failed: %s", batchNum, totalBatches, errorMsg))
+					}
+				} else {
+					progressCallback(fmt.Sprintf("❌ Batch %d/%d failed: %s", batchNum, totalBatches, errorMsg))
+				}
 			}
 			return false, fmt.Errorf("batch %d failed: %v", batchNum, err)
 		}
 
 		// Validate translated batch has correct number of entries
 		if len(translatedBatch) != len(batch) {
-			errMsg := fmt.Sprintf("batch %d returned %d entries, expected %d", batchNum, len(translatedBatch), len(batch))
 			if progressCallback != nil {
-				progressCallback(fmt.Sprintf("⚠️ %s", errMsg))
+				progressCallback(fmt.Sprintf("⚠️ Translation count mismatch - attempting to recover"))
 			}
-			return false, fmt.Errorf(errMsg)
+			// Attempt to recover by padding with original text
+			if len(translatedBatch) < len(batch) {
+				for i := len(translatedBatch); i < len(batch); i++ {
+					translatedBatch = append(translatedBatch, batch[i])
+				}
+			} else {
+				// Truncate excess
+				translatedBatch = translatedBatch[:len(batch)]
+			}
 		}
 
 		if progressCallback != nil {
@@ -712,7 +751,6 @@ func translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang
 func cleanAIResponse(response string) string {
 	// If response starts with "THOUGHT:" or similar, remove it
 	if strings.Contains(response, "THOUGHT:") {
-		fmt.Printf("⚠️ AI included thinking process - cleaning response\n")
 
 		// Try to extract just the translations by looking for patterns like "*Translation:*"
 		lines := strings.Split(response, "\n")
@@ -762,9 +800,7 @@ func cleanAIResponse(response string) string {
 		}
 
 		if len(cleanedParts) > 0 {
-			result := strings.Join(cleanedParts, "\n---SUBTITLE_SEPARATOR---\n")
-			fmt.Printf("✅ Cleaned response: extracted %d translations\n", len(cleanedParts))
-			return result
+			return strings.Join(cleanedParts, "\n---SUBTITLE_SEPARATOR---\n")
 		}
 	}
 
@@ -772,9 +808,8 @@ func cleanAIResponse(response string) string {
 	return response
 }
 
-// translateBatch translates subtitle entries using REAL batch processing (like your working translator)
+// translateBatch translates subtitle entries using REAL batch processing
 func translateBatch(entries []SubtitleEntry, sourceLang, targetLang string, config AITranslationConfig) ([]SubtitleEntry, error) {
-	fmt.Printf("🔧 Processing batch: %d texts\n", len(entries))
 
 	// Create batch text exactly like your working translator
 	var textParts []string
@@ -822,14 +857,10 @@ Text to translate:
 	}
 
 	// Make API call
-	fmt.Printf("🧠 AI analyzing subtitle structure...\n")
 	translatedText, err := callGeminiAPI(request, config)
 	if err != nil {
-		fmt.Printf("❌ Batch translation failed: %v\n", err)
 		return nil, err
 	}
-
-	fmt.Printf("📊 Parsing translation results...\n")
 
 	// Clean up AI thinking/reasoning if present
 	translatedText = cleanAIResponse(translatedText)
@@ -839,7 +870,6 @@ Text to translate:
 
 	// Validate count matches
 	if len(translatedParts) != len(entries) {
-		fmt.Printf("⚠️ Translation count mismatch: got %d, expected %d\n", len(translatedParts), len(entries))
 		// Try to handle gracefully
 		if len(translatedParts) < len(entries) {
 			// Pad with original text
@@ -865,7 +895,6 @@ Text to translate:
 		})
 	}
 
-	fmt.Printf("✅ Batch completed: %d translations\n", len(translatedEntries))
 	return translatedEntries, nil
 }
 
@@ -908,7 +937,17 @@ func callGeminiAPI(request GeminiRequest, config AITranslationConfig) (string, e
 	}
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("API error: %s", string(body))
+		// Provide user-friendly error messages
+		if resp.StatusCode == 429 {
+			return "", fmt.Errorf("rate limit exceeded - please wait and try again")
+		} else if resp.StatusCode == 401 || resp.StatusCode == 403 {
+			return "", fmt.Errorf("invalid API key - check your key at https://aistudio.google.com/app/apikey")
+		} else if resp.StatusCode == 400 {
+			return "", fmt.Errorf("bad request - check your input format")
+		} else if resp.StatusCode >= 500 {
+			return "", fmt.Errorf("Google API server error (%d) - please try again later", resp.StatusCode)
+		}
+		return "", fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
@@ -939,11 +978,6 @@ func callGeminiAPI(request GeminiRequest, config AITranslationConfig) (string, e
 			translatedText = strings.Join(lines[1:len(lines)-1], "\n")
 			translatedText = strings.TrimSpace(translatedText)
 		}
-	}
-
-	// Basic validation for single entry translation
-	if len(translatedText) == 0 {
-		return "", fmt.Errorf("API returned empty translation")
 	}
 
 	return translatedText, nil
