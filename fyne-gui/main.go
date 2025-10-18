@@ -7077,14 +7077,21 @@ func main() {
 				}
 			})
 		} else if tab.Text == "🤖 AI Translate" {
-			// Set up drag and drop for AI Translation tab
+			// Set up drag and drop for AI Translation tab (supports multiple files)
 			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
-				if len(uris) > 0 {
-					filePath := uris[0].Path()
+				if len(uris) == 0 {
+					return
+				}
+				
+				// Accept subtitle files for AI translation
+				subtitleExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub"}
+				var subtitleFiles []string
+				
+				// Process all dropped files
+				for _, uri := range uris {
+					filePath := uri.Path()
 					fileExt := strings.ToLower(filepath.Ext(filePath))
 					
-					// Accept subtitle files for AI translation
-					subtitleExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub"}
 					isSubtitleFile := false
 					for _, ext := range subtitleExts {
 						if fileExt == ext {
@@ -7092,22 +7099,36 @@ func main() {
 							break
 						}
 					}
-
+					
 					if isSubtitleFile {
-						// Handle subtitle file drop for AI translation
-						if aiTranslationAddFile != nil {
+						subtitleFiles = append(subtitleFiles, filePath)
+					}
+				}
+				
+				// Add all valid subtitle files
+				if len(subtitleFiles) > 0 {
+					if aiTranslationAddFile != nil {
+						for _, filePath := range subtitleFiles {
 							aiTranslationAddFile(filePath)
 						}
+					}
+					
+					if len(subtitleFiles) == 1 {
 						a.SendNotification(&fyne.Notification{
 							Title:   "Subtitle File Added",
-							Content: "Added to translation queue: " + filepath.Base(filePath),
+							Content: "Added to translation queue: " + filepath.Base(subtitleFiles[0]),
 						})
 					} else {
 						a.SendNotification(&fyne.Notification{
-							Title:   "Invalid File",
-							Content: "Please drop a subtitle file (.srt, .ass, .ssa, .vtt, .sub) for AI translation.",
+							Title:   "Batch Mode Enabled",
+							Content: fmt.Sprintf("Added %d subtitle files to translation queue", len(subtitleFiles)),
 						})
 					}
+				} else {
+					a.SendNotification(&fyne.Notification{
+						Title:   "Invalid Files",
+						Content: "Please drop subtitle file(s) (.srt, .ass, .ssa, .vtt, .sub) for AI translation.",
+					})
 				}
 			})
 		} else if tab.Text == "Convert Subtitles" {
