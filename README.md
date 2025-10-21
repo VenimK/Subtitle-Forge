@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.1
+# Subtitle Forge v2.0.2
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -74,6 +74,46 @@ This project provides two applications:
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
 
+## What's New in v2.0.2 ✨
+
+### 🚀 Professional-Grade AI Translation Improvements
+
+**v2.0.2** brings enterprise-level translation quality matching the best Python translators:
+
+- **🔓 Safety Filters Disabled**: All content categories set to `BLOCK_NONE` - no more translation refusals on mature content
+- **📋 Structured JSON Schema**: Enforced request/response schema ensures consistent, reliable output
+- **📝 Detailed Instruction Prompts**: Comprehensive prompts with field definitions, formatting rules, and context awareness
+- **🎯 Temperature Control Enhanced**: New text entry field alongside slider for precise control (e.g., 0.2, 0.15)
+- **⚡ Optimized Batch Size**: Default changed to 100 entries for better speed/quality balance
+- **🎨 Better Defaults**: Temperature set to 0.3 for consistent, high-quality translations
+- **📚 Gender-Aware Translation Ready**: Prompt templates prepared for future audio context support
+
+### 🎯 Translation Quality Improvements
+- **More Consistent Output**: Structured JSON prevents AI rambling and ensures exact format
+- **Better Context Understanding**: Detailed instructions guide AI for subtitle-specific translations
+- **No Content Blocking**: Translates movies/shows with any content rating
+- **Easier Configuration**: Type exact temperature values instead of struggling with slider
+
+**Perfect for professional translators who demand the highest quality! Matches or exceeds Python-based translators.**
+
+---
+
+## What's New in v2.0.1 ✨
+
+### 🔥 Production Enhancements for AI Translation
+
+**v2.0.1** brings essential UX improvements and production-ready refinements:
+
+- **✨ Multiple File Drag-and-Drop**: Drag multiple subtitle files at once into AI Translate tab
+- **💾 Persistent API Key Storage**: "Remember API Keys" checkbox saves keys securely
+- **🪟 Fixed Window Resizing**: Window resizes freely in both width and height
+- **⛔ Working Stop Button**: Functional translation cancellation with graceful shutdown
+- **🧹 Production-Ready Code**: Removed debug statements for professional output
+- **🔌 Provider Clarity**: Clear labeling of supported vs coming soon providers
+- **💬 Improved Error Messages**: User-friendly validation with helpful links
+
+---
+
 ## What's New in v2.0.0 🎉
 
 ### 🤖 AI Translation - Revolutionary New Feature!
@@ -105,6 +145,8 @@ This project provides two applications:
 6. Click **Start Translation** and watch the AI work its magic!
 
 **Perfect for content creators, translators, and subtitle enthusiasts who need professional-quality translations at scale!**
+
+---
 
 ## What's New in v1.9.2
 

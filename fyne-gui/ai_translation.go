@@ -30,6 +30,7 @@ type AITranslationConfig struct {
 	UseThinking     bool
 	ThinkingBudget  int
 	UseAudioContext bool
+	VideoFile       string // Path to video file for audio context
 	Description     string
 	ResumeMode      bool
 	ProgressLog     bool
@@ -59,6 +60,7 @@ type GeminiRequest struct {
 	Contents          []GeminiContent        `json:"contents"`
 	GenerationConfig  GeminiGenerationConfig `json:"generationConfig,omitempty"`
 	SystemInstruction *GeminiContent         `json:"systemInstruction,omitempty"`
+	SafetySettings    []GeminiSafetySetting  `json:"safetySettings,omitempty"`
 }
 
 type GeminiContent struct {
@@ -71,10 +73,24 @@ type GeminiPart struct {
 }
 
 type GeminiGenerationConfig struct {
-	Temperature     float64 `json:"temperature,omitempty"`
-	TopP            float64 `json:"topP,omitempty"`
-	TopK            int     `json:"topK,omitempty"`
-	MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
+	Temperature      float64              `json:"temperature,omitempty"`
+	TopP             float64              `json:"topP,omitempty"`
+	TopK             int                  `json:"topK,omitempty"`
+	MaxOutputTokens  int                  `json:"maxOutputTokens,omitempty"`
+	ResponseMimeType string               `json:"responseMimeType,omitempty"`
+	ResponseSchema   *GeminiResponseSchema `json:"responseSchema,omitempty"`
+}
+
+type GeminiSafetySetting struct {
+	Category  string `json:"category"`
+	Threshold string `json:"threshold"`
+}
+
+type GeminiResponseSchema struct {
+	Type     string                          `json:"type"`
+	Items    *GeminiResponseSchema           `json:"items,omitempty"`
+	Properties map[string]*GeminiResponseSchema `json:"properties,omitempty"`
+	Required []string                         `json:"required,omitempty"`
 }
 
 type GeminiResponse struct {
@@ -292,14 +308,29 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	// Translation settings
 	temperatureSlider := widget.NewSlider(0.0, 2.0)
-	temperatureSlider.SetValue(0.7)
-	temperatureLabel := widget.NewLabel("Temperature: 0.7")
+	temperatureSlider.SetValue(0.3)
+	temperatureEntry := widget.NewEntry()
+	temperatureEntry.SetText("0.3")
+	temperatureEntry.SetPlaceHolder("0.0-2.0")
+	temperatureLabel := widget.NewLabel("Temperature:")
+	
+	// Sync slider -> entry
 	temperatureSlider.OnChanged = func(value float64) {
-		temperatureLabel.SetText(fmt.Sprintf("Temperature: %.1f", value))
+		temperatureEntry.SetText(fmt.Sprintf("%.2f", value))
+	}
+	
+	// Sync entry -> slider
+	temperatureEntry.OnChanged = func(text string) {
+		var value float64
+		if _, err := fmt.Sscanf(text, "%f", &value); err == nil {
+			if value >= 0.0 && value <= 2.0 {
+				temperatureSlider.SetValue(value)
+			}
+		}
 	}
 
 	batchSizeEntry := widget.NewEntry()
-	batchSizeEntry.SetText("300")
+	batchSizeEntry.SetText("100")
 	batchSizeEntry.SetPlaceHolder("Batch size (lines per request)")
 
 	descriptionEntry := widget.NewMultiLineEntry()
@@ -334,7 +365,8 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	advancedSettings := container.NewVBox(
 		widget.NewLabel("Translation Quality"),
-		container.NewHBox(temperatureLabel, temperatureSlider),
+		container.NewHBox(temperatureLabel, temperatureEntry, temperatureSlider),
+		widget.NewLabel("💡 Tip: Lower values (0.1-0.3) = more consistent, Higher (0.6-1.0) = more creative"),
 		container.NewHBox(widget.NewLabel("Batch Size:"), batchSizeEntry),
 		widget.NewSeparator(),
 
@@ -426,8 +458,8 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 			APIKey:          apiKeyEntry.Text,
 			SecondaryAPIKey: secondaryKeyEntry.Text,
 			Model:           strings.Split(modelSelect.Selected, " ")[0],
-			Temperature:     temperatureSlider.Value,
-			BatchSize:       parseInt(batchSizeEntry.Text, 300),
+			Temperature:     parseFloat(temperatureEntry.Text, 0.3),
+			BatchSize:       parseInt(batchSizeEntry.Text, 100),
 			UseThinking:     useThinkingCheck.Checked,
 			ThinkingBudget:  int(thinkingBudgetSlider.Value),
 			UseAudioContext: useAudioContextCheck.Checked,
@@ -747,6 +779,77 @@ func translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang
 	return true, nil
 }
 
+// getSafetySettings returns safety settings to disable all content filtering
+func getSafetySettings() []GeminiSafetySetting {
+	return []GeminiSafetySetting{
+		{Category: "HARM_CATEGORY_HATE_SPEECH", Threshold: "BLOCK_NONE"},
+		{Category: "HARM_CATEGORY_DANGEROUS_CONTENT", Threshold: "BLOCK_NONE"},
+		{Category: "HARM_CATEGORY_CIVIC_INTEGRITY", Threshold: "BLOCK_NONE"},
+		{Category: "HARM_CATEGORY_HARASSMENT", Threshold: "BLOCK_NONE"},
+		{Category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", Threshold: "BLOCK_NONE"},
+	}
+}
+
+// getResponseSchema returns the structured JSON schema for translation response
+func getResponseSchema() *GeminiResponseSchema {
+	return &GeminiResponseSchema{
+		Type: "array",
+		Items: &GeminiResponseSchema{
+			Type: "object",
+			Properties: map[string]*GeminiResponseSchema{
+				"index": {Type: "string"},
+				"content": {Type: "string"},
+			},
+			Required: []string{"index", "content"},
+		},
+	}
+}
+
+// getInstruction generates detailed translation instruction based on target language
+func getInstruction(targetLang string, useAudioContext bool, audioFile string, description string) string {
+	fields := "- index: a string identifier\n- content: the text to translate\n"
+	
+	if useAudioContext && audioFile != "" {
+		fields += "- time_start: the start time of the segment\n- time_end: the end time of the segment\n"
+	}
+
+	instruction := fmt.Sprintf(`You are an assistant that translates subtitles from any language to %s.
+You will receive a list of objects, each with these fields:
+
+%s
+Translate the 'content' field of each object.
+If the 'content' field is empty, leave it as is.
+Preserve line breaks, formatting, and special characters.
+Do NOT move or merge 'content' between objects.
+Do NOT add or remove any objects.
+Do NOT alter the 'index' field.`, targetLang, fields)
+
+	if useAudioContext && audioFile != "" {
+		instruction += fmt.Sprintf(`
+
+You will also receive an audio file.
+Use the time_start and time_end of each object to analyze the audio.
+Analyze the speaker's voice in the audio to determine gender, then apply grammatical gender rules for %s:
+1. Listen for voice characteristics to identify if speaker is male/female:
+   - Use masculine verb forms/adjectives if speaker sounds male
+   - Use feminine verb forms/adjectives if speaker sounds female
+   - Apply gender agreement to: verbs, adjectives, past participles, pronouns
+   - Example: French 'I am tired' -> 'Je suis fatigué' (male) vs 'Je suis fatiguée' (female)
+2. In some cases you also need to identify who the current speaker is talking to:
+   - If the speaker is talking to a male, use masculine forms.
+   - If the speaker is talking to a female, use feminine forms.
+   - If the speaker is talking to a group, use plural forms.
+   - Example: Portuguese 'You are tired' -> 'Você está cansado' (male) vs 'Você está cansada' (female)
+   - Example: Spanish 'You are tired' (group) -> 'Ustedes están cansados' (male/general group) vs 'Ustedes están cansadas' (female group)`, targetLang)
+	}
+
+	if description != "" {
+		instruction += fmt.Sprintf("\n\nAdditional user instruction:\n\n%s", description)
+	}
+
+	return instruction
+}
+
 // cleanAIResponse removes AI thinking/reasoning from response
 func cleanAIResponse(response string) string {
 	// If response starts with "THOUGHT:" or similar, remove it
@@ -808,84 +911,89 @@ func cleanAIResponse(response string) string {
 	return response
 }
 
-// translateBatch translates subtitle entries using REAL batch processing
+// translateBatch translates subtitle entries using structured JSON with schema
 func translateBatch(entries []SubtitleEntry, sourceLang, targetLang string, config AITranslationConfig) ([]SubtitleEntry, error) {
 
-	// Create batch text exactly like your working translator
-	var textParts []string
-	for _, entry := range entries {
-		textParts = append(textParts, entry.Text)
+	// Build input JSON with index and content fields
+	type InputEntry struct {
+		Index   string `json:"index"`
+		Content string `json:"content"`
+	}
+	
+	var inputEntries []InputEntry
+	for i, entry := range entries {
+		inputEntries = append(inputEntries, InputEntry{
+			Index:   fmt.Sprintf("%d", i),
+			Content: entry.Text,
+		})
+	}
+	
+	inputJSON, err := json.MarshalIndent(inputEntries, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create input JSON: %v", err)
 	}
 
-	// Join with clear separators (like your working translator)
-	batchText := strings.Join(textParts, "\n---SUBTITLE_SEPARATOR---\n")
+	// Get detailed instruction using the helper function
+	instruction := getInstruction(targetLang, config.UseAudioContext, config.VideoFile, config.Description)
+	
+	// Create user prompt with input data
+	userPrompt := fmt.Sprintf("%s\n\nInput data:\n%s", instruction, string(inputJSON))
 
-	// Use strict prompt to prevent AI thinking/reasoning in output
-	prompt := fmt.Sprintf(`Translate the following subtitle entries from %s to %s.
-
-CRITICAL RULES:
-1. Output ONLY the translated text
-2. NO explanations, NO thinking process, NO commentary
-3. Keep the ---SUBTITLE_SEPARATOR--- markers EXACTLY as they are
-4. Preserve line breaks exactly (same number of lines in translation)
-5. Natural conversational translation
-
-DO NOT include phrases like "Translation:", "THOUGHT:", "Entry X:", etc.
-Output ONLY the pure translated text with separators.
-
-Text to translate:
-%s`, sourceLang, targetLang, batchText)
-
-	// Create API request with system instruction to prevent thinking
+	// Create API request with structured JSON response
 	request := GeminiRequest{
 		SystemInstruction: &GeminiContent{
-			Parts: []GeminiPart{{Text: "You are a translation tool. Output ONLY translated text, never include reasoning, thinking, or explanations."}},
+			Parts: []GeminiPart{{Text: "You are a professional subtitle translator. Always follow the instructions precisely and return valid JSON."}},
 			Role:  "system",
 		},
 		Contents: []GeminiContent{
 			{
-				Parts: []GeminiPart{{Text: prompt}},
+				Parts: []GeminiPart{{Text: userPrompt}},
 				Role:  "user",
 			},
 		},
 		GenerationConfig: GeminiGenerationConfig{
-			Temperature:     config.Temperature,
-			TopP:            0.95,
-			TopK:            20,
-			MaxOutputTokens: 8192,
+			Temperature:      config.Temperature,
+			TopP:             0.95,
+			TopK:             40,
+			MaxOutputTokens:  8192,
+			ResponseMimeType: "application/json",
+			ResponseSchema:   getResponseSchema(),
 		},
+		SafetySettings: getSafetySettings(),
 	}
 
 	// Make API call
-	translatedText, err := callGeminiAPI(request, config)
+	translatedJSON, err := callGeminiAPI(request, config)
 	if err != nil {
 		return nil, err
 	}
 
-	// Clean up AI thinking/reasoning if present
-	translatedText = cleanAIResponse(translatedText)
-
-	// Split response by separators (like your working translator)
-	translatedParts := strings.Split(translatedText, "---SUBTITLE_SEPARATOR---")
+	// Parse JSON response
+	type OutputEntry struct {
+		Index   string `json:"index"`
+		Content string `json:"content"`
+	}
+	
+	var outputEntries []OutputEntry
+	err = json.Unmarshal([]byte(translatedJSON), &outputEntries)
+	if err != nil {
+		// Try to fix common JSON issues
+		fixedJSON := fixCommonJSONIssues(translatedJSON)
+		err = json.Unmarshal([]byte(fixedJSON), &outputEntries)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse translation response: %v\nResponse: %s", err, translatedJSON)
+		}
+	}
 
 	// Validate count matches
-	if len(translatedParts) != len(entries) {
-		// Try to handle gracefully
-		if len(translatedParts) < len(entries) {
-			// Pad with original text
-			for i := len(translatedParts); i < len(entries); i++ {
-				translatedParts = append(translatedParts, entries[i].Text)
-			}
-		} else {
-			// Truncate excess
-			translatedParts = translatedParts[:len(entries)]
-		}
+	if len(outputEntries) != len(entries) {
+		return nil, fmt.Errorf("translation count mismatch: expected %d, got %d", len(entries), len(outputEntries))
 	}
 
 	// Build result entries (preserve original timing and indexes)
 	var translatedEntries []SubtitleEntry
 	for i, entry := range entries {
-		translatedText := strings.TrimSpace(translatedParts[i])
+		translatedText := strings.TrimSpace(outputEntries[i].Content)
 
 		translatedEntries = append(translatedEntries, SubtitleEntry{
 			Index:     entry.Index,     // Preserve original index

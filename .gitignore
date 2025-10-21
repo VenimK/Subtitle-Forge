@@ -53,3 +53,10 @@ fyne-gui/main.go.backup
 fyne-gui/test-build
 fyne-gui/demo_subtitle.srt
 fyne-gui/demo_subtitle.vtt
+
+# Binary executables in fyne-gui
+fyne-gui/subtitle-forge
+fyne-gui/subtitleforge
+
+# Test files
+fyne-gui/test_color.srt
