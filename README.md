@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.2
+# Subtitle Forge v2.0.3
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -48,22 +48,6 @@ This project provides two applications:
    **For Self-Contained Bundle**: Use the launcher script:
    ```bash
    ./subtitle-forge.sh
-
-## What's New in v2.0.1 ✨
-
-### 🔥 Production Enhancements for AI Translation
-
-**v2.0.1** brings essential UX improvements and production-ready refinements:
-
-- **✨ Multiple File Drag-and-Drop**: Drag multiple subtitle files at once into AI Translate tab
-- **💾 Persistent API Key Storage**: "Remember API Keys" checkbox saves keys securely
-- **🪟 Fixed Window Resizing**: Window resizes freely in both width and height
-- **⛔ Working Stop Button**: Functional translation cancellation with graceful shutdown
-- **🧹 Production-Ready Code**: Removed debug statements for professional output
-- **🔌 Provider Clarity**: Clear labeling of supported vs coming soon providers
-- **💬 Improved Error Messages**: User-friendly validation with helpful links
-
----
    ```
 4. Make the binary executable: `chmod +x subtitle-forge-linux` (if needed)
 5. Launch the application: `./subtitle-forge-linux`
@@ -73,6 +57,53 @@ This project provides two applications:
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v2.0.3 ✨
+
+### 🐍 GST Integration - Professional Terminal-Based Translation!
+
+**v2.0.3** introduces full integration with `gst` (gemini-srt-translator), the powerful Python-based translation tool:
+
+- **🖥️ Native Terminal Integration**: Opens macOS Terminal.app with beautiful, ANSI-colored interface
+- **✨ Live Progress Display**: Watch real-time translation progress with animated spinners and progress bars
+- **📊 Rich Status Information**: Displays subtitle count, duration timer, and completion statistics
+- **🎯 Complete gst Support**: Full access to all gst features:
+  - **Thinking Models**: Enable/disable AI thinking with configurable token budgets (0-24576)
+  - **Resume Mode**: Auto-resume interrupted translations from where they left off
+  - **Progress Logging**: Save detailed progress logs for debugging and monitoring
+  - **Thoughts Logging**: Capture AI reasoning process for quality analysis
+  - **Secondary API Keys**: Quota management with dual API key support
+- **🎨 Beautiful Terminal UI**: Professional formatting with:
+  - Box-drawing characters for structured display
+  - File information header with input/output details
+  - Real-time timer showing elapsed time
+  - Interactive post-completion menu (open file, view logs)
+- **🔒 Self-Cleaning Scripts**: Temporary files automatically cleaned up after execution
+
+### 🎛️ Dual Translation Providers
+
+Now with **two fully-functional AI translation providers**:
+
+1. **Google Gemini AI** (Native Go Implementation)
+   - Integrated batch translation in GUI
+   - Smart auto-scroll results window
+   - Temperature control and model selection
+   
+2. **gst (Python)** (Terminal-Based)
+   - Professional terminal interface with ANSI colors
+   - All advanced gst features available
+   - Perfect for users who prefer command-line experience
+
+### 🔧 Code Quality Improvements
+
+- **Cleaned Provider References**: Removed placeholders for unimplemented providers (OpenAI, DeepL, Azure)
+- **Fixed Terminal Script Race Condition**: Temp scripts now self-delete after execution
+- **Improved Error Handling**: Better error messages with detailed diagnostics
+- **Accurate Documentation**: Comments and UI reflect actual implementation
+
+**Perfect for professionals who demand both GUI convenience and terminal power!**
+
+---
 
 ## What's New in v2.0.2 ✨
 
