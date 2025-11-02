@@ -57,6 +57,8 @@ fyne-gui/demo_subtitle.vtt
 # Binary executables in fyne-gui
 fyne-gui/subtitle-forge
 fyne-gui/subtitleforge
+SubtitleForge
+fyne-gui/SubtitleForge
 
 # Test files
 fyne-gui/test_color.srt

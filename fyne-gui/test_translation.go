@@ -49,18 +49,16 @@ Would you like to grab coffee?`
 		return
 	}
 	
-	// Test with NEW improved settings
-	fmt.Println("🚀 Testing with IMPROVED settings (JSON + Safety + Detailed Instructions)...")
+	// Test with GST
+	fmt.Println("🚀 Testing with GST...")
 	fmt.Println()
 	
 	config := AITranslationConfig{
-		Provider:        "gemini",
+		GSTPath:         findGSTPath(),
 		APIKey:          apiKey,
-		Model:           "gemini-2.5-flash",
+		Model:           "gemini-2.0-flash-exp",
 		Temperature:     0.3, // Lower for more consistent translations
 		BatchSize:       100,
-		UseThinking:     false,
-		UseAudioContext: false,
 		Description:     "Casual conversation between friends. Use natural, conversational Portuguese.",
 		ResumeMode:      false,
 		ProgressLog:     false,

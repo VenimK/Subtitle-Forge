@@ -2,11 +2,8 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,32 +18,27 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// AITranslationConfig holds all AI translation settings
+// AITranslationConfig holds all GST translation settings
 type AITranslationConfig struct {
-	Provider        string // "gemini", "gst"
-	APIKey          string
+	GSTPath         string // Path to gst binary
+	APIKey          string // API key for GST
 	SecondaryAPIKey string // For quota management
-	Model           string // "gemini-2.5-flash", etc.
+	Model           string // Model name for GST
 	Temperature     float64
 	BatchSize       int
-	UseThinking     bool
-	ThinkingBudget  int
-	UseAudioContext bool
-	VideoFile       string // Path to video file for audio context
 	Description     string
 	ResumeMode      bool
 	ProgressLog     bool
 	ThoughtsLog     bool
-	GSTPath         string // Path to gst binary when using gst provider
 }
 
 // findGSTPath tries to find the gst executable. Prefers the user's venv path, then PATH.
 func findGSTPath() string {
-    preferred := "/Users/venimk/subsvenv/bin/gst"
-    if _, err := os.Stat(preferred); err == nil {
-        return preferred
-    }
-    return "gst"
+	preferred := "/Users/venimk/subsvenv/bin/gst"
+	if _, err := os.Stat(preferred); err == nil {
+		return preferred
+	}
+	return "gst"
 }
 
 // translateWithGSTInTerminal opens a terminal window and runs gst translate there
@@ -82,11 +74,6 @@ func translateWithGSTInTerminal(inputFile, outputFile, targetLang string, config
 	if config.Temperature >= 0 {
 		args = append(args, "--temperature", fmt.Sprintf("%.2f", config.Temperature))
 	}
-	if config.UseThinking == false {
-		args = append(args, "--no-thinking")
-	} else if config.ThinkingBudget > 0 {
-		args = append(args, "--thinking-budget", fmt.Sprintf("%d", config.ThinkingBudget))
-	}
 	if config.ProgressLog {
 		args = append(args, "--progress-log")
 	}
@@ -116,7 +103,7 @@ func translateWithGSTInTerminal(inputFile, outputFile, targetLang string, config
 	// Build enhanced terminal script with info display and error handling
 	fileName := filepath.Base(inputFile)
 	outputFileName := filepath.Base(outputFile)
-	
+
 	terminalScript := fmt.Sprintf(`
 echo -ne "\\033]0;GST Translation: %s\\007"
 clear
@@ -181,9 +168,9 @@ case "$choice" in
         fi
         ;;
 esac
-`, 
+`,
 		fileName,
-		fileName, 
+		fileName,
 		outputFileName,
 		targetLang,
 		inputFile,
@@ -192,7 +179,7 @@ esac
 		outputFile,
 		outputFile,
 		outputFile,
-		strings.TrimSuffix(inputFile, filepath.Ext(inputFile)) + "_progress.log",
+		strings.TrimSuffix(inputFile, filepath.Ext(inputFile))+"_progress.log",
 	)
 
 	// Use osascript to open Terminal.app with the enhanced script
@@ -202,22 +189,22 @@ esac
 		return fmt.Errorf("failed to create temp script: %v", err)
 	}
 	tmpScriptPath := tmpScript.Name()
-	
+
 	// Add self-deletion at the end of the script
 	terminalScriptWithCleanup := terminalScript + fmt.Sprintf("\nrm -f '%s'", tmpScriptPath)
-	
+
 	if _, err := tmpScript.WriteString(terminalScriptWithCleanup); err != nil {
 		return fmt.Errorf("failed to write temp script: %v", err)
 	}
 	if err := tmpScript.Close(); err != nil {
 		return fmt.Errorf("failed to close temp script: %v", err)
 	}
-	
+
 	// Make script executable
 	if err := os.Chmod(tmpScriptPath, 0755); err != nil {
 		return fmt.Errorf("failed to make script executable: %v", err)
 	}
-	
+
 	// Open Terminal.app and execute the script
 	// Note: Script will delete itself when done
 	script := fmt.Sprintf(`tell application "Terminal"
@@ -234,101 +221,96 @@ end tell`, tmpScriptPath)
 
 // translateWithGST shells out to gst translate and streams output
 func translateWithGST(inputFile, outputFile, targetLang string, config AITranslationConfig, progressCallback func(string)) (bool, error) {
-    gstPath := config.GSTPath
-    if strings.TrimSpace(gstPath) == "" {
-        gstPath = findGSTPath()
-    }
-    args := []string{"translate"}
-    if inputFile != "" {
-        args = append(args, "-i", inputFile)
-    }
-    if targetLang != "" {
-        args = append(args, "-l", targetLang)
-    }
-    if config.APIKey != "" {
-        args = append(args, "-k", config.APIKey)
-    }
-    if config.SecondaryAPIKey != "" {
-        args = append(args, "-k2", config.SecondaryAPIKey)
-    }
-    if outputFile != "" {
-        args = append(args, "-o", outputFile)
-    }
-    if config.Model != "" {
-        args = append(args, "-m", config.Model)
-    }
-    if config.BatchSize > 0 {
-        args = append(args, "-b", fmt.Sprintf("%d", config.BatchSize))
-    }
-    // Temperature is float, pass if set
-    if config.Temperature >= 0 {
-        args = append(args, "--temperature", fmt.Sprintf("%.2f", config.Temperature))
-    }
-    if config.UseThinking == false {
-        args = append(args, "--no-thinking")
-    } else if config.ThinkingBudget > 0 {
-        args = append(args, "--thinking-budget", fmt.Sprintf("%d", config.ThinkingBudget))
-    }
-    if config.ProgressLog {
-        args = append(args, "--progress-log")
-    }
-    if config.ThoughtsLog {
-        args = append(args, "--thoughts-log")
-    }
-    if config.ResumeMode {
-        args = append(args, "--resume")
-    } else {
-        args = append(args, "--no-resume")
-    }
-    if desc := strings.TrimSpace(config.Description); desc != "" {
-        args = append(args, "-d", desc)
-    }
+	gstPath := config.GSTPath
+	if strings.TrimSpace(gstPath) == "" {
+		gstPath = findGSTPath()
+	}
+	args := []string{"translate"}
+	if inputFile != "" {
+		args = append(args, "-i", inputFile)
+	}
+	if targetLang != "" {
+		args = append(args, "-l", targetLang)
+	}
+	if config.APIKey != "" {
+		args = append(args, "-k", config.APIKey)
+	}
+	if config.SecondaryAPIKey != "" {
+		args = append(args, "-k2", config.SecondaryAPIKey)
+	}
+	if outputFile != "" {
+		args = append(args, "-o", outputFile)
+	}
+	if config.Model != "" {
+		args = append(args, "-m", config.Model)
+	}
+	if config.BatchSize > 0 {
+		args = append(args, "-b", fmt.Sprintf("%d", config.BatchSize))
+	}
+	// Temperature is float, pass if set
+	if config.Temperature >= 0 {
+		args = append(args, "--temperature", fmt.Sprintf("%.2f", config.Temperature))
+	}
+	if config.ProgressLog {
+		args = append(args, "--progress-log")
+	}
+	if config.ThoughtsLog {
+		args = append(args, "--thoughts-log")
+	}
+	if config.ResumeMode {
+		args = append(args, "--resume")
+	} else {
+		args = append(args, "--no-resume")
+	}
+	if desc := strings.TrimSpace(config.Description); desc != "" {
+		args = append(args, "-d", desc)
+	}
 
-    cmd := exec.Command(gstPath, args...)
-    stdout, _ := cmd.StdoutPipe()
-    stderr, _ := cmd.StderrPipe()
-    if err := cmd.Start(); err != nil {
-        return false, fmt.Errorf("failed to start gst: %v", err)
-    }
+	cmd := exec.Command(gstPath, args...)
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+	if err := cmd.Start(); err != nil {
+		return false, fmt.Errorf("failed to start gst: %v", err)
+	}
 
-    // Stream gst output lines to progress callback
-    stream := func(r io.Reader) {
-        scanner := bufio.NewScanner(r)
-        buf := make([]byte, 0, 256*1024)
-        scanner.Buffer(buf, 1024*1024)
-        for scanner.Scan() {
-            raw := scanner.Text()
-            // Remove carriage returns used for in-place progress and ANSI color codes
-            line := strings.ReplaceAll(raw, "\r", "")
-            line = stripANSI(line)
-            if strings.TrimSpace(line) == "" {
-                continue
-            }
-            if progressCallback != nil {
-                progressCallback(line)
-            }
-        }
-    }
-    go stream(stdout)
-    go stream(stderr)
+	// Stream gst output lines to progress callback
+	stream := func(r io.Reader) {
+		scanner := bufio.NewScanner(r)
+		buf := make([]byte, 0, 256*1024)
+		scanner.Buffer(buf, 1024*1024)
+		for scanner.Scan() {
+			raw := scanner.Text()
+			// Remove carriage returns used for in-place progress and ANSI color codes
+			line := strings.ReplaceAll(raw, "\r", "")
+			line = stripANSI(line)
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			if progressCallback != nil {
+				progressCallback(line)
+			}
+		}
+	}
+	go stream(stdout)
+	go stream(stderr)
 
-    err := cmd.Wait()
-    if err != nil {
-        return false, fmt.Errorf("gst failed: %v", err)
-    }
-    // gst writes the output file itself; treat as success if it completed
-    return true, nil
+	err := cmd.Wait()
+	if err != nil {
+		return false, fmt.Errorf("gst failed: %v", err)
+	}
+	// gst writes the output file itself; treat as success if it completed
+	return true, nil
 }
 
 // stripANSI removes ANSI escape sequences used for terminal colors and cursor moves
 func stripANSI(s string) string {
-    // Matches CSI sequences like \x1b[31m, \x1b[?25l, and OSC etc.
-    ansi := regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
-    s = ansi.ReplaceAllString(s, "")
-    // Also remove other ESC sequences (OSC terminated by BEL or ST) conservatively
-    osc := regexp.MustCompile(`\x1b\].*?(\x07|\x1b\\)`)
-    s = osc.ReplaceAllString(s, "")
-    return s
+	// Matches CSI sequences like \x1b[31m, \x1b[?25l, and OSC etc.
+	ansi := regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	s = ansi.ReplaceAllString(s, "")
+	// Also remove other ESC sequences (OSC terminated by BEL or ST) conservatively
+	osc := regexp.MustCompile(`\x1b\].*?(\x07|\x1b\\)`)
+	s = osc.ReplaceAllString(s, "")
+	return s
 }
 
 // TranslationJob represents a translation task
@@ -349,144 +331,17 @@ type TranslationJob struct {
 	ErrorMessage string
 }
 
-// GeminiRequest represents the API request structure
-type GeminiRequest struct {
-	Contents          []GeminiContent        `json:"contents"`
-	GenerationConfig  GeminiGenerationConfig `json:"generationConfig,omitempty"`
-	SystemInstruction *GeminiContent         `json:"systemInstruction,omitempty"`
-	SafetySettings    []GeminiSafetySetting  `json:"safetySettings,omitempty"`
-}
+// Removed Gemini-specific types - using GST only
 
-type GeminiContent struct {
-	Parts []GeminiPart `json:"parts"`
-	Role  string       `json:"role,omitempty"`
-}
-
-type GeminiPart struct {
-	Text string `json:"text"`
-}
-
-type GeminiGenerationConfig struct {
-	Temperature      float64              `json:"temperature,omitempty"`
-	TopP             float64              `json:"topP,omitempty"`
-	TopK             int                  `json:"topK,omitempty"`
-	MaxOutputTokens  int                  `json:"maxOutputTokens,omitempty"`
-	ResponseMimeType string               `json:"responseMimeType,omitempty"`
-	ResponseSchema   *GeminiResponseSchema `json:"responseSchema,omitempty"`
-}
-
-type GeminiSafetySetting struct {
-	Category  string `json:"category"`
-	Threshold string `json:"threshold"`
-}
-
-type GeminiResponseSchema struct {
-	Type     string                          `json:"type"`
-	Items    *GeminiResponseSchema           `json:"items,omitempty"`
-	Properties map[string]*GeminiResponseSchema `json:"properties,omitempty"`
-	Required []string                         `json:"required,omitempty"`
-}
-
-type GeminiResponse struct {
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-	} `json:"candidates"`
-}
-
-type geminiModelInfo struct {
-	OutputTokenLimit int `json:"output_token_limit"`
-}
-
-type countTokensRequest struct {
-	Model    string           `json:"model"`
-	Contents []GeminiContent  `json:"contents"`
-}
-
-type countTokensResponse struct {
-	TotalTokens int `json:"total_tokens"`
-}
-
-// callGeminiAPI sends a generateContent request and returns the raw text response
-func callGeminiAPI(request GeminiRequest, config AITranslationConfig) (string, error) {
-    // Prepare request body
-    jsonData, err := json.Marshal(request)
-    if err != nil {
-        return "", err
-    }
-
-    // Use the model name from config, normalize older aliases
-    modelName := config.Model
-    if modelName == "gemini-1.5-flash" {
-        modelName = "gemini-2.5-flash"
-    }
-
-    // Create HTTP request
-    url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", modelName, config.APIKey)
-    req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-    if err != nil {
-        return "", err
-    }
-    req.Header.Set("Content-Type", "application/json")
-
-    // Make request
-    client := &http.Client{Timeout: 60 * time.Second}
-    resp, err := client.Do(req)
-    if err != nil {
-        return "", err
-    }
-    defer resp.Body.Close()
-
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return "", err
-    }
-
-    if resp.StatusCode != 200 {
-        if resp.StatusCode == 429 {
-            return "", fmt.Errorf("rate limit exceeded - please wait and try again")
-        } else if resp.StatusCode == 401 || resp.StatusCode == 403 {
-            return "", fmt.Errorf("invalid API key - check your key at https://aistudio.google.com/app/apikey")
-        } else if resp.StatusCode == 400 {
-            return "", fmt.Errorf("bad request - check your input format")
-        } else if resp.StatusCode >= 500 {
-            return "", fmt.Errorf("Google API server error (%d) - please try again later", resp.StatusCode)
-        }
-        return "", fmt.Errorf("API error (%d): %s", resp.StatusCode, string(body))
-    }
-
-    // Parse response
-    var geminiResp GeminiResponse
-    if err := json.Unmarshal(body, &geminiResp); err != nil {
-        return "", err
-    }
-    if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-        return "", fmt.Errorf("no translation received from API")
-    }
-
-    translatedText := strings.TrimSpace(geminiResp.Candidates[0].Content.Parts[0].Text)
-    if translatedText == "" {
-        return "", fmt.Errorf("API returned empty translation")
-    }
-    if strings.HasPrefix(translatedText, "```") {
-        lines := strings.Split(translatedText, "\n")
-        if len(lines) > 2 {
-            translatedText = strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
-        }
-    }
-    return translatedText, nil
-}
+// Removed callGeminiAPI - using GST only
 
 // Global variables for AI translation
 var activeTranslationJobs = make(map[string]*TranslationJob)
 var aiTranslationAddFile func(string) // Function to add files from drag & drop
 var cancelTranslation bool            // Flag to cancel ongoing translation
-var resultsWindow fyne.Window       // Separate results window
-var resultsArea *widget.Entry       // Results text area
-var resultsScroll *container.Scroll // Scroll container for results
+var resultsWindow fyne.Window         // Separate results window
+var resultsArea *widget.Entry         // Results text area
+var resultsScroll *container.Scroll   // Scroll container for results
 
 // createResultsWindow creates a separate window for translation results
 func createResultsWindow(a fyne.App) {
@@ -534,16 +389,9 @@ func createResultsWindow(a fyne.App) {
 // createAITranslationTab creates the AI translation interface
 func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	// Title
-	title := widget.NewLabel("AI-Powered Subtitle Translation")
+	title := widget.NewLabel("GST Subtitle Translation")
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.Alignment = fyne.TextAlignCenter
-
-	// Provider selection
-	providerSelect := widget.NewSelect([]string{
-		"Google Gemini AI",
-		"gst (Python)",
-	}, nil)
-	providerSelect.SetSelected("Google Gemini AI")
 
 	// API Key configuration
 	apiKeyEntry := widget.NewPasswordEntry()
@@ -586,16 +434,13 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 		}
 	}
 
-	// gst path configuration (visible only for gst provider)
-	gstPathLabel := widget.NewLabel("gst Path:")
+	// gst path configuration
+	gstPathLabel := widget.NewLabel("GST Path:")
 	gstPathEntry := widget.NewEntry()
 	gstPathEntry.SetPlaceHolder("/path/to/gst or 'gst' if on PATH")
 	gstPathEntry.SetText(findGSTPath())
-	// Hidden by default (Gemini selected)
-	gstPathLabel.Hide()
-	gstPathEntry.Hide()
 
-	// Model selection (dynamic based on provider)
+	// Model selection for GST
 	modelSelect := widget.NewSelect([]string{
 		"gemini-2.5-flash (Recommended)",
 		"gemini-2.5-pro (Higher Quality)",
@@ -734,12 +579,12 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	temperatureEntry.SetText("0.3")
 	temperatureEntry.SetPlaceHolder("0.0-2.0")
 	temperatureLabel := widget.NewLabel("Temperature:")
-	
+
 	// Sync slider -> entry
 	temperatureSlider.OnChanged = func(value float64) {
 		temperatureEntry.SetText(fmt.Sprintf("%.2f", value))
 	}
-	
+
 	// Sync entry -> slider
 	temperatureEntry.OnChanged = func(text string) {
 		var value float64
@@ -757,19 +602,6 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	descriptionEntry := widget.NewMultiLineEntry()
 	descriptionEntry.SetPlaceHolder("Optional: Describe the content context (e.g., 'Medical TV series, use medical terminology')")
 	descriptionEntry.Resize(fyne.NewSize(400, 60))
-
-	// AI-specific options
-	useThinkingCheck := widget.NewCheck("Enable AI Thinking (Gemini 2.5 only)", nil)
-	useThinkingCheck.SetChecked(true)
-
-	thinkingBudgetSlider := widget.NewSlider(0, 24576)
-	thinkingBudgetSlider.SetValue(2048)
-	thinkingBudgetLabel := widget.NewLabel("Thinking Budget: 2048 tokens")
-	thinkingBudgetSlider.OnChanged = func(value float64) {
-		thinkingBudgetLabel.SetText(fmt.Sprintf("Thinking Budget: %.0f tokens", value))
-	}
-
-	useAudioContextCheck := widget.NewCheck("Extract audio context from video (requires FFmpeg)", nil)
 
 	// Logging options
 	progressLogCheck := widget.NewCheck("Save progress log", nil)
@@ -794,12 +626,6 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewLabel("Content Context"),
 		widget.NewLabel("Description:"),
 		descriptionEntry,
-		widget.NewSeparator(),
-
-		widget.NewLabel("AI Features (Gemini)"),
-		useThinkingCheck,
-		container.NewHBox(thinkingBudgetLabel, thinkingBudgetSlider),
-		useAudioContextCheck,
 		widget.NewSeparator(),
 
 		widget.NewLabel("Logging & Resume"),
@@ -831,10 +657,10 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	// Action buttons - declare first to avoid forward reference issues
 	var translateBtn, stopBtn *widget.Button
-	
+
 	translateBtn = widget.NewButton("Start Translation", nil)
 	stopBtn = widget.NewButton("Stop Translation", nil)
-	
+
 	// Set button callbacks after declaration
 	translateBtn.OnTapped = func() {
 		if len(inputFiles) == 0 {
@@ -842,19 +668,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 			return
 		}
 
-		// Skip API key validation for gst provider
-		if providerSelect.Selected != "gst (Python)" {
-			if apiKeyEntry.Text == "" {
-				dialog.ShowError(fmt.Errorf("Please enter your Google Gemini API key.\n\nGet your free API key at:\nhttps://aistudio.google.com/app/apikey"), w)
-				return
-			}
-
-			// Validate API key format (basic check)
-			if len(apiKeyEntry.Text) < 20 || !strings.HasPrefix(apiKeyEntry.Text, "AI") {
-				dialog.ShowError(fmt.Errorf("Invalid API key format.\n\nGemini API keys should start with 'AI' and be at least 20 characters long."), w)
-				return
-			}
-		}
+		// API key is optional for GST (uses GST's own key management)
 
 		// Reset cancellation flag and enable stop button
 		cancelTranslation = false
@@ -871,20 +685,16 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 		// Create translation config
 		config := AITranslationConfig{
-			Provider:        strings.ToLower(strings.Split(providerSelect.Selected, " ")[0]),
+			GSTPath:         gstPathEntry.Text,
 			APIKey:          apiKeyEntry.Text,
 			SecondaryAPIKey: secondaryKeyEntry.Text,
 			Model:           strings.Split(modelSelect.Selected, " ")[0],
 			Temperature:     parseFloat(temperatureEntry.Text, 0.3),
 			BatchSize:       parseInt(batchSizeEntry.Text, 100),
-			UseThinking:     useThinkingCheck.Checked,
-			ThinkingBudget:  int(thinkingBudgetSlider.Value),
-			UseAudioContext: useAudioContextCheck.Checked,
 			Description:     descriptionEntry.Text,
 			ResumeMode:      resumeModeCheck.Checked,
 			ProgressLog:     progressLogCheck.Checked,
 			ThoughtsLog:     thoughtsLogCheck.Checked,
-			GSTPath:         gstPathEntry.Text,
 		}
 
 		// Create/show results window
@@ -924,14 +734,13 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	// Layout
 	configSection := container.NewVBox(
-		widget.NewLabel("AI Provider & Authentication"),
+		widget.NewLabel("GST Configuration"),
 		container.New(layout.NewFormLayout(),
-			widget.NewLabel("Provider:"), providerSelect,
+			gstPathLabel, gstPathEntry,
 			widget.NewLabel("API Key:"), apiKeyEntry,
 			widget.NewLabel("Secondary Key:"), secondaryKeyEntry,
 			widget.NewLabel(""), rememberAPIKeyCheck,
 			widget.NewLabel("Model:"), modelSelect,
-			gstPathLabel, gstPathEntry,
 		),
 		widget.NewSeparator(),
 
@@ -976,35 +785,6 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewLabel("💡 Results will appear in a separate window when translation starts"),
 	)
 
-	// Provider onChange handler - after all widgets are created
-	providerSelect.OnChanged = func(selected string) {
-		// Allow only Gemini and gst
-		if selected != "Google Gemini AI" && selected != "gst (Python)" {
-			dialog.ShowInformation("Provider Not Available",
-				"Only Google Gemini AI and gst (Python) are currently supported.", w)
-			providerSelect.SetSelected("Google Gemini AI")
-			selected = "Google Gemini AI"
-		}
-
-		if selected == "gst (Python)" {
-			// Show gst path, hide Gemini-only controls
-			gstPathLabel.Show()
-			gstPathEntry.Show()
-			useThinkingCheck.Hide()
-			thinkingBudgetLabel.Hide()
-			thinkingBudgetSlider.Hide()
-			useAudioContextCheck.Hide()
-		} else {
-			gstPathLabel.Hide()
-			gstPathEntry.Hide()
-			useThinkingCheck.Show()
-			thinkingBudgetLabel.Show()
-			thinkingBudgetSlider.Show()
-			useAudioContextCheck.Show()
-		}
-		configSection.Refresh()
-	}
-
 	// Main container with tabs or accordion for better organization
 	mainContent := container.NewVBox(
 		title,
@@ -1015,9 +795,6 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 		fileSection,
 		progressSection,
 	)
-
-	// Initialize visibility for the default selection
-	providerSelect.OnChanged(providerSelect.Selected)
 
 	return mainContent
 }
@@ -1202,499 +979,33 @@ func translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang
 		contentStr = contentStr[3:]
 	}
 
-	// Parse SRT content
+	// Using GST (Python) for translation - open terminal window
 	if progressCallback != nil {
-		progressCallback("🔍 Parsing subtitle entries...")
+		progressCallback("🐍 Opening terminal window for GST translation...")
+		progressCallback(fmt.Sprintf("📝 Input: %s", filepath.Base(inputFile)))
+		progressCallback(fmt.Sprintf("📝 Output: %s", filepath.Base(outputFile)))
+		progressCallback("💡 Watch the terminal window for live progress!")
 	}
-	entries, err := parseSRT(contentStr)
+	err = translateWithGSTInTerminal(inputFile, outputFile, targetLang, config)
 	if err != nil {
-		fmt.Printf("Error parsing SRT file %s: %v\n", inputFile, err)
-		return false, err
+		return false, fmt.Errorf("failed to open terminal: %v", err)
 	}
-
-	if progressCallback != nil {
-		progressCallback(fmt.Sprintf("📊 Found %d subtitle entries", len(entries)))
-	}
-
-    // If provider is gst (Python), open terminal window
-    if strings.ToLower(config.Provider) == "gst" {
-        if progressCallback != nil {
-            progressCallback("🐍 Opening terminal window for gst translation...")
-            progressCallback(fmt.Sprintf("📝 Input: %s", filepath.Base(inputFile)))
-            progressCallback(fmt.Sprintf("📝 Output: %s", filepath.Base(outputFile)))
-            progressCallback("💡 Watch the terminal window for live progress!")
-        }
-        err := translateWithGSTInTerminal(inputFile, outputFile, targetLang, config)
-        if err != nil {
-            return false, fmt.Errorf("failed to open terminal: %v", err)
-        }
-        // Return success - actual translation happens in terminal
-        return true, nil
-    }
-
-    // Translate in batches
-	translatedEntries := make([]SubtitleEntry, len(entries))
-	batchSize := config.BatchSize
-	totalBatches := (len(entries) + batchSize - 1) / batchSize
-	// Previous message context like gst
-	var previousMsgs []GeminiContent
-	// Token limit cache
-	modelLimit := 0
-	if lim, err := getModelOutputLimit(config.Model, config.APIKey); err == nil {
-		modelLimit = lim
-	}
-
-	if progressCallback != nil {
-		progressCallback(fmt.Sprintf("🚀 Starting translation in %d batches (batch size: %d)", totalBatches, batchSize))
-	}
-
-	for i := 0; i < len(entries); i += batchSize {
-		// propose end
-		end := i + batchSize
-		if end > len(entries) {
-			end = len(entries)
-		}
-
-		// Token preflight: shrink until under 90% of model limit
-		if modelLimit > 0 {
-			for {
-				// Build temporary user content for [i:end]
-				type tmpIn struct{ Index string `json:"index"`; Content string `json:"content"` }
-				tmpArr := make([]tmpIn, 0, end-i)
-				for j := i; j < end; j++ {
-					tmpArr = append(tmpArr, tmpIn{Index: fmt.Sprintf("%d", j-i), Content: entries[j].Text})
-				}
-				b, _ := json.Marshal(tmpArr)
-				contents := append([]GeminiContent{}, previousMsgs...)
-				contents = append(contents, GeminiContent{Role: "user", Parts: []GeminiPart{{Text: string(b)}}})
-
-				total, err := countTokensAPI(config.Model, config.APIKey, contents)
-				if err != nil {
-					break // fallback: proceed without shrinking
-				}
-				if total <= int(float64(modelLimit)*0.9) {
-					break
-				}
-				// shrink by half until at least 1
-				newLen := (end - i) / 2
-				if newLen < 1 { newLen = 1 }
-				end = i + newLen
-				if progressCallback != nil {
-					progressCallback(fmt.Sprintf("🔧 Reducing batch size due to token limit: now %d", end-i))
-				}
-			}
-		}
-
-		batch := entries[i:end]
-		batchNum := (i / batchSize) + 1
-
-		if progressCallback != nil {
-			progressCallback(fmt.Sprintf("🔧 Processing batch %d: %d texts", batchNum, len(batch)))
-		}
-
-		// Check for cancellation
-		if cancelTranslation {
-			return false, fmt.Errorf("translation cancelled by user")
-		}
-
-		translatedBatch, nextPrev, err := translateBatch(batch, sourceLang, targetLang, config, previousMsgs)
-		if err != nil {
-			fmt.Printf("Error translating batch %d: %v\n", batchNum, err)
-			if progressCallback != nil {
-				// Provide more helpful error messages
-				errorMsg := err.Error()
-				if strings.Contains(errorMsg, "API error") {
-					if strings.Contains(errorMsg, "429") {
-						progressCallback(fmt.Sprintf("❌ Rate limit exceeded. Please wait a moment and try again."))
-					} else if strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "403") {
-						progressCallback(fmt.Sprintf("❌ Invalid API key. Please check your key at https://aistudio.google.com/app/apikey"))
-					} else if strings.Contains(errorMsg, "quota") {
-						progressCallback(fmt.Sprintf("❌ API quota exceeded. Check your usage at https://aistudio.google.com/"))
-					} else {
-						progressCallback(fmt.Sprintf("❌ Batch %d/%d failed: %s", batchNum, totalBatches, errorMsg))
-					}
-				} else {
-					progressCallback(fmt.Sprintf("❌ Batch %d/%d failed: %s", batchNum, totalBatches, errorMsg))
-				}
-			}
-			return false, fmt.Errorf("batch %d failed: %v", batchNum, err)
-		}
-
-		// Validate translated batch has correct number of entries
-		if len(translatedBatch) != len(batch) {
-			if progressCallback != nil {
-				progressCallback(fmt.Sprintf("⚠️ Translation count mismatch - attempting to recover"))
-			}
-			// Attempt to recover by padding with original text
-			if len(translatedBatch) < len(batch) {
-				for i := len(translatedBatch); i < len(batch); i++ {
-					translatedBatch = append(translatedBatch, batch[i])
-				}
-			} else {
-				// Truncate excess
-				translatedBatch = translatedBatch[:len(batch)]
-			}
-		}
-
-		if progressCallback != nil {
-			progressCallback(fmt.Sprintf("✅ Batch %d completed: %d translations", batchNum, len(translatedBatch)))
-		}
-
-		copy(translatedEntries[i:end], translatedBatch)
-		previousMsgs = nextPrev
-	}
-
-	// Generate output SRT
-	if progressCallback != nil {
-		progressCallback("📝 Generating output SRT file...")
-	}
-	outputContent := generateSRT(translatedEntries)
-
-	// Write output file
-	if progressCallback != nil {
-		progressCallback("💾 Saving translated file...")
-	}
-	err = os.WriteFile(outputFile, []byte(outputContent), 0644)
-	if err != nil {
-		fmt.Printf("Error writing output file %s: %v\n", outputFile, err)
-		return false, err
-	}
-
+	// Return success - actual translation happens in terminal
 	return true, nil
 }
 
-// getSafetySettings returns safety settings to disable all content filtering
-func getSafetySettings() []GeminiSafetySetting {
-	return []GeminiSafetySetting{
-		{Category: "HARM_CATEGORY_HATE_SPEECH", Threshold: "BLOCK_NONE"},
-		{Category: "HARM_CATEGORY_DANGEROUS_CONTENT", Threshold: "BLOCK_NONE"},
-		{Category: "HARM_CATEGORY_CIVIC_INTEGRITY", Threshold: "BLOCK_NONE"},
-		{Category: "HARM_CATEGORY_HARASSMENT", Threshold: "BLOCK_NONE"},
-		{Category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", Threshold: "BLOCK_NONE"},
-	}
-}
+// Removed getSafetySettings - using GST only
 
-// getResponseSchema returns the structured JSON schema for translation response
-func getResponseSchema() *GeminiResponseSchema {
-	return &GeminiResponseSchema{
-		Type: "array",
-		Items: &GeminiResponseSchema{
-			Type: "object",
-			Properties: map[string]*GeminiResponseSchema{
-				"index": {Type: "string"},
-				"content": {Type: "string"},
-			},
-			Required: []string{"index", "content"},
-		},
-	}
-}
+// Removed getResponseSchema - using GST only
 
-// getInstruction generates detailed translation instruction based on target language
-func getInstruction(targetLang string, useAudioContext bool, audioFile string, description string) string {
-	fields := "- index: a string identifier\n- content: the text to translate\n"
-	
-	if useAudioContext && audioFile != "" {
-		fields += "- time_start: the start time of the segment\n- time_end: the end time of the segment\n"
-	}
+// Removed getInstruction - using GST only
 
-	instruction := fmt.Sprintf(`You are an assistant that translates subtitles from any language to %s.
-You will receive a list of objects, each with these fields:
+// Removed cleanAIResponse - using GST only
 
-%s
-Translate the 'content' field of each object.
-If the 'content' field is empty, leave it as is.
-Preserve line breaks, formatting, and special characters.
-Do NOT move or merge 'content' between objects.
-Do NOT add or remove any objects.
-Do NOT alter the 'index' field.`, targetLang, fields)
+// Removed translateBatch - using GST only
 
-	if useAudioContext && audioFile != "" {
-		instruction += fmt.Sprintf(`
+// Removed getModelOutputLimit - using GST only
 
-You will also receive an audio file.
-Use the time_start and time_end of each object to analyze the audio.
-Analyze the speaker's voice in the audio to determine gender, then apply grammatical gender rules for %s:
-1. Listen for voice characteristics to identify if speaker is male/female:
-   - Use masculine verb forms/adjectives if speaker sounds male
-   - Use feminine verb forms/adjectives if speaker sounds female
-   - Apply gender agreement to: verbs, adjectives, past participles, pronouns
-   - Example: French 'I am tired' -> 'Je suis fatigué' (male) vs 'Je suis fatiguée' (female)
-2. In some cases you also need to identify who the current speaker is talking to:
-   - If the speaker is talking to a male, use masculine forms.
-   - If the speaker is talking to a female, use feminine forms.
-   - If the speaker is talking to a group, use plural forms.
-   - Example: Portuguese 'You are tired' -> 'Você está cansado' (male) vs 'Você está cansada' (female)
-   - Example: Spanish 'You are tired' (group) -> 'Ustedes están cansados' (male/general group) vs 'Ustedes están cansadas' (female group)`, targetLang)
-	}
+// Removed countTokensAPI - using GST only
 
-	if description != "" {
-		instruction += fmt.Sprintf("\n\nAdditional user instruction:\n\n%s", description)
-	}
-
-	return instruction
-}
-
-// cleanAIResponse removes AI thinking/reasoning from response
-func cleanAIResponse(response string) string {
-	// If response starts with "THOUGHT:" or similar, remove it
-	if strings.Contains(response, "THOUGHT:") {
-
-		// Try to extract just the translations by looking for patterns like "*Translation:*"
-		lines := strings.Split(response, "\n")
-		var cleanedParts []string
-		var currentTranslation strings.Builder
-		inTranslation := false
-
-		for _, line := range lines {
-			// Look for translation markers like "*Translation:*"
-			if strings.Contains(line, "*Translation:*") {
-				// Extract the translation part after the marker
-				parts := strings.Split(line, "*Translation:*")
-				if len(parts) > 1 {
-					translation := strings.TrimSpace(parts[1])
-					if currentTranslation.Len() > 0 {
-						cleanedParts = append(cleanedParts, currentTranslation.String())
-						currentTranslation.Reset()
-					}
-					currentTranslation.WriteString(translation)
-					inTranslation = true
-				}
-				continue
-			}
-
-			// Skip lines with entry markers like "**Entry"
-			if strings.HasPrefix(strings.TrimSpace(line), "**Entry") {
-				if inTranslation && currentTranslation.Len() > 0 {
-					cleanedParts = append(cleanedParts, currentTranslation.String())
-					currentTranslation.Reset()
-				}
-				inTranslation = false
-				continue
-			}
-
-			// If we're in a translation and line doesn't look like metadata, include it
-			if inTranslation && !strings.Contains(line, "THOUGHT:") && !strings.Contains(line, "I need to") {
-				if currentTranslation.Len() > 0 {
-					currentTranslation.WriteString("\n")
-				}
-				currentTranslation.WriteString(line)
-			}
-		}
-
-		// Add the last translation
-		if currentTranslation.Len() > 0 {
-			cleanedParts = append(cleanedParts, currentTranslation.String())
-		}
-
-		if len(cleanedParts) > 0 {
-			return strings.Join(cleanedParts, "\n---SUBTITLE_SEPARATOR---\n")
-		}
-	}
-
-	// No cleaning needed
-	return response
-}
-
-// translateBatch translates subtitle entries using structured JSON with schema, and returns next previous-message context
-func translateBatch(entries []SubtitleEntry, sourceLang, targetLang string, config AITranslationConfig, previous []GeminiContent) ([]SubtitleEntry, []GeminiContent, error) {
-
-    // Build input JSON with index and content fields
-    type InputEntry struct {
-        Index   string `json:"index"`
-        Content string `json:"content"`
-    }
-    var inputEntries []InputEntry
-    for i, entry := range entries {
-        inputEntries = append(inputEntries, InputEntry{Index: fmt.Sprintf("%d", i), Content: entry.Text})
-    }
-
-    // Marshal to JSON for the user part
-    inputJSON, _ := json.Marshal(inputEntries)
-    userPart := GeminiContent{Role: "user", Parts: []GeminiPart{{Text: string(inputJSON)}}}
-
-    // Create API request with structured JSON response
-    request := GeminiRequest{
-        SystemInstruction: &GeminiContent{
-            Parts: []GeminiPart{{Text: getInstruction(targetLang, config.UseAudioContext, config.VideoFile, config.Description)}},
-            Role:  "system",
-        },
-        Contents: append(append([]GeminiContent{}, previous...), userPart),
-        GenerationConfig: GeminiGenerationConfig{
-            Temperature:      config.Temperature,
-            TopP:             0.95,
-            TopK:             40,
-            MaxOutputTokens:  8192,
-            ResponseMimeType: "application/json",
-            ResponseSchema:   getResponseSchema(),
-        },
-        SafetySettings: getSafetySettings(),
-    }
-
-    // Make API call
-    translatedJSON, err := callGeminiAPI(request, config)
-    if err != nil {
-        return nil, nil, err
-    }
-
-    // Parse JSON response
-    type OutputEntry struct {
-        Index   string `json:"index"`
-        Content string `json:"content"`
-    }
-    
-    var outputEntries []OutputEntry
-    err = json.Unmarshal([]byte(translatedJSON), &outputEntries)
-    if err != nil {
-        // Try to fix common JSON issues
-        fixedJSON := fixCommonJSONIssues(translatedJSON)
-        err = json.Unmarshal([]byte(fixedJSON), &outputEntries)
-        if err != nil {
-            return nil, nil, fmt.Errorf("failed to parse translation response: %v\nResponse: %s", err, translatedJSON)
-        }
-    }
-
-    // Validate count matches
-    if len(outputEntries) != len(entries) {
-        return nil, nil, fmt.Errorf("translation count mismatch: expected %d, got %d", len(entries), len(outputEntries))
-    }
-
-    // Build result entries (preserve original timing and indexes)
-    var translatedEntries []SubtitleEntry
-    for i, entry := range entries {
-        translatedText := strings.TrimSpace(outputEntries[i].Content)
-
-        translatedEntries = append(translatedEntries, SubtitleEntry{
-            Index:     entry.Index,     // Preserve original index
-            StartTime: entry.StartTime, // Preserve original timing
-            EndTime:   entry.EndTime,   // Preserve original timing
-            Text:      translatedText,  // Use translated content
-        })
-    }
-
-    // Build previous messages for next batch: user original subset and model translated subset
-    modelArr, _ := json.Marshal(outputEntries)
-    nextPrevious := []GeminiContent{
-        {Role: "user", Parts: []GeminiPart{{Text: string(inputJSON)}}},
-        {Role: "model", Parts: []GeminiPart{{Text: string(modelArr)}}},
-    }
-
-    return translatedEntries, nextPrevious, nil
-}
-
-// getModelOutputLimit fetches model metadata to get output token limit
-func getModelOutputLimit(modelName, apiKey string) (int, error) {
-    url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s?key=%s", modelName, apiKey)
-    req, err := http.NewRequest("GET", url, nil)
-    if err != nil {
-        return 0, err
-    }
-    client := &http.Client{Timeout: 30 * time.Second}
-    resp, err := client.Do(req)
-    if err != nil {
-        return 0, err
-    }
-    defer resp.Body.Close()
-    if resp.StatusCode != 200 {
-        body, _ := io.ReadAll(resp.Body)
-        return 0, fmt.Errorf("model info error (%d): %s", resp.StatusCode, string(body))
-    }
-    var m map[string]any
-    if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-        return 0, err
-    }
-    if v, ok := m["output_token_limit"].(float64); ok {
-        return int(v), nil
-    }
-    return 0, fmt.Errorf("output_token_limit not found")
-}
-
-// countTokensAPI calls the token counting endpoint for given contents
-func countTokensAPI(modelName, apiKey string, contents []GeminiContent) (int, error) {
-    reqBody := map[string]any{
-        "model":    modelName,
-        "contents": contents,
-    }
-    b, _ := json.Marshal(reqBody)
-    url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models:countTokens?key=%s", apiKey)
-    req, err := http.NewRequest("POST", url, bytes.NewBuffer(b))
-    if err != nil { return 0, err }
-    req.Header.Set("Content-Type", "application/json")
-    client := &http.Client{Timeout: 30 * time.Second}
-    resp, err := client.Do(req)
-    if err != nil { return 0, err }
-    defer resp.Body.Close()
-    if resp.StatusCode != 200 {
-        body, _ := io.ReadAll(resp.Body)
-        return 0, fmt.Errorf("countTokens error (%d): %s", resp.StatusCode, string(body))
-    }
-    var res struct { TotalTokens int `json:"total_tokens"` }
-    if err := json.NewDecoder(resp.Body).Decode(&res); err != nil { return 0, err }
-    return res.TotalTokens, nil
-}
-
- 
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-    if a < b {
-        return a
-    }
-    return b
-}
-
-// fixCommonJSONIssues attempts to fix common JSON formatting problems
-func fixCommonJSONIssues(jsonStr string) string {
-    fixed := strings.TrimSpace(jsonStr)
-
-    // Strip markdown code fences
-    if strings.HasPrefix(fixed, "```") {
-        lines := strings.Split(fixed, "\n")
-        if len(lines) > 2 {
-            fixed = strings.Join(lines[1:len(lines)-1], "\n")
-            fixed = strings.TrimSpace(fixed)
-        }
-    }
-
-    // Keep from first '[' onward if any prelude text exists
-    if idx := strings.Index(fixed, "["); idx > 0 {
-        fixed = fixed[idx:]
-    }
-
-    // Fix trailing commas before closing brackets/braces
-    fixed = regexp.MustCompile(`,(\s*[}\]])`).ReplaceAllString(fixed, "$1")
-
-    // Fix missing commas between objects (common AI mistake)
-    fixed = regexp.MustCompile(`}(\s*){`).ReplaceAllString(fixed, "},$1{")
-
-    // Attempt to cut at last complete ']' if response is truncated
-    if last := strings.LastIndex(fixed, "]"); last != -1 {
-        fixed = fixed[:last+1]
-    }
-
-    // Ensure starts with '['
-    if !strings.HasPrefix(fixed, "[") {
-        fixed = "[" + fixed
-    }
-    // Balance brackets: if more '[' than ']', append missing ']'s
-    open := strings.Count(fixed, "[")
-    close := strings.Count(fixed, "]")
-    if close < open {
-        fixed = fixed + strings.Repeat("]", open-close)
-    }
-
-    return strings.TrimSpace(fixed)
-}
-
-// generateSRT generates SRT content from subtitle entries
-func generateSRT(entries []SubtitleEntry) string {
-    var result strings.Builder
-    for _, entry := range entries {
-        result.WriteString(fmt.Sprintf("%d\n", entry.Index))
-        result.WriteString(fmt.Sprintf("%s --> %s\n",
-            formatSRTTime(entry.StartTime),
-            formatSRTTime(entry.EndTime)))
-        result.WriteString(entry.Text)
-        result.WriteString("\n\n")
-    }
-    return result.String()
-}
+// Removed fixCommonJSONIssues - using GST only
