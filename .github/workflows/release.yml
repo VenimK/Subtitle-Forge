@@ -127,7 +127,7 @@ jobs:
           cp ../LICENSE.md build/linux/ 2>/dev/null || echo "LICENSE.md not found"
           
           # Create INSTALL.md
-          echo "# Subtitle Forge Linux Installation v1.7.3a" > build/linux/INSTALL.md
+          echo "# Subtitle Forge Linux Installation v2.0.5" > build/linux/INSTALL.md
           echo "" >> build/linux/INSTALL.md
           echo "## Quick Start" >> build/linux/INSTALL.md
           echo "1. Extract this archive to your desired location" >> build/linux/INSTALL.md
@@ -141,9 +141,9 @@ jobs:
           echo "- install_pgsrip.sh - PGSRip installation script" >> build/linux/INSTALL.md
           echo "- install_tessdata.sh - Tesseract language data installer" >> build/linux/INSTALL.md
           echo "" >> build/linux/INSTALL.md
-          echo "## Fixed in v1.7.3a" >> build/linux/INSTALL.md
-          echo "- All installation scripts now included" >> build/linux/INSTALL.md
-          echo "- No more file not found errors" >> build/linux/INSTALL.md
+          echo "## What's New in v2.0.5" >> build/linux/INSTALL.md
+          echo "- Fixed GST path persistence - custom paths are now saved" >> build/linux/INSTALL.md
+          echo "- All installation scripts included" >> build/linux/INSTALL.md
           echo "- Proper dependency installation workflow" >> build/linux/INSTALL.md
           
           # Create the package

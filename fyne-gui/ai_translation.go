@@ -438,7 +438,20 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	gstPathLabel := widget.NewLabel("GST Path:")
 	gstPathEntry := widget.NewEntry()
 	gstPathEntry.SetPlaceHolder("/path/to/gst or 'gst' if on PATH")
-	gstPathEntry.SetText(findGSTPath())
+
+	// Load saved GST path from preferences, fallback to findGSTPath()
+	savedGSTPath := a.Preferences().StringWithFallback("ai_gst_path", "")
+	if savedGSTPath != "" {
+		gstPathEntry.SetText(savedGSTPath)
+	} else {
+		gstPathEntry.SetText(findGSTPath())
+	}
+
+	// Save GST path when it changes
+	gstPathEntry.OnChanged = func(newPath string) {
+		// Save the path immediately when user changes it
+		a.Preferences().SetString("ai_gst_path", newPath)
+	}
 
 	// Model selection for GST
 	modelSelect := widget.NewSelect([]string{
@@ -682,6 +695,9 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 				a.Preferences().SetString("ai_secondary_api_key", secondaryKeyEntry.Text)
 			}
 		}
+
+		// Always save GST path when starting translation
+		a.Preferences().SetString("ai_gst_path", gstPathEntry.Text)
 
 		// Create translation config
 		config := AITranslationConfig{
