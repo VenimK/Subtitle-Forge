@@ -471,13 +471,37 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	}, nil)
 	sourceLanguageSelect.SetSelected("Auto-detect")
 
+	// Create language map for system language detection
+	languageMap := map[string]string{
+		"English":           "eng",
+		"Spanish":           "spa",
+		"French":            "fre",
+		"German":            "ger",
+		"Italian":           "ita",
+		"Portuguese":        "por",
+		"Russian":           "rus",
+		"Japanese":          "jpn",
+		"Korean":            "kor",
+		"Chinese (Simplified)": "chi",
+		"Chinese (Traditional)": "chi",
+		"Arabic":            "ara",
+		"Hindi":             "hin",
+		"Dutch":             "dut",
+		"Swedish":           "swe",
+		"Norwegian":         "nor",
+		"Danish":            "dan",
+	}
+
+	// Get system language and set as default target
+	systemLang := getSystemLanguage(languageMap)
 	targetLanguageSelect := widget.NewSelect([]string{
 		"English", "Spanish", "French", "German", "Italian", "Portuguese",
 		"Russian", "Japanese", "Korean", "Chinese (Simplified)", "Chinese (Traditional)",
 		"Arabic", "Hindi", "Dutch", "Swedish", "Norwegian", "Danish",
 		"Brazilian Portuguese", "Mexican Spanish", "Canadian French",
 	}, nil)
-	targetLanguageSelect.SetSelected("English")
+	// Set default target language to system language if available, otherwise fall back to English
+	targetLanguageSelect.SetSelected(systemLang)
 
 	// File selection
 	var inputFiles []string

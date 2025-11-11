@@ -6347,12 +6347,15 @@ func main() {
 	// Add "Custom" option at the end
 	langNames = append(langNames, "Custom")
 
+	// Detect system language
+	systemLang := getSystemLanguage(languages)
+	
 	// Create language dropdown
-	selectedLang := "English"
+	selectedLang := systemLang
 	langDropdown := widget.NewSelect(langNames, func(selected string) {
 		selectedLang = selected
 	})
-	langDropdown.SetSelected("English")
+	langDropdown.SetSelected(systemLang)
 
 	// Create custom language code dropdown with improved readability
 	selectedLangCode := "eng"
@@ -6381,8 +6384,8 @@ func main() {
 
 	// Create track name entry
 	trackNameEntry := widget.NewEntry()
-	trackNameEntry.SetPlaceHolder("English")
-	trackNameEntry.SetText("English")
+	trackNameEntry.SetPlaceHolder(systemLang)
+	trackNameEntry.SetText(systemLang)
 
 	// Create result label for subtitle insertion
 	insertResultLabel := widget.NewLabel("")
