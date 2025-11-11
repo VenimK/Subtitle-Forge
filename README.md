@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.3
+# Subtitle Forge v2.0.6
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -88,6 +88,7 @@ Now with **two fully-functional AI translation providers**:
    - Integrated batch translation in GUI
    - Smart auto-scroll results window
    - Temperature control and model selection
+   - System language detection for default target language
    
 2. **gst (Python)** (Terminal-Based)
    - Professional terminal interface with ANSI colors
@@ -153,6 +154,7 @@ Now with **two fully-functional AI translation providers**:
 - **Google Gemini AI Integration**: Professional-quality translations using Google's advanced Gemini 2.5 Flash model
 - **Intelligent Batch Processing**: Translate 100+ subtitle entries per API call for maximum efficiency
 - **Multi-Language Support**: Translate between 100+ languages with automatic language detection
+- **Smart Language Selection**: Automatically detects system language and sets as default target language
 - **Real-Time Progress Tracking**: Watch your translations progress with detailed batch-by-batch status updates
 - **Batch File Processing**: Translate multiple subtitle files simultaneously with drag & drop support
 - **Smart Format Preservation**: Maintains original timing, line breaks, and subtitle structure perfectly
