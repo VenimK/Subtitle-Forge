@@ -13,15 +13,9 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            output_name: subtitle-forge-mac-arm64
-            artifact_name: Subtitle-Forge-macOS-ARM64
-            arch: arm64
-            package_cmd: fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac-arm64
-          - os: macos-latest
-            output_name: subtitle-forge-mac-amd64
-            artifact_name: Subtitle-Forge-macOS-Intel
-            arch: amd64
-            package_cmd: fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac-amd64
+            output_name: subtitle-forge-mac
+            artifact_name: Subtitle-Forge-macOS
+            package_cmd: fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac
           - os: ubuntu-latest
             output_name: subtitle-forge-linux
             artifact_name: subtitle-forge-linux
@@ -72,21 +66,18 @@ jobs:
       - name: Build and package application (macOS)
         if: matrix.os == 'macos-latest'
         working-directory: ./fyne-gui
-        env:
-          GOARCH: ${{ matrix.arch }}
-          CGO_ENABLED: 1
         run: |
           # Build the binary first
-          echo "Building macOS binary for ${{ matrix.arch }}..."
+          echo "Building macOS binary..."
           go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/${{ matrix.output_name }}
           
           # Create the .app bundle using fyne package
-          echo "Creating macOS app bundle for ${{ matrix.arch }}..."
+          echo "Creating macOS app bundle..."
           fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }}
           
           # Verify the app bundle was created
           if [ -d "Subtitle Forge.app" ]; then
-            echo "✅ macOS app bundle created successfully for ${{ matrix.arch }}"
+            echo "✅ macOS app bundle created successfully"
             ls -la "Subtitle Forge.app"
           else
             echo "❌ Failed to create macOS app bundle"
@@ -279,8 +270,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            Subtitle-Forge-macOS-ARM64/Subtitle-Forge-macOS-ARM64.zip
-            Subtitle-Forge-macOS-Intel/Subtitle-Forge-macOS-Intel.zip
+            Subtitle-Forge-macOS/Subtitle-Forge-macOS.zip
             subtitle-forge-linux/subtitle-forge-linux.tar.gz
             Subtitle-Forge-Windows/Subtitle-Forge-Windows.zip
           draft: false
