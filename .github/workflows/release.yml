@@ -13,9 +13,13 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            output_name: subtitle-forge-mac
-            artifact_name: Subtitle-Forge-macOS
-            package_cmd: fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac
+            output_name: subtitle-forge-mac-arm64
+            artifact_name: Subtitle-Forge-macOS-ARM64-binary
+            arch: arm64
+          - os: macos-13
+            output_name: subtitle-forge-mac-x86_64
+            artifact_name: Subtitle-Forge-macOS-Intel-binary
+            arch: x86_64
           - os: ubuntu-latest
             output_name: subtitle-forge-linux
             artifact_name: subtitle-forge-linux
@@ -62,39 +66,17 @@ jobs:
         shell: pwsh
         run: New-Item -ItemType Directory -Force -Path build
 
-      # Build and package application (macOS)
-      - name: Build and package application (macOS)
-        if: matrix.os == 'macos-latest'
+      # Build macOS binaries (native for each architecture)
+      - name: Build macOS binary (${{ matrix.arch }})
+        if: startsWith(matrix.os, 'macos')
         working-directory: ./fyne-gui
         run: |
-          # Build ARM64 binary
-          echo "Building macOS ARM64 binary..."
-          GOARCH=arm64 go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-mac-arm64
+          echo "Building macOS binary natively for ${{ matrix.arch }}..."
+          go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/${{ matrix.output_name }}
           
-          # Build AMD64 (Intel) binary
-          echo "Building macOS Intel (AMD64) binary..."
-          GOARCH=amd64 go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-mac-amd64
-          
-          # Create universal binary using lipo
-          echo "Creating universal binary..."
-          lipo -create -output build/${{ matrix.output_name }} build/subtitle-forge-mac-arm64 build/subtitle-forge-mac-amd64
-          
-          # Verify universal binary
-          lipo -info build/${{ matrix.output_name }}
-          
-          # Create the .app bundle using fyne package
-          echo "Creating macOS app bundle..."
-          fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }}
-          
-          # Verify the app bundle was created
-          if [ -d "Subtitle Forge.app" ]; then
-            echo "✅ macOS universal app bundle created successfully"
-            ls -la "Subtitle Forge.app"
-            lipo -info "Subtitle Forge.app/Contents/MacOS/subtitle-forge-mac"
-          else
-            echo "❌ Failed to create macOS app bundle"
-            exit 1
-          fi
+          # Verify the binary
+          file build/${{ matrix.output_name }}
+          echo "✅ macOS ${{ matrix.arch }} binary created successfully"
 
       # Build and package application (Linux) 
       - name: Build and package application (Linux)
@@ -175,22 +157,6 @@ jobs:
           # Use fyne package for Windows
           fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/${{ matrix.output_name }}
 
-      # Create archive for macOS
-      - name: Create macOS archive
-        if: matrix.os == 'macos-latest'
-        working-directory: ./fyne-gui
-        run: |
-          # Create zip archive from the app bundle
-          if [ -d "Subtitle Forge.app" ]; then
-            echo "Creating macOS archive from app bundle..."
-            zip -r ${{ matrix.artifact_name }}.zip "Subtitle Forge.app"
-            echo "✅ macOS archive created"
-            ls -la ${{ matrix.artifact_name }}.zip
-          else
-            echo "❌ App bundle not found, cannot create archive"
-            exit 1
-          fi
-
       # Create archive for Linux (use packages from build.sh)
       - name: Create Linux archive
         if: matrix.os == 'ubuntu-latest'
@@ -253,8 +219,16 @@ jobs:
           }
 
       # Upload artifacts
-      - name: Upload ZIP artifacts
-        if: matrix.os == 'macos-latest' || matrix.os == 'windows-latest'
+      - name: Upload macOS binary
+        if: startsWith(matrix.os, 'macos')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ./fyne-gui/build/${{ matrix.output_name }}
+          retention-days: 1
+
+      - name: Upload Windows ZIP artifact
+        if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
@@ -269,9 +243,81 @@ jobs:
           path: ./fyne-gui/${{ matrix.artifact_name }}.tar.gz
           retention-days: 1
 
+  create-universal-binary:
+    name: Create Universal macOS Binary
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install Fyne CLI
+        run: |
+          go install fyne.io/fyne/v2/cmd/fyne@latest
+          go install fyne.io/tools/cmd/fyne@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Download ARM64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: Subtitle-Forge-macOS-ARM64-binary
+          path: ./binaries/arm64
+
+      - name: Download Intel binary
+        uses: actions/download-artifact@v4
+        with:
+          name: Subtitle-Forge-macOS-Intel-binary
+          path: ./binaries/amd64
+
+      - name: Create universal binary
+        working-directory: ./fyne-gui
+        run: |
+          mkdir -p build
+          
+          # Combine binaries
+          echo "Creating universal binary..."
+          lipo -create \
+            ../binaries/arm64/subtitle-forge-mac-arm64 \
+            ../binaries/x86_64/subtitle-forge-mac-x86_64 \
+            -output build/subtitle-forge-mac
+          
+          # Verify universal binary
+          echo "Verifying universal binary..."
+          lipo -info build/subtitle-forge-mac
+          file build/subtitle-forge-mac
+          
+          # Create .app bundle
+          echo "Creating macOS app bundle..."
+          fyne package -os darwin -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe build/subtitle-forge-mac
+          
+          # Verify the app bundle
+          if [ -d "Subtitle Forge.app" ]; then
+            echo "✅ Universal macOS app bundle created successfully"
+            lipo -info "Subtitle Forge.app/Contents/MacOS/subtitle-forge-mac"
+            
+            # Create zip archive
+            zip -r Subtitle-Forge-macOS.zip "Subtitle Forge.app"
+            echo "✅ macOS archive created"
+          else
+            echo "❌ Failed to create macOS app bundle"
+            exit 1
+          fi
+
+      - name: Upload universal macOS app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Subtitle-Forge-macOS
+          path: ./fyne-gui/Subtitle-Forge-macOS.zip
+          retention-days: 1
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, create-universal-binary]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
