@@ -67,9 +67,20 @@ jobs:
         if: matrix.os == 'macos-latest'
         working-directory: ./fyne-gui
         run: |
-          # Build the binary first
-          echo "Building macOS binary..."
-          go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/${{ matrix.output_name }}
+          # Build ARM64 binary
+          echo "Building macOS ARM64 binary..."
+          GOARCH=arm64 go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-mac-arm64
+          
+          # Build AMD64 (Intel) binary
+          echo "Building macOS Intel (AMD64) binary..."
+          GOARCH=amd64 go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/subtitle-forge-mac-amd64
+          
+          # Create universal binary using lipo
+          echo "Creating universal binary..."
+          lipo -create -output build/${{ matrix.output_name }} build/subtitle-forge-mac-arm64 build/subtitle-forge-mac-amd64
+          
+          # Verify universal binary
+          lipo -info build/${{ matrix.output_name }}
           
           # Create the .app bundle using fyne package
           echo "Creating macOS app bundle..."
@@ -77,8 +88,9 @@ jobs:
           
           # Verify the app bundle was created
           if [ -d "Subtitle Forge.app" ]; then
-            echo "✅ macOS app bundle created successfully"
+            echo "✅ macOS universal app bundle created successfully"
             ls -la "Subtitle Forge.app"
+            lipo -info "Subtitle Forge.app/Contents/MacOS/subtitle-forge-mac"
           else
             echo "❌ Failed to create macOS app bundle"
             exit 1
