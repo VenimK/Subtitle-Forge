@@ -115,22 +115,40 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 	for _, asset := range releaseInfo.Assets {
 		switch runtime.GOOS {
 		case "darwin": // macOS
+			// Determine the correct macOS asset based on architecture
+			var expectedName string
+			if runtime.GOARCH == "arm64" {
+				expectedName = "Subtitle-Forge-macOS-ARM64.zip"
+			} else {
+				expectedName = "Subtitle-Forge-macOS-Intel.zip"
+			}
+
+			// Try exact match first
+			if asset.Name == expectedName {
+				downloadURL = asset.BrowserDownloadURL
+				assetName = asset.Name
+				goto FOUND_ASSET
+			}
+
+			// Fallback: try universal binary (for backward compatibility)
 			if asset.Name == "Subtitle-Forge-macOS.zip" {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
-				// Found exact match, no need to check other assets
 				goto FOUND_ASSET
-			} else if strings.Contains(asset.Name, "macos") || strings.Contains(asset.Name, "darwin") {
+			}
+
+			// Fallback: any macOS-related file
+			if strings.Contains(strings.ToLower(asset.Name), "macos") || strings.Contains(strings.ToLower(asset.Name), "darwin") {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
 			}
 		case "windows":
-			if strings.Contains(asset.Name, "windows") {
+			if strings.Contains(strings.ToLower(asset.Name), "windows") {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
 			}
 		case "linux":
-			if strings.Contains(asset.Name, "linux") {
+			if strings.Contains(strings.ToLower(asset.Name), "linux") {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
 			}
