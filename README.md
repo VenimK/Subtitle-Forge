@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.11
+# Subtitle Forge v2.0.12
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -58,11 +58,19 @@ This project provides two applications:
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
 
-## What's New in v2.0.3 ✨
+## What's New in v2.0.12 ✨
 
 ### 🐍 GST Integration - Professional Terminal-Based Translation!
 
-**v2.0.3** introduces full integration with `gst` (gemini-srt-translator), the powerful Python-based translation tool:
+**v2.0.12** introduces full integration with `gst` (gemini-srt-translator), the powerful Python-based translation tool:
+
+v2.0.12 Release Summary:
+
+✅ vobsub2srt - GUI installation with graphical sudo prompt
+✅ pgsrip - Complete installation and detection with Python fallback
+✅ UX - Cleaner Extract tab with visible results
+✅ Scripts - All installation scripts bundled in macOS app
+✅ Build - macOS 15 Intel runner (deprecated macos-13 removed)
 
 - **🖥️ Native Terminal Integration**: Opens macOS Terminal.app with beautiful, ANSI-colored interface
 - **✨ Live Progress Display**: Watch real-time translation progress with animated spinners and progress bars
@@ -106,11 +114,11 @@ Now with **two fully-functional AI translation providers**:
 
 ---
 
-## What's New in v2.0.2 ✨
+## What's New in v2.0.12 ✨
 
 ### 🚀 Professional-Grade AI Translation Improvements
 
-**v2.0.2** brings enterprise-level translation quality matching the best Python translators:
+**v2.0.12** brings enterprise-level translation quality matching the best Python translators:
 
 - **🔓 Safety Filters Disabled**: All content categories set to `BLOCK_NONE` - no more translation refusals on mature content
 - **📋 Structured JSON Schema**: Enforced request/response schema ensures consistent, reliable output
