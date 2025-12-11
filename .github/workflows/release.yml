@@ -16,7 +16,7 @@ jobs:
             output_name: subtitle-forge-mac-arm64
             artifact_name: Subtitle-Forge-macOS-ARM64
             arch: arm64
-          - os: macos-13
+          - os: macos-15-intel
             output_name: subtitle-forge-mac-x86_64
             artifact_name: Subtitle-Forge-macOS-Intel
             arch: x86_64
