@@ -39,7 +39,7 @@ type TrackItem struct {
 	Codec      string
 	Name       string
 	State      string
-	FilePath   string        // Source MKV file path (for batch processing)
+	FilePath   string // Source MKV file path (for batch processing)
 	Check      *widget.Check
 	Status     *widget.Label
 	ConvertOCR *widget.Check  // Option to convert PGS to SRT using OCR
@@ -432,8 +432,9 @@ func checkMkvmerge() bool {
 	return mkvmergeFound
 }
 
-	// Global variable to store the path to mkvextract
-	var mkvextractBinaryPath string
+// Global variable to store the path to mkvextract
+var mkvextractBinaryPath string
+
 // Check for MKVExtract installation
 func checkMkvextract() bool {
 	fmt.Println("[DEBUG] Checking for MKVExtract...")
@@ -1422,7 +1423,7 @@ func installDependencies(tools []string, w fyne.Window) {
 // detectSubtitleFormat detects the subtitle format based on file extension and content
 func detectSubtitleFormat(filePath string) string {
 	ext := strings.ToLower(filepath.Ext(filePath))
-	
+
 	switch ext {
 	case ".srt":
 		return "SRT"
@@ -1470,11 +1471,11 @@ func detectFormatByContent(filePath string) string {
 
 	scanner := bufio.NewScanner(file)
 	lineCount := 0
-	
+
 	for scanner.Scan() && lineCount < 10 {
 		line := strings.TrimSpace(scanner.Text())
 		lineCount++
-		
+
 		// SRT format detection
 		if regexp.MustCompile(`^\d+$`).MatchString(line) {
 			// Next line should be timestamp
@@ -1485,26 +1486,26 @@ func detectFormatByContent(filePath string) string {
 				}
 			}
 		}
-		
+
 		// ASS/SSA format detection
 		if strings.Contains(line, "[Script Info]") || strings.Contains(line, "[V4+ Styles]") {
 			return "ASS"
 		}
-		
+
 		// VTT format detection
 		if strings.HasPrefix(line, "WEBVTT") {
 			return "VTT"
 		}
 	}
-	
+
 	return "Unknown"
 }
 
 // convertSubtitleFile performs the actual subtitle conversion
-func convertSubtitleFile(inputPath, inputFormat, outputFormat, outputDir string, 
-	preserveTiming, preserveStyle bool, encoding string, 
+func convertSubtitleFile(inputPath, inputFormat, outputFormat, outputDir string,
+	preserveTiming, preserveStyle bool, encoding string,
 	progress *widget.ProgressBar, result *widget.Label) bool {
-	
+
 	// Determine output path
 	var outputPath string
 	if outputDir != "" {
@@ -1513,12 +1514,12 @@ func convertSubtitleFile(inputPath, inputFormat, outputFormat, outputDir string,
 	} else {
 		outputPath = strings.TrimSuffix(inputPath, filepath.Ext(inputPath)) + "." + outputFormat
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.1)
 		result.SetText(fmt.Sprintf("🔄 Converting %s to %s...", inputFormat, strings.ToUpper(outputFormat)))
 	})
-	
+
 	// Read input file
 	inputData, err := os.ReadFile(inputPath)
 	if err != nil {
@@ -1527,12 +1528,12 @@ func convertSubtitleFile(inputPath, inputFormat, outputFormat, outputDir string,
 		})
 		return false
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.3)
 		result.SetText("🔄 Parsing subtitle format...")
 	})
-	
+
 	// Parse input format
 	subtitles, err := parseSubtitleFile(string(inputData), inputFormat)
 	if err != nil {
@@ -1541,12 +1542,12 @@ func convertSubtitleFile(inputPath, inputFormat, outputFormat, outputDir string,
 		})
 		return false
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.6)
 		result.SetText("🔄 Converting to target format...")
 	})
-	
+
 	// Convert to output format
 	outputData, err := convertToFormat(subtitles, outputFormat, preserveTiming, preserveStyle)
 	if err != nil {
@@ -1555,12 +1556,12 @@ func convertSubtitleFile(inputPath, inputFormat, outputFormat, outputDir string,
 		})
 		return false
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.8)
 		result.SetText("🔄 Writing output file...")
 	})
-	
+
 	// Write output file
 	err = os.WriteFile(outputPath, []byte(outputData), 0644)
 	if err != nil {
@@ -1569,12 +1570,12 @@ func convertSubtitleFile(inputPath, inputFormat, outputFormat, outputDir string,
 		})
 		return false
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(1.0)
 		result.SetText(fmt.Sprintf("✅ Successfully converted to: %s", outputPath))
 	})
-	
+
 	return true
 }
 
@@ -1607,14 +1608,14 @@ func parseSubtitleFile(content, format string) ([]SubtitleEntry, error) {
 func parseSRT(content string) ([]SubtitleEntry, error) {
 	var entries []SubtitleEntry
 	lines := strings.Split(content, "\n")
-	
+
 	for i := 0; i < len(lines); {
 		// Skip empty lines
 		if strings.TrimSpace(lines[i]) == "" {
 			i++
 			continue
 		}
-		
+
 		// Parse index
 		indexStr := strings.TrimSpace(lines[i])
 		index, err := strconv.Atoi(indexStr)
@@ -1623,7 +1624,7 @@ func parseSRT(content string) ([]SubtitleEntry, error) {
 			continue
 		}
 		i++
-		
+
 		// Parse timestamp
 		if i >= len(lines) {
 			break
@@ -1635,14 +1636,14 @@ func parseSRT(content string) ([]SubtitleEntry, error) {
 			continue
 		}
 		i++
-		
+
 		// Parse text
 		var textLines []string
 		for i < len(lines) && strings.TrimSpace(lines[i]) != "" {
 			textLines = append(textLines, lines[i])
 			i++
 		}
-		
+
 		if len(textLines) > 0 {
 			entries = append(entries, SubtitleEntry{
 				Index:     index,
@@ -1652,7 +1653,7 @@ func parseSRT(content string) ([]SubtitleEntry, error) {
 			})
 		}
 	}
-	
+
 	return entries, nil
 }
 
@@ -1662,17 +1663,17 @@ func parseSRTTimestamp(line string) (time.Duration, time.Duration, error) {
 	if len(parts) != 2 {
 		return 0, 0, fmt.Errorf("invalid timestamp format: %s", line)
 	}
-	
+
 	start, err := parseSRTTime(strings.TrimSpace(parts[0]))
 	if err != nil {
 		return 0, 0, err
 	}
-	
+
 	end, err := parseSRTTime(strings.TrimSpace(parts[1]))
 	if err != nil {
 		return 0, 0, err
 	}
-	
+
 	return start, end, nil
 }
 
@@ -1684,17 +1685,17 @@ func parseSRTTime(timeStr string) (time.Duration, error) {
 	if len(matches) != 5 {
 		return 0, fmt.Errorf("invalid time format: %s", timeStr)
 	}
-	
+
 	hours, _ := strconv.Atoi(matches[1])
 	minutes, _ := strconv.Atoi(matches[2])
 	seconds, _ := strconv.Atoi(matches[3])
 	milliseconds, _ := strconv.Atoi(matches[4])
-	
+
 	duration := time.Duration(hours)*time.Hour +
 		time.Duration(minutes)*time.Minute +
 		time.Duration(seconds)*time.Second +
 		time.Duration(milliseconds)*time.Millisecond
-	
+
 	return duration, nil
 }
 
@@ -1702,18 +1703,18 @@ func parseSRTTime(timeStr string) (time.Duration, error) {
 func parseASS(content string) ([]SubtitleEntry, error) {
 	var entries []SubtitleEntry
 	lines := strings.Split(content, "\n")
-	
+
 	inEvents := false
 	index := 1
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		if line == "[Events]" {
 			inEvents = true
 			continue
 		}
-		
+
 		if inEvents && strings.HasPrefix(line, "Dialogue:") {
 			parts := strings.Split(line, ",")
 			if len(parts) >= 10 {
@@ -1721,16 +1722,16 @@ func parseASS(content string) ([]SubtitleEntry, error) {
 				if err != nil {
 					continue
 				}
-				
+
 				endTime, err := parseASSTime(parts[2])
 				if err != nil {
 					continue
 				}
-				
+
 				// Text is everything after the 9th comma
 				textParts := parts[9:]
 				text := strings.Join(textParts, ",")
-				
+
 				entries = append(entries, SubtitleEntry{
 					Index:     index,
 					StartTime: startTime,
@@ -1741,7 +1742,7 @@ func parseASS(content string) ([]SubtitleEntry, error) {
 			}
 		}
 	}
-	
+
 	return entries, nil
 }
 
@@ -1753,17 +1754,17 @@ func parseASSTime(timeStr string) (time.Duration, error) {
 	if len(matches) != 5 {
 		return 0, fmt.Errorf("invalid ASS time format: %s", timeStr)
 	}
-	
+
 	hours, _ := strconv.Atoi(matches[1])
 	minutes, _ := strconv.Atoi(matches[2])
 	seconds, _ := strconv.Atoi(matches[3])
 	centiseconds, _ := strconv.Atoi(matches[4])
-	
+
 	duration := time.Duration(hours)*time.Hour +
 		time.Duration(minutes)*time.Minute +
 		time.Duration(seconds)*time.Second +
 		time.Duration(centiseconds*10)*time.Millisecond
-	
+
 	return duration, nil
 }
 
@@ -1771,18 +1772,18 @@ func parseASSTime(timeStr string) (time.Duration, error) {
 func parseVTT(content string) ([]SubtitleEntry, error) {
 	var entries []SubtitleEntry
 	lines := strings.Split(content, "\n")
-	
+
 	index := 1
-	
+
 	for i := 0; i < len(lines); {
 		line := strings.TrimSpace(lines[i])
-		
+
 		// Skip WEBVTT header and empty lines
 		if line == "" || strings.HasPrefix(line, "WEBVTT") || strings.HasPrefix(line, "NOTE") {
 			i++
 			continue
 		}
-		
+
 		// Check if this line contains timestamp
 		if strings.Contains(line, "-->") {
 			startTime, endTime, err := parseVTTTimestamp(line)
@@ -1791,14 +1792,14 @@ func parseVTT(content string) ([]SubtitleEntry, error) {
 				continue
 			}
 			i++
-			
+
 			// Parse text
 			var textLines []string
 			for i < len(lines) && strings.TrimSpace(lines[i]) != "" {
 				textLines = append(textLines, lines[i])
 				i++
 			}
-			
+
 			if len(textLines) > 0 {
 				entries = append(entries, SubtitleEntry{
 					Index:     index,
@@ -1812,7 +1813,7 @@ func parseVTT(content string) ([]SubtitleEntry, error) {
 			i++
 		}
 	}
-	
+
 	return entries, nil
 }
 
@@ -1822,17 +1823,17 @@ func parseVTTTimestamp(line string) (time.Duration, time.Duration, error) {
 	if len(parts) != 2 {
 		return 0, 0, fmt.Errorf("invalid VTT timestamp format: %s", line)
 	}
-	
+
 	start, err := parseVTTTime(strings.TrimSpace(parts[0]))
 	if err != nil {
 		return 0, 0, err
 	}
-	
+
 	end, err := parseVTTTime(strings.TrimSpace(parts[1]))
 	if err != nil {
 		return 0, 0, err
 	}
-	
+
 	return start, end, nil
 }
 
@@ -1844,9 +1845,9 @@ func parseVTTTime(timeStr string) (time.Duration, error) {
 	if len(matches) < 4 {
 		return 0, fmt.Errorf("invalid VTT time format: %s", timeStr)
 	}
-	
+
 	var hours, minutes, seconds, milliseconds int
-	
+
 	if matches[1] != "" {
 		hours, _ = strconv.Atoi(matches[1])
 		minutes, _ = strconv.Atoi(matches[2])
@@ -1857,12 +1858,12 @@ func parseVTTTime(timeStr string) (time.Duration, error) {
 		seconds, _ = strconv.Atoi(matches[3])
 		milliseconds, _ = strconv.Atoi(matches[4])
 	}
-	
+
 	duration := time.Duration(hours)*time.Hour +
 		time.Duration(minutes)*time.Minute +
 		time.Duration(seconds)*time.Second +
 		time.Duration(milliseconds)*time.Millisecond
-	
+
 	return duration, nil
 }
 
@@ -1889,16 +1890,16 @@ func convertToFormat(entries []SubtitleEntry, format string, preserveTiming, pre
 // convertToSRT converts to SRT format
 func convertToSRT(entries []SubtitleEntry) string {
 	var result strings.Builder
-	
+
 	for _, entry := range entries {
 		result.WriteString(fmt.Sprintf("%d\n", entry.Index))
-		result.WriteString(fmt.Sprintf("%s --> %s\n", 
-			formatSRTTime(entry.StartTime), 
+		result.WriteString(fmt.Sprintf("%s --> %s\n",
+			formatSRTTime(entry.StartTime),
 			formatSRTTime(entry.EndTime)))
 		result.WriteString(entry.Text)
 		result.WriteString("\n\n")
 	}
-	
+
 	return result.String()
 }
 
@@ -1908,33 +1909,33 @@ func formatSRTTime(d time.Duration) string {
 	minutes := int(d.Minutes()) % 60
 	seconds := int(d.Seconds()) % 60
 	milliseconds := int(d.Nanoseconds()/1000000) % 1000
-	
+
 	return fmt.Sprintf("%02d:%02d:%02d,%03d", hours, minutes, seconds, milliseconds)
 }
 
 // convertToASS converts to ASS format (basic)
 func convertToASS(entries []SubtitleEntry, preserveStyle bool) string {
 	var result strings.Builder
-	
+
 	// ASS header
 	result.WriteString("[Script Info]\n")
 	result.WriteString("Title: Converted by Subtitle Forge\n")
 	result.WriteString("ScriptType: v4.00+\n\n")
-	
+
 	result.WriteString("[V4+ Styles]\n")
 	result.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
 	result.WriteString("Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1\n\n")
-	
+
 	result.WriteString("[Events]\n")
 	result.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
-	
+
 	for _, entry := range entries {
 		result.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n",
 			formatASSTime(entry.StartTime),
 			formatASSTime(entry.EndTime),
 			entry.Text))
 	}
-	
+
 	return result.String()
 }
 
@@ -1944,24 +1945,24 @@ func formatASSTime(d time.Duration) string {
 	minutes := int(d.Minutes()) % 60
 	seconds := int(d.Seconds()) % 60
 	centiseconds := int(d.Nanoseconds()/10000000) % 100
-	
+
 	return fmt.Sprintf("%d:%02d:%02d.%02d", hours, minutes, seconds, centiseconds)
 }
 
 // convertToVTT converts to WebVTT format
 func convertToVTT(entries []SubtitleEntry) string {
 	var result strings.Builder
-	
+
 	result.WriteString("WEBVTT\n\n")
-	
+
 	for _, entry := range entries {
-		result.WriteString(fmt.Sprintf("%s --> %s\n", 
-			formatVTTTime(entry.StartTime), 
+		result.WriteString(fmt.Sprintf("%s --> %s\n",
+			formatVTTTime(entry.StartTime),
 			formatVTTTime(entry.EndTime)))
 		result.WriteString(entry.Text)
 		result.WriteString("\n\n")
 	}
-	
+
 	return result.String()
 }
 
@@ -1971,7 +1972,7 @@ func formatVTTTime(d time.Duration) string {
 	minutes := int(d.Minutes()) % 60
 	seconds := int(d.Seconds()) % 60
 	milliseconds := int(d.Nanoseconds()/1000000) % 1000
-	
+
 	if hours > 0 {
 		return fmt.Sprintf("%02d:%02d:%02d.%03d", hours, minutes, seconds, milliseconds)
 	}
@@ -1981,26 +1982,26 @@ func formatVTTTime(d time.Duration) string {
 // convertToSSA converts to SSA format (SubStation Alpha v4)
 func convertToSSA(entries []SubtitleEntry, preserveStyle bool) string {
 	var result strings.Builder
-	
+
 	// SSA header
 	result.WriteString("[Script Info]\n")
 	result.WriteString("Title: Converted by Subtitle Forge\n")
 	result.WriteString("ScriptType: v4.00\n\n")
-	
+
 	result.WriteString("[V4 Styles]\n")
 	result.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, AlphaLevel, Encoding\n")
 	result.WriteString("Style: Default,Arial,20,16777215,255,0,0,0,0,1,2,0,2,10,10,10,0,1\n\n")
-	
+
 	result.WriteString("[Events]\n")
 	result.WriteString("Format: Marked, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
-	
+
 	for _, entry := range entries {
 		result.WriteString(fmt.Sprintf("Dialogue: Marked=0,%s,%s,Default,,0,0,0,,%s\n",
 			formatSSATime(entry.StartTime),
 			formatSSATime(entry.EndTime),
 			entry.Text))
 	}
-	
+
 	return result.String()
 }
 
@@ -2010,124 +2011,124 @@ func formatSSATime(d time.Duration) string {
 	minutes := int(d.Minutes()) % 60
 	seconds := int(d.Seconds()) % 60
 	centiseconds := int(d.Nanoseconds()/10000000) % 100
-	
+
 	return fmt.Sprintf("%d:%02d:%02d.%02d", hours, minutes, seconds, centiseconds)
 }
 
 // convertToSUB converts to SUB format (MicroDVD)
 func convertToSUB(entries []SubtitleEntry) string {
 	var result strings.Builder
-	
+
 	// MicroDVD uses frame numbers instead of time codes
 	// Assuming 25 FPS as default (can be made configurable)
 	fps := 25.0
-	
+
 	// First line should contain FPS info
 	result.WriteString(fmt.Sprintf("{1}{1}%.1f\n", fps))
-	
+
 	for _, entry := range entries {
 		startFrame := int(entry.StartTime.Seconds() * fps)
 		endFrame := int(entry.EndTime.Seconds() * fps)
-		
+
 		// Replace newlines with | for MicroDVD format
 		text := strings.ReplaceAll(entry.Text, "\n", "|")
-		
+
 		result.WriteString(fmt.Sprintf("{%d}{%d}%s\n", startFrame, endFrame, text))
 	}
-	
+
 	return result.String()
 }
 
 // convertToASSAdvanced converts to ASS format with advanced options
 func convertToASSAdvanced(entries []SubtitleEntry, options ConversionOptions) string {
 	var result strings.Builder
-	
+
 	// Parse font color (hex to decimal)
 	fontColor := parseHexColor(options.FontColor, 16777215) // Default white
-	
+
 	// ASS header
 	result.WriteString("[Script Info]\n")
 	result.WriteString("Title: Converted by Subtitle Forge\n")
 	result.WriteString("ScriptType: v4.00+\n\n")
-	
+
 	result.WriteString("[V4+ Styles]\n")
 	result.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-	
+
 	// Apply style template
 	bold, italic, outline, shadow := getStyleTemplate(options.StyleTemplate)
-	
+
 	result.WriteString(fmt.Sprintf("Style: Default,%s,%d,%d,&H000000FF,&H00000000,&H80000000,%d,%d,0,0,100,100,0,0,1,%d,%d,2,%d,%d,%d,1\n\n",
 		options.FontFamily, options.FontSize, fontColor, bold, italic, outline, shadow,
 		options.MarginLeft, options.MarginRight, options.MarginVertical))
-	
+
 	result.WriteString("[Events]\n")
 	result.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
-	
+
 	for _, entry := range entries {
 		result.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n",
 			formatASSTime(entry.StartTime),
 			formatASSTime(entry.EndTime),
 			entry.Text))
 	}
-	
+
 	return result.String()
 }
 
 // convertToSSAAdvanced converts to SSA format with advanced options
 func convertToSSAAdvanced(entries []SubtitleEntry, options ConversionOptions) string {
 	var result strings.Builder
-	
+
 	// Parse font color for SSA (different format)
 	fontColor := parseHexColorSSA(options.FontColor, 16777215)
-	
+
 	// SSA header
 	result.WriteString("[Script Info]\n")
 	result.WriteString("Title: Converted by Subtitle Forge\n")
 	result.WriteString("ScriptType: v4.00\n\n")
-	
+
 	result.WriteString("[V4 Styles]\n")
 	result.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, TertiaryColour, BackColour, Bold, Italic, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, AlphaLevel, Encoding\n")
-	
+
 	// Apply style template
 	bold, italic, outline, shadow := getStyleTemplate(options.StyleTemplate)
-	
+
 	result.WriteString(fmt.Sprintf("Style: Default,%s,%d,%d,255,0,0,%d,%d,1,%d,%d,2,%d,%d,%d,0,1\n\n",
 		options.FontFamily, options.FontSize, fontColor, bold, italic, outline, shadow,
 		options.MarginLeft, options.MarginRight, options.MarginVertical))
-	
+
 	result.WriteString("[Events]\n")
 	result.WriteString("Format: Marked, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
-	
+
 	for _, entry := range entries {
 		result.WriteString(fmt.Sprintf("Dialogue: Marked=0,%s,%s,Default,,0,0,0,,%s\n",
 			formatSSATime(entry.StartTime),
 			formatSSATime(entry.EndTime),
 			entry.Text))
 	}
-	
+
 	return result.String()
 }
 
 // convertToSUBAdvanced converts to SUB format with custom frame rate
 func convertToSUBAdvanced(entries []SubtitleEntry, options ConversionOptions) string {
 	var result strings.Builder
-	
+
 	// Use custom frame rate
 	fps := options.FrameRate
-	
+
 	// First line should contain FPS info
 	result.WriteString(fmt.Sprintf("{1}{1}%.3f\n", fps))
-	
+
 	for _, entry := range entries {
 		startFrame := int(entry.StartTime.Seconds() * fps)
 		endFrame := int(entry.EndTime.Seconds() * fps)
-		
+
 		// Replace newlines with | for MicroDVD format
 		text := strings.ReplaceAll(entry.Text, "\n", "|")
-		
+
 		result.WriteString(fmt.Sprintf("{%d}{%d}%s\n", startFrame, endFrame, text))
 	}
-	
+
 	return result.String()
 }
 
@@ -2136,12 +2137,12 @@ func parseHexColor(hexColor string, defaultColor int) int {
 	if !strings.HasPrefix(hexColor, "#") {
 		return defaultColor
 	}
-	
+
 	hexColor = strings.TrimPrefix(hexColor, "#")
 	if len(hexColor) != 6 {
 		return defaultColor
 	}
-	
+
 	if color, err := strconv.ParseInt(hexColor, 16, 64); err == nil {
 		// Convert RGB to BGR for ASS format
 		r := (color >> 16) & 0xFF
@@ -2151,7 +2152,7 @@ func parseHexColor(hexColor string, defaultColor int) int {
 		// So we swap R and B positions: BGR = B<<16 | G<<8 | R
 		return int(b<<16 | g<<8 | r)
 	}
-	
+
 	return defaultColor
 }
 
@@ -2160,12 +2161,12 @@ func parseHexColorSSA(hexColor string, defaultColor int) int {
 	if !strings.HasPrefix(hexColor, "#") {
 		return defaultColor
 	}
-	
+
 	hexColor = strings.TrimPrefix(hexColor, "#")
 	if len(hexColor) != 6 {
 		return defaultColor
 	}
-	
+
 	if color, err := strconv.ParseInt(hexColor, 16, 64); err == nil {
 		// Convert RGB to BGR for SSA format (same as ASS)
 		r := (color >> 16) & 0xFF
@@ -2175,7 +2176,7 @@ func parseHexColorSSA(hexColor string, defaultColor int) int {
 		// So we swap R and B positions: BGR = B<<16 | G<<8 | R
 		return int(b<<16 | g<<8 | r)
 	}
-	
+
 	return defaultColor
 }
 
@@ -2199,12 +2200,12 @@ func getStyleTemplate(template string) (bold, italic, outline, shadow int) {
 // parseHexColorSimple parses a hex color string to NRGBA
 func parseHexColorSimple(hexColor string) (color.NRGBA, bool) {
 	var col color.NRGBA
-	
+
 	// Remove the # prefix if present
 	if len(hexColor) > 0 && hexColor[0] == '#' {
 		hexColor = hexColor[1:]
 	}
-	
+
 	// Parse RGB format (6 characters)
 	if len(hexColor) == 6 {
 		r, err1 := strconv.ParseUint(hexColor[0:2], 16, 8)
@@ -2215,22 +2216,22 @@ func parseHexColorSimple(hexColor string) (color.NRGBA, bool) {
 			return col, true
 		}
 	}
-	
+
 	return col, false
 }
 
 // convertToTXT converts to plain text format
 func convertToTXT(entries []SubtitleEntry) string {
 	var result strings.Builder
-	
+
 	for _, entry := range entries {
-		result.WriteString(fmt.Sprintf("[%s - %s]\n", 
-			formatSRTTime(entry.StartTime), 
+		result.WriteString(fmt.Sprintf("[%s - %s]\n",
+			formatSRTTime(entry.StartTime),
 			formatSRTTime(entry.EndTime)))
 		result.WriteString(entry.Text)
 		result.WriteString("\n\n")
 	}
-	
+
 	return result.String()
 }
 
@@ -2268,9 +2269,9 @@ func parseInt(s string, defaultVal int) int {
 }
 
 // convertSubtitleFileAdvanced performs advanced subtitle conversion with all options
-func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir string, 
+func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir string,
 	options ConversionOptions, progress *widget.ProgressBar, result *widget.Label) bool {
-	
+
 	// Determine output path
 	var outputPath string
 	if outputDir != "" {
@@ -2279,12 +2280,12 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 	} else {
 		outputPath = strings.TrimSuffix(inputPath, filepath.Ext(inputPath)) + "." + outputFormat
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.1)
 		result.SetText(fmt.Sprintf("🔄 Converting %s to %s...", inputFormat, strings.ToUpper(outputFormat)))
 	})
-	
+
 	// Read input file
 	inputData, err := os.ReadFile(inputPath)
 	if err != nil {
@@ -2293,31 +2294,31 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 		})
 		return false
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.3)
 		result.SetText("🔄 Parsing subtitle format...")
 	})
-	
+
 	// Handle PGS format with OCR conversion
 	var subtitles []SubtitleEntry
 	if strings.ToUpper(inputFormat) == "PGS" {
 		fyne.Do(func() {
 			result.SetText("🔍 Converting PGS to SRT using OCR...")
 		})
-		
+
 		// Convert PGS to SRT using the same method as Extract Subtitles tab
 		tempSrtPath := strings.TrimSuffix(inputPath, filepath.Ext(inputPath)) + "_temp.srt"
-		
+
 		// Try pgsrip first if available
 		var cmd *exec.Cmd
 		var conversionMethod string
-		
+
 		// Ensure pgsrip is checked if path is empty
 		if pgsripBinaryPath == "" {
 			checkPgsrip() // This should set pgsripBinaryPath
 		}
-		
+
 		if pgsripBinaryPath != "" {
 			// Use pgsrip if available (same format as Extract Subtitles tab)
 			cmd = exec.Command(pgsripBinaryPath, inputPath, tempSrtPath, "--verbose")
@@ -2332,11 +2333,11 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 			})
 			return false
 		}
-		
+
 		fyne.Do(func() {
 			result.SetText(fmt.Sprintf("🔍 Converting PGS using %s...\nCommand: %s %s %s --verbose", conversionMethod, pgsripBinaryPath, inputPath, tempSrtPath))
 		})
-		
+
 		err := cmd.Run()
 		if err != nil {
 			fyne.Do(func() {
@@ -2344,7 +2345,7 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 			})
 			return false
 		}
-		
+
 		// Read the converted SRT file
 		srtData, err := os.ReadFile(tempSrtPath)
 		if err != nil {
@@ -2353,7 +2354,7 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 			})
 			return false
 		}
-		
+
 		// Parse the SRT content
 		subtitles, err = parseSRT(string(srtData))
 		if err != nil {
@@ -2363,10 +2364,10 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 			os.Remove(tempSrtPath) // Clean up
 			return false
 		}
-		
+
 		// Clean up temporary file
 		os.Remove(tempSrtPath)
-		
+
 		fyne.Do(func() {
 			result.SetText("✅ PGS successfully converted using OCR")
 		})
@@ -2381,20 +2382,20 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 			return false
 		}
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.5)
 		result.SetText("🔄 Applying conversion options...")
 	})
-	
+
 	// Apply conversion options
 	subtitles = applyConversionOptions(subtitles, options)
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.7)
 		result.SetText("🔄 Converting to target format...")
 	})
-	
+
 	// Convert to output format
 	outputData, err := convertToFormatAdvanced(subtitles, outputFormat, options)
 	if err != nil {
@@ -2403,12 +2404,12 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 		})
 		return false
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(0.9)
 		result.SetText("🔄 Writing output file...")
 	})
-	
+
 	// Write output file
 	err = os.WriteFile(outputPath, []byte(outputData), 0644)
 	if err != nil {
@@ -2417,28 +2418,28 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 		})
 		return false
 	}
-	
+
 	fyne.Do(func() {
 		progress.SetValue(1.0)
 		result.SetText(fmt.Sprintf("✅ Successfully converted to: %s", outputPath))
 	})
-	
+
 	return true
 }
 
 // applyConversionOptions applies various conversion options to subtitle entries
 func applyConversionOptions(entries []SubtitleEntry, options ConversionOptions) []SubtitleEntry {
 	var result []SubtitleEntry
-	
+
 	for _, entry := range entries {
 		newEntry := entry
-		
+
 		// Apply time offset
 		if options.TimeOffset != 0 {
 			offset := time.Duration(options.TimeOffset * float64(time.Second))
 			newEntry.StartTime += offset
 			newEntry.EndTime += offset
-			
+
 			// Ensure times don't go negative
 			if newEntry.StartTime < 0 {
 				newEntry.StartTime = 0
@@ -2447,10 +2448,10 @@ func applyConversionOptions(entries []SubtitleEntry, options ConversionOptions) 
 				newEntry.EndTime = 0
 			}
 		}
-		
+
 		// Apply text processing
 		text := newEntry.Text
-		
+
 		// Remove formatting tags if requested
 		if options.RemoveFormatting {
 			// Remove HTML tags
@@ -2458,7 +2459,7 @@ func applyConversionOptions(entries []SubtitleEntry, options ConversionOptions) 
 			// Remove ASS tags
 			text = regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(text, "")
 		}
-		
+
 		// Apply case conversion
 		switch options.TextCase {
 		case "UPPERCASE":
@@ -2468,11 +2469,11 @@ func applyConversionOptions(entries []SubtitleEntry, options ConversionOptions) 
 		case "Title Case":
 			text = strings.Title(strings.ToLower(text))
 		}
-		
+
 		newEntry.Text = text
 		result = append(result, newEntry)
 	}
-	
+
 	return result
 }
 
@@ -2507,22 +2508,22 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	var inputFormat string
 	var convertFiles []string
 	var convertBatchMode bool
-	
+
 	inputLabel := widget.NewLabel("No file selected")
 	inputLabel.Wrapping = fyne.TextWrapWord
-	
+
 	// File list for batch mode (declare early)
 	convertFileList := container.NewVBox()
 	convertFileListScroll := container.NewScroll(convertFileList)
 	convertFileListScroll.SetMinSize(fyne.NewSize(0, 150))
-	
+
 	// Function to update file list display (declare early)
 	updateConvertFileList := func() {
 		convertFileList.Objects = nil
 		for i, filePath := range convertFiles {
 			fileName := filepath.Base(filePath)
 			format := detectSubtitleFormat(filePath)
-			
+
 			// Create remove button for each file
 			removeBtn := widget.NewButton("Remove", nil)
 			fileIndex := i // Capture index for closure
@@ -2535,7 +2536,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 					for j, filePath := range convertFiles {
 						fileName := filepath.Base(filePath)
 						format := detectSubtitleFormat(filePath)
-						
+
 						// Create new remove button
 						newRemoveBtn := widget.NewButton("Remove", nil)
 						newFileIndex := j
@@ -2547,7 +2548,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 							}
 						}
 						newRemoveBtn.Importance = widget.LowImportance
-						
+
 						fileRow := container.NewBorder(nil, nil, nil, newRemoveBtn,
 							widget.NewLabel(fmt.Sprintf("%s (%s)", fileName, format)))
 						convertFileList.Add(fileRow)
@@ -2557,14 +2558,14 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 				}
 			}
 			removeBtn.Importance = widget.LowImportance
-			
+
 			fileRow := container.NewBorder(nil, nil, nil, removeBtn,
 				widget.NewLabel(fmt.Sprintf("%s (%s)", fileName, format)))
 			convertFileList.Add(fileRow)
 		}
 		convertFileList.Refresh()
 	}
-	
+
 	// Single file selection button
 	inputBtn := widget.NewButton("Select Subtitle File", func() {
 		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
@@ -2572,17 +2573,17 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 				return
 			}
 			defer reader.Close()
-			
+
 			// Switch to single file mode
 			convertBatchMode = false
 			convertFiles = nil
 			convertFileList.Objects = nil
 			convertFileList.Refresh()
-			
+
 			inputFile = reader.URI().Path()
 			fileName := filepath.Base(inputFile)
 			inputFormat = detectSubtitleFormat(inputFile)
-			
+
 			if strings.ToUpper(inputFormat) == "PGS" {
 				// Determine which conversion method will be used
 				var conversionInfo string
@@ -2593,7 +2594,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 				} else {
 					conversionInfo = "⚠️ No PGS conversion tool available. Please install pgsrip or PGS-to-SRT script."
 				}
-				
+
 				inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s\n\n🔍 PGS format detected! %s", fileName, inputFormat, conversionInfo))
 			} else {
 				inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s", fileName, inputFormat))
@@ -2601,23 +2602,23 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 		}, w)
 	})
 	inputBtn.Importance = widget.MediumImportance
-	
+
 	// Batch file selection button
 	batchBtn := widget.NewButton("Select Multiple Files (Batch)", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil || uri == nil {
 				return
 			}
-			
+
 			// Switch to batch mode
 			convertBatchMode = true
 			inputFile = ""
 			inputFormat = ""
-			
+
 			// Find all subtitle files in the directory
 			convertFiles = []string{}
 			supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt"}
-			
+
 			filepath.Walk(uri.Path(), func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					return nil
@@ -2633,14 +2634,14 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 				}
 				return nil
 			})
-			
+
 			// Update UI
 			updateConvertFileList()
 			inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch conversion", len(convertFiles)))
 		}, w)
 	})
 	batchBtn.Importance = widget.MediumImportance
-	
+
 	// Clear files button
 	clearBtn := widget.NewButton("Clear Files", func() {
 		convertBatchMode = false
@@ -2661,7 +2662,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	// Output directory selection
 	var outputDir string
 	outputLabel := widget.NewLabel("Output: Same as input file")
-	
+
 	outputBtn := widget.NewButton("Choose Output Directory", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil || uri == nil {
@@ -2675,10 +2676,10 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	// Basic conversion options
 	preserveTimingCheck := widget.NewCheck("Preserve original timing", nil)
 	preserveTimingCheck.SetChecked(true)
-	
+
 	preserveStyleCheck := widget.NewCheck("Preserve styling (when possible)", nil)
 	preserveStyleCheck.SetChecked(true)
-	
+
 	encodingSelect := widget.NewSelect([]string{"UTF-8", "UTF-16", "Windows-1252", "ISO-8859-1"}, nil)
 	encodingSelect.SetSelected("UTF-8")
 
@@ -2698,14 +2699,14 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 
 	// ASS/SSA specific options
 	fontFamilySelect := widget.NewSelect([]string{
-		"Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", 
+		"Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana",
 		"Tahoma", "Trebuchet MS", "Comic Sans MS", "Impact", "Lucida Console",
 		"Courier New", "Palatino", "Garamond", "Bookman", "Avant Garde",
 		"Century Gothic", "Franklin Gothic", "Optima", "Futura", "Calibri",
 		"Segoe UI", "Open Sans", "Roboto", "Lato", "Montserrat", "Custom...",
 	}, nil)
 	fontFamilySelect.SetSelected("Arial")
-	
+
 	// Set up custom font callback after creation
 	fontFamilySelect.OnChanged = func(selected string) {
 		// Handle custom font selection
@@ -2713,7 +2714,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 			// Show entry dialog for custom font
 			customEntry := widget.NewEntry()
 			customEntry.SetPlaceHolder("Enter custom font name")
-			
+
 			dialog.ShowForm("Custom Font", "OK", "Cancel", []*widget.FormItem{
 				widget.NewFormItem("Font Name", customEntry),
 			}, func(submitted bool) {
@@ -2741,17 +2742,17 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	var selectedFontColor = "#FFFFFF"
 	fontColorPreview := canvas.NewRectangle(color.NRGBA{R: 255, G: 255, B: 255, A: 255})
 	fontColorPreview.SetMinSize(fyne.NewSize(30, 25))
-	
+
 	fontColorLabel := widget.NewLabel("#FFFFFF")
 	fontColorLabel.TextStyle = fyne.TextStyle{Monospace: true}
-	
+
 	fontColorButton := widget.NewButton("Choose Color", func() {
 		// Parse current color
 		currentColor := color.NRGBA{R: 255, G: 255, B: 255, A: 255}
 		if col, ok := parseHexColorSimple(selectedFontColor); ok {
 			currentColor = col
 		}
-		
+
 		// Create color picker dialog
 		colorPicker := NewColorPicker(currentColor, func(newColor color.NRGBA) {
 			// Update preview and label
@@ -2760,7 +2761,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 			selectedFontColor = fmt.Sprintf("#%02X%02X%02X", newColor.R, newColor.G, newColor.B)
 			fontColorLabel.SetText(selectedFontColor)
 		})
-		
+
 		// Show color picker in dialog
 		dialog.ShowCustom("Choose Font Color", "OK", colorPicker, w)
 	})
@@ -2783,7 +2784,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	// Progress bar and result
 	convertProgress := widget.NewProgressBar()
 	convertProgress.Hide()
-	
+
 	convertResult := widget.NewLabel("")
 	convertResult.Wrapping = fyne.TextWrapWord
 	convertResultScroll := container.NewScroll(convertResult)
@@ -2800,7 +2801,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 			convertResult.SetText("❌ Please select files for batch conversion first")
 			return
 		}
-		
+
 		outputFormat := strings.ToLower(outputFormatSelect.Selected)
 		if outputFormat == "" {
 			convertResult.SetText("❌ Please select an output format")
@@ -2809,70 +2810,70 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 
 		// Show progress
 		convertProgress.Show()
-		
+
 		if convertBatchMode {
 			convertResult.SetText(fmt.Sprintf("🔄 Converting %d subtitle files...", len(convertFiles)))
 		} else {
 			convertResult.SetText("🔄 Converting subtitle file...")
 		}
-		
+
 		// Perform conversion in goroutine
 		go func() {
 			// Create conversion options struct
 			options := ConversionOptions{
-				PreserveTiming:    preserveTimingCheck.Checked,
-				PreserveStyle:     preserveStyleCheck.Checked,
-				Encoding:          encodingSelect.Selected,
-				FrameRate:         parseFloat(frameRateSelect.Selected, 25.0),
-				TimeOffset:        parseFloat(timeOffsetEntry.Text, 0.0),
-				RemoveFormatting:  removeFormattingCheck.Checked,
-				TextCase:          caseSelect.Selected,
-				FontFamily:        fontFamilySelect.Selected,
-				FontSize:          parseInt(fontSizeEntry.Text, 20),
-				FontColor:         selectedFontColor,
-				MarginLeft:        parseInt(marginLeftEntry.Text, 10),
-				MarginRight:       parseInt(marginRightEntry.Text, 10),
-				MarginVertical:    parseInt(marginVerticalEntry.Text, 10),
-				StyleTemplate:     styleTemplateSelect.Selected,
+				PreserveTiming:   preserveTimingCheck.Checked,
+				PreserveStyle:    preserveStyleCheck.Checked,
+				Encoding:         encodingSelect.Selected,
+				FrameRate:        parseFloat(frameRateSelect.Selected, 25.0),
+				TimeOffset:       parseFloat(timeOffsetEntry.Text, 0.0),
+				RemoveFormatting: removeFormattingCheck.Checked,
+				TextCase:         caseSelect.Selected,
+				FontFamily:       fontFamilySelect.Selected,
+				FontSize:         parseInt(fontSizeEntry.Text, 20),
+				FontColor:        selectedFontColor,
+				MarginLeft:       parseInt(marginLeftEntry.Text, 10),
+				MarginRight:      parseInt(marginRightEntry.Text, 10),
+				MarginVertical:   parseInt(marginVerticalEntry.Text, 10),
+				StyleTemplate:    styleTemplateSelect.Selected,
 			}
-			
+
 			if convertBatchMode {
 				// Batch conversion
 				successCount := 0
 				totalFiles := len(convertFiles)
-				
+
 				for i, filePath := range convertFiles {
 					fileFormat := detectSubtitleFormat(filePath)
 					fileName := filepath.Base(filePath)
-					
+
 					fyne.Do(func() {
 						convertProgress.SetValue(float64(i) / float64(totalFiles))
 						convertResult.SetText(fmt.Sprintf("🔄 Converting file %d/%d: %s", i+1, totalFiles, fileName))
 					})
-					
-					success := convertSubtitleFileAdvanced(filePath, fileFormat, outputFormat, outputDir, 
+
+					success := convertSubtitleFileAdvanced(filePath, fileFormat, outputFormat, outputDir,
 						options, convertProgress, convertResult)
-					
+
 					if success {
 						successCount++
 					}
 				}
-				
+
 				fyne.Do(func() {
 					convertProgress.SetValue(1.0)
 					convertProgress.Hide()
-					convertResult.SetText(fmt.Sprintf("✅ Batch conversion completed: %d/%d files successfully converted to %s format", 
+					convertResult.SetText(fmt.Sprintf("✅ Batch conversion completed: %d/%d files successfully converted to %s format",
 						successCount, totalFiles, strings.ToUpper(outputFormat)))
 				})
 			} else {
 				// Single file conversion
-				success := convertSubtitleFileAdvanced(inputFile, inputFormat, outputFormat, outputDir, 
+				success := convertSubtitleFileAdvanced(inputFile, inputFormat, outputFormat, outputDir,
 					options, convertProgress, convertResult)
-				
+
 				fyne.Do(func() {
 					convertProgress.Hide()
 					if success {
-						convertResult.SetText(fmt.Sprintf("✅ Successfully converted %s to %s format", 
+						convertResult.SetText(fmt.Sprintf("✅ Successfully converted %s to %s format",
 							filepath.Base(inputFile), strings.ToUpper(outputFormat)))
 					}
 				})
@@ -2955,11 +2956,11 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 		convertFiles = nil
 		convertFileList.Objects = nil
 		convertFileList.Refresh()
-		
+
 		inputFile = filePath
 		fileName := filepath.Base(inputFile)
 		inputFormat = detectSubtitleFormat(inputFile)
-		
+
 		if strings.ToUpper(inputFormat) == "PGS" {
 			// Determine which conversion method will be used
 			var conversionInfo string
@@ -2970,7 +2971,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 			} else {
 				conversionInfo = "⚠️ No PGS conversion tool available. Please install pgsrip or PGS-to-SRT script."
 			}
-			
+
 			inputLabel.SetText(fmt.Sprintf("File: %s\nDetected Format: %s\n\n🔍 PGS format detected! %s", fileName, inputFormat, conversionInfo))
 			convertResult.SetText("📝 PGS (Presentation Graphics Stream) is a bitmap subtitle format.\n\nThis format will be automatically converted to text using OCR when you click 'Convert Subtitle'.\n\nThe same conversion tools used in the Extract Subtitles tab will be used here.")
 		} else {
@@ -2978,18 +2979,18 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 			convertResult.SetText("File loaded successfully. Select output format and click 'Convert Subtitle' to begin.")
 		}
 	}
-	
+
 	// Create a function to handle multiple file drops for batch mode
 	loadDroppedFiles := func(filePaths []string) {
 		// Switch to batch mode
 		convertBatchMode = true
 		inputFile = ""
 		inputFormat = ""
-		
+
 		// Filter for supported subtitle files
 		convertFiles = []string{}
 		supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt"}
-		
+
 		for _, filePath := range filePaths {
 			ext := strings.ToLower(filepath.Ext(filePath))
 			for _, supportedExt := range supportedExts {
@@ -2999,7 +3000,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 				}
 			}
 		}
-		
+
 		// Update UI
 		updateConvertFileList()
 		inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch conversion", len(convertFiles)))
@@ -3334,12 +3335,12 @@ func loadTracksForFile(mkvPath string) bool {
 	} else {
 		cmd = exec.Command("mkvmerge", "-J", mkvPath)
 	}
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return false
 	}
-	
+
 	// Parse JSON output (simplified - just check if we have tracks)
 	return len(output) > 0 && strings.Contains(string(output), "tracks")
 }
@@ -3353,12 +3354,12 @@ func extractAllSubtitleTracks(mkvPath, outDir string) bool {
 	} else {
 		cmd = exec.Command("mkvmerge", "-J", mkvPath)
 	}
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return false
 	}
-	
+
 	// Parse JSON to find subtitle tracks
 	var mkvInfo struct {
 		Tracks []struct {
@@ -3366,21 +3367,21 @@ func extractAllSubtitleTracks(mkvPath, outDir string) bool {
 			Type       string `json:"type"`
 			Codec      string `json:"codec"`
 			Properties struct {
-				Language string `json:"language"`
+				Language  string `json:"language"`
 				TrackName string `json:"track_name"`
 			} `json:"properties"`
 		} `json:"tracks"`
 	}
-	
+
 	err = json.Unmarshal(output, &mkvInfo)
 	if err != nil {
 		return false
 	}
-	
+
 	// Extract subtitle tracks
 	mkvBaseName := filepath.Base(mkvPath)
 	mkvBaseName = strings.TrimSuffix(mkvBaseName, filepath.Ext(mkvBaseName))
-	
+
 	successCount := 0
 	for _, track := range mkvInfo.Tracks {
 		if track.Type == "subtitles" {
@@ -3402,14 +3403,14 @@ func extractAllSubtitleTracks(mkvPath, outDir string) bool {
 			default:
 				ext = "srt" // Default to SRT
 			}
-			
+
 			lang := track.Properties.Language
 			if lang == "" {
 				lang = "und"
 			}
-			
+
 			outFile := fmt.Sprintf("%s.track%d_%s.%s", mkvBaseName, track.ID, lang, ext)
-			
+
 			// Extract the track
 			var extractCmd *exec.Cmd
 			if mkvextractBinaryPath != "" {
@@ -3418,14 +3419,14 @@ func extractAllSubtitleTracks(mkvPath, outDir string) bool {
 				extractCmd = exec.Command("mkvextract", "tracks", mkvPath, fmt.Sprintf("%d:%s", track.ID, outFile))
 			}
 			extractCmd.Dir = outDir
-			
+
 			_, err := extractCmd.CombinedOutput()
 			if err == nil {
 				successCount++
 			}
 		}
 	}
-	
+
 	return successCount > 0
 }
 
@@ -3823,6 +3824,16 @@ func main() {
 										execDir := filepath.Dir(execPath)
 										scriptPath := filepath.Join(execDir, "install_vobsub2srt.sh")
 										cmd = exec.Command("bash", scriptPath)
+									case "pgsrip":
+										// Get the script path relative to the executable
+										execPath, err := os.Executable()
+										if err != nil {
+											fmt.Println("[ERROR] Failed to get executable path:", err)
+											execPath = "."
+										}
+										execDir := filepath.Dir(execPath)
+										scriptPath := filepath.Join(execDir, "install_pgsrip.sh")
+										cmd = exec.Command("bash", scriptPath)
 									default:
 										fmt.Printf("[ERROR] Unknown tool: %s\n", tool)
 										failureCount++
@@ -3891,7 +3902,7 @@ func main() {
 			container := item.(*fyne.Container)
 			label := container.Objects[0].(*widget.Label)
 			removeBtn := container.Objects[1].(*widget.Button)
-			
+
 			label.SetText(filepath.Base(mkvFiles[id]))
 			removeBtn.OnTapped = func() {
 				// Remove file from list
@@ -3940,7 +3951,7 @@ func main() {
 			mkvFiles = []string{}
 			fileList.Refresh()
 			fileListContainer.Hide()
-			
+
 			mkvPath = filePath
 			selectedFile.SetText(mkvPath)
 
@@ -3969,7 +3980,7 @@ func main() {
 			}
 
 			folderPath := uri.Path()
-			
+
 			// Find all MKV files in the selected folder
 			var foundFiles []string
 			err = filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
@@ -4009,7 +4020,7 @@ func main() {
 
 			selectedFile.SetText(fmt.Sprintf("%d MKV files selected for batch processing", len(mkvFiles)))
 			result.SetText(setLogMessage(LogInfo, "Batch Mode Enabled", fmt.Sprintf("Found %d MKV files. Click 'Start Extraction' to process all files.", len(mkvFiles))))
-			
+
 		}, w)
 	})
 
@@ -4048,7 +4059,7 @@ func main() {
 				dialog.ShowError(fmt.Errorf("Please select MKV files for batch processing first."), w)
 				return
 			}
-			
+
 			// Load tracks from all MKV files
 			go func() {
 				fyne.Do(func() {
@@ -4056,17 +4067,17 @@ func main() {
 					progress.Max = float64(len(mkvFiles))
 					progress.SetValue(0)
 				})
-				
+
 				// Clear previous tracks
 				trackItems = []*TrackItem{}
-				
+
 				totalTracks := 0
 				for fileIndex, mkvFile := range mkvFiles {
 					fyne.Do(func() {
 						currentTrackLabel.SetText(fmt.Sprintf("Analyzing file %d/%d: %s", fileIndex+1, len(mkvFiles), filepath.Base(mkvFile)))
 						progress.SetValue(float64(fileIndex))
 					})
-					
+
 					// Get track info for this file
 					var cmd *exec.Cmd
 					if mkvmergeBinaryPath != "" {
@@ -4074,7 +4085,7 @@ func main() {
 					} else {
 						cmd = exec.Command("mkvmerge", "-J", mkvFile)
 					}
-					
+
 					output, err := cmd.Output()
 					if err != nil {
 						fyne.Do(func() {
@@ -4082,7 +4093,7 @@ func main() {
 						})
 						continue
 					}
-					
+
 					// Parse JSON output
 					var mkvInfo struct {
 						Tracks []struct {
@@ -4095,7 +4106,7 @@ func main() {
 							} `json:"properties"`
 						} `json:"tracks"`
 					}
-					
+
 					err = json.Unmarshal(output, &mkvInfo)
 					if err != nil {
 						fyne.Do(func() {
@@ -4103,7 +4114,7 @@ func main() {
 						})
 						continue
 					}
-					
+
 					// Add subtitle tracks to the list
 					for _, track := range mkvInfo.Tracks {
 						if track.Type == "subtitles" {
@@ -4111,12 +4122,12 @@ func main() {
 							if lang == "" {
 								lang = "und"
 							}
-							
+
 							trackName := track.Properties.TrackName
 							if trackName == "" {
 								trackName = "Untitled"
 							}
-							
+
 							// Create track item with file info
 							trackItem := &TrackItem{
 								Num:      track.ID,
@@ -4127,30 +4138,30 @@ func main() {
 								Check:    widget.NewCheck("", nil),
 								Status:   widget.NewLabel("Ready"),
 							}
-							
+
 							// Handle PGS subtitles with OCR option
 							if track.Codec == "hdmv_pgs_subtitle" {
 								trackItem.ConvertOCR = widget.NewCheck("", nil)
 							}
-							
+
 							trackItems = append(trackItems, trackItem)
 							totalTracks++
 						}
 					}
 				}
-				
+
 				// Update UI with all tracks
 				fyne.Do(func() {
 					progress.SetValue(float64(len(mkvFiles)))
 					currentTrackLabel.SetText(fmt.Sprintf("Found %d subtitle tracks across %d files", totalTracks, len(mkvFiles)))
-					
+
 					// Update track list
 					trackList.Objects = nil
 					for _, tt := range trackItems {
 						// Show file name + track info
 						fileName := filepath.Base(tt.FilePath)
 						trackInfo := widget.NewLabel(fmt.Sprintf("%s - Track %d: %s (%s) %s", fileName, tt.Num, tt.Lang, tt.Codec, tt.Name))
-						
+
 						if tt.ConvertOCR != nil {
 							// For PGS subtitles, show OCR option
 							ocrLabel := widget.NewLabel("Convert to SRT")
@@ -4163,13 +4174,13 @@ func main() {
 						}
 					}
 					trackList.Refresh()
-					
+
 					result.SetText(setLogMessage(LogSuccess, "Batch Tracks Loaded", fmt.Sprintf("Found %d subtitle tracks across %d MKV files. Select the tracks you want to extract, then click 'Start Extraction'.", totalTracks, len(mkvFiles))))
 				})
 			}()
 			return
 		}
-		
+
 		// Single file mode
 		if mkvPath == "" {
 			dialog.ShowError(fmt.Errorf("Please select or drag & drop an MKV file first."), w)
@@ -4359,27 +4370,27 @@ func main() {
 				dialog.ShowError(fmt.Errorf("Please select MKV files and output directory for batch processing."), w)
 				return
 			}
-			
+
 			// Start batch processing
 			go func() {
 				totalFiles := len(mkvFiles)
 				successCount := 0
 				failureCount := 0
-				
+
 				fyne.Do(func() {
 					result.SetText(setLogMessage(LogInfo, "Batch Processing Started", fmt.Sprintf("Processing %d MKV files...", totalFiles)))
 					progress.Max = float64(totalFiles)
 					progress.SetValue(0)
 				})
-				
+
 				for fileIndex, currentMkvPath := range mkvFiles {
 					mkvPath = currentMkvPath // Set current file for processing
-					
+
 					fyne.Do(func() {
 						currentTrackLabel.SetText(fmt.Sprintf("Processing file %d/%d: %s", fileIndex+1, totalFiles, filepath.Base(currentMkvPath)))
 						progress.SetValue(float64(fileIndex))
 					})
-					
+
 					// Load tracks for current file (simplified check)
 					if !loadTracksForFile(currentMkvPath) {
 						failureCount++
@@ -4388,7 +4399,7 @@ func main() {
 						})
 						continue
 					}
-					
+
 					// Extract selected tracks for this file
 					selectedTracksForFile := []*TrackItem{}
 					for _, t := range trackItems {
@@ -4396,21 +4407,21 @@ func main() {
 							selectedTracksForFile = append(selectedTracksForFile, t)
 						}
 					}
-					
+
 					if len(selectedTracksForFile) == 0 {
 						fyne.Do(func() {
 							result.SetText(result.Text + fmt.Sprintf("\n⏭️ Skipped (no tracks selected): %s", filepath.Base(currentMkvPath)))
 						})
 						continue
 					}
-					
+
 					// Extract selected tracks
 					fileSuccess := true
 					for _, track := range selectedTracksForFile {
 						fyne.Do(func() {
 							track.Status.SetText("Extracting...")
 						})
-						
+
 						// Determine file extension based on codec with comprehensive matching
 						var ext string
 						codecLower := strings.ToLower(track.Codec)
@@ -4432,11 +4443,11 @@ func main() {
 						default:
 							ext = "srt"
 						}
-						
+
 						mkvBaseName := filepath.Base(currentMkvPath)
 						mkvBaseName = strings.TrimSuffix(mkvBaseName, filepath.Ext(mkvBaseName))
 						outFile := fmt.Sprintf("%s.track%d_%s.%s", mkvBaseName, track.Num, track.Lang, ext)
-						
+
 						// Extract the track
 						var extractCmd *exec.Cmd
 						if mkvextractBinaryPath != "" {
@@ -4445,7 +4456,7 @@ func main() {
 							extractCmd = exec.Command("mkvextract", "tracks", currentMkvPath, fmt.Sprintf("%d:%s", track.Num, outFile))
 						}
 						extractCmd.Dir = outDir
-						
+
 						_, err := extractCmd.CombinedOutput()
 						if err != nil {
 							fileSuccess = false
@@ -4458,7 +4469,7 @@ func main() {
 							})
 						}
 					}
-					
+
 					if fileSuccess {
 						successCount++
 						fyne.Do(func() {
@@ -4471,14 +4482,14 @@ func main() {
 						})
 					}
 				}
-				
+
 				// Final batch processing results
 				fyne.Do(func() {
 					progress.SetValue(float64(totalFiles))
 					currentTrackLabel.SetText("Batch processing completed")
 					result.SetText(result.Text + fmt.Sprintf("\n\n🎬 Batch Processing Complete\n✅ Success: %d files\n❌ Failed: %d files\n📁 Output: %s", successCount, failureCount, outDir))
 				})
-				
+
 				// Show completion notification
 				fyne.CurrentApp().SendNotification(&fyne.Notification{
 					Title:   "Batch Processing Complete",
@@ -4487,7 +4498,7 @@ func main() {
 			}()
 			return
 		}
-		
+
 		// Single file processing mode
 		if mkvPath == "" || outDir == "" {
 			dialog.ShowError(fmt.Errorf("Please select both MKV file and output directory."), w)
@@ -4769,7 +4780,7 @@ func main() {
 						// Get absolute paths for input and output
 						absInputPath := filepath.Join(outDir, tempPgsFile)
 						absOutputPath := filepath.Join(outDir, outFile)
-						
+
 						// Check if pgsrip is available and use it if possible
 						pgsripAvailable := checkPgsrip()
 						if pgsripAvailable {
@@ -4777,12 +4788,12 @@ func main() {
 								result.SetText(result.Text + "\n\n=== Using pgsrip for conversion ===\n")
 								statusLabel.SetText("Starting pgsrip conversion...")
 							})
-							
+
 							// Set up conversion settings - simplified
 							convSettings := PgsConversionSettings{
 								Verbose: true, // Enable verbose logging
 							}
-							
+
 							// Call our pgsrip conversion function
 							err = convertPgsWithPgsrip(absInputPath, absOutputPath, langCode, result, statusLabel, conversionProgress, convSettings)
 							if err == nil {
@@ -4799,14 +4810,14 @@ func main() {
 								// Fall back to pgs-to-srt
 							}
 						}
-						
+
 						// Fall back to pgs-to-srt if pgsrip not available or failed
 						// Use the configured PGS-to-SRT script with Deno
 						pgsToSrtScript := pgsToSrtScriptPath
-						
+
 						// Define the path to the trained data file with the selected language
 						trainedDataPath := filepath.Join(filepath.Dir(pgsToSrtScript), "tessdata_fast", langCode+".traineddata")
-						
+
 						// Check if the script exists
 						fyne.Do(func() {
 							result.SetText(result.Text + fmt.Sprintf("\n\n[DEBUG] Checking if script exists at: %s", pgsToSrtScript))
@@ -6056,7 +6067,6 @@ func main() {
 		filterTracks(text)
 	}
 
-
 	// Track sorting dropdown
 	sortSelect := widget.NewSelect([]string{
 		"Default Order",
@@ -6084,7 +6094,7 @@ func main() {
 		} else {
 			// Convert filter text to lowercase for case-insensitive comparison
 			lowerFilter := strings.ToLower(filterText)
-			
+
 			// Add only tracks that match the filter
 			for _, t := range trackItems {
 				// Check if the track matches the filter criteria
@@ -6093,13 +6103,13 @@ func main() {
 					strings.Contains(strings.ToLower(t.Name), lowerFilter) ||
 					strings.Contains(strings.ToLower(fmt.Sprintf("Track %d", t.Num)), lowerFilter) ||
 					strings.Contains(strings.ToLower(filepath.Base(t.FilePath)), lowerFilter)
-				
+
 				if matchesFilter {
 					tracksToShow = append(tracksToShow, t)
 				}
 			}
 		}
-		
+
 		// Apply sorting based on current selection
 		if sortSelect.Selected != "Default Order" {
 			switch sortSelect.Selected {
@@ -6147,7 +6157,7 @@ func main() {
 				})
 			}
 		}
-		
+
 		// Display the sorted/filtered tracks
 		for _, t := range tracksToShow {
 			// Create row for this track
@@ -6279,16 +6289,16 @@ func main() {
 					break
 				}
 			}
-			
+
 			if !isSupported {
 				dialog.ShowInformation("Invalid File", "Please select a subtitle file (.srt, .ass, .ssa, .vtt, .sub, .sup, .txt)", w)
 				return
 			}
 
 			insertSubtitleFileLabel.SetText(filePath)
-	}, w)
-	fd.SetFilter(storage.NewExtensionFileFilter([]string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt", ".smi", ".mpl", ".tmp"}))
-	fd.Show()
+		}, w)
+		fd.SetFilter(storage.NewExtensionFileFilter([]string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".sup", ".txt", ".smi", ".mpl", ".tmp"}))
+		fd.Show()
 	})
 
 	// Create language selection for subtitle insertion
@@ -6349,7 +6359,7 @@ func main() {
 
 	// Detect system language
 	systemLang := getSystemLanguage(languages)
-	
+
 	// Create language dropdown
 	selectedLang := systemLang
 	langDropdown := widget.NewSelect(langNames, func(selected string) {
@@ -7020,7 +7030,7 @@ func main() {
 	// Create AI Translation tab
 	aiTranslationTabContent := createAITranslationTab(w, a)
 	aiTranslationScroll := container.NewScroll(aiTranslationTabContent)
-	
+
 	// Create tabs with scrollable content
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Extract Subtitles", extractScroll),
@@ -7060,7 +7070,7 @@ func main() {
 								break
 							}
 						}
-						
+
 						if isSupported {
 							// Handle subtitle file drop
 							insertSubtitleFileLabel.SetText(filePath)
@@ -7086,16 +7096,16 @@ func main() {
 				if len(uris) == 0 {
 					return
 				}
-				
+
 				// Accept subtitle files for AI translation
 				subtitleExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub"}
 				var subtitleFiles []string
-				
+
 				// Process all dropped files
 				for _, uri := range uris {
 					filePath := uri.Path()
 					fileExt := strings.ToLower(filepath.Ext(filePath))
-					
+
 					isSubtitleFile := false
 					for _, ext := range subtitleExts {
 						if fileExt == ext {
@@ -7103,12 +7113,12 @@ func main() {
 							break
 						}
 					}
-					
+
 					if isSubtitleFile {
 						subtitleFiles = append(subtitleFiles, filePath)
 					}
 				}
-				
+
 				// Add all valid subtitle files
 				if len(subtitleFiles) > 0 {
 					if aiTranslationAddFile != nil {
@@ -7116,7 +7126,7 @@ func main() {
 							aiTranslationAddFile(filePath)
 						}
 					}
-					
+
 					if len(subtitleFiles) == 1 {
 						a.SendNotification(&fyne.Notification{
 							Title:   "Subtitle File Added",
@@ -7141,13 +7151,13 @@ func main() {
 				if len(uris) == 0 {
 					return
 				}
-				
+
 				// Check if it's a single file or multiple files
 				if len(uris) == 1 {
 					// Single file - use existing single file logic
 					filePath := uris[0].Path()
 					fileExt := strings.ToLower(filepath.Ext(filePath))
-					
+
 					// Check if it's a supported subtitle format
 					supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx", ".sup", ".txt"}
 					isSupported := false
@@ -7157,7 +7167,7 @@ func main() {
 							break
 						}
 					}
-					
+
 					if isSupported {
 						// Load the file into the Convert tab
 						loadConvertFile(filePath)
@@ -7175,7 +7185,7 @@ func main() {
 					// Multiple files - use batch mode
 					var subtitleFiles []string
 					supportedExts := []string{".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx", ".sup", ".txt"}
-					
+
 					for _, uri := range uris {
 						filePath := uri.Path()
 						fileExt := strings.ToLower(filepath.Ext(filePath))
@@ -7186,7 +7196,7 @@ func main() {
 							}
 						}
 					}
-					
+
 					if len(subtitleFiles) > 0 {
 						// Load multiple files for batch conversion
 						loadConvertFiles(subtitleFiles)
