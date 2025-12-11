@@ -49,6 +49,28 @@ fi
 # Navigate to the cloned repository
 cd VobSub2SRT || exit 1
 
+# Fix CMakeLists.txt to update cmake_minimum_required version
+echo "Patching CMakeLists.txt..."
+if [ -f "CMakeLists.txt" ]; then
+    # Replace any old cmake_minimum_required version with 3.5
+    sed -i.bak 's/cmake_minimum_required.*$/cmake_minimum_required(VERSION 3.5)/g' CMakeLists.txt
+    # Move cmake_minimum_required to the very first line if it's not already
+    if head -n 1 CMakeLists.txt | grep -q "cmake_minimum_required"; then
+        echo "✅ CMakeLists.txt already has cmake_minimum_required at the top"
+    else
+        # Extract cmake_minimum_required line and remove it from its current position
+        CMAKE_LINE=$(grep "cmake_minimum_required" CMakeLists.txt | head -n 1)
+        grep -v "cmake_minimum_required" CMakeLists.txt > CMakeLists.txt.tmp
+        # Add it at the top
+        echo "$CMAKE_LINE" > CMakeLists.txt.new
+        cat CMakeLists.txt.tmp >> CMakeLists.txt.new
+        mv CMakeLists.txt.new CMakeLists.txt
+        rm -f CMakeLists.txt.tmp
+        echo "✅ Moved cmake_minimum_required to top of CMakeLists.txt"
+    fi
+    rm -f CMakeLists.txt.bak
+fi
+
 # Create build directory
 echo "Creating build directory..."
 mkdir -p build
@@ -56,7 +78,7 @@ cd build || exit 1
 
 # Run cmake
 echo "Running cmake..."
-cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
+cmake ..
 if [ $? -ne 0 ]; then
     echo "Failed to configure with cmake."
     echo "This might be due to missing dependencies or configuration issues."
