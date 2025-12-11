@@ -1026,6 +1026,26 @@ func installDependency(w fyne.Window, tool string) {
 
 					cmd = exec.Command("bash", scriptPath)
 					installDesc = "Installing VobSub2SRT (may require additional dependencies)"
+				case "pgsrip":
+					// Use the custom installation script for pgsrip
+					execPath, err := os.Executable()
+					if err != nil {
+						fmt.Println("[ERROR] Failed to get executable path:", err)
+					}
+
+					scriptPath := filepath.Join(filepath.Dir(execPath), "install_pgsrip.sh")
+
+					// Check if script exists
+					if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+						progress.Hide()
+						dialog.ShowError(
+							fmt.Errorf("Installation script not found: %s", scriptPath),
+							w)
+						return
+					}
+
+					cmd = exec.Command("bash", scriptPath)
+					installDesc = "Installing pgsrip Python package for PGS OCR"
 				case "pgstoSRT", "pgs-to-srt", "pgstoSrt", "pgstosrt":
 					// Create a temp directory for creating the installation script
 					tempDir, err := os.MkdirTemp("", "pgs-to-srt-install")
@@ -1383,6 +1403,16 @@ func installDependencies(tools []string, w fyne.Window) {
 				}
 				execDir := filepath.Dir(execPath)
 				scriptPath := filepath.Join(execDir, "install_vobsub2srt.sh")
+				cmd = exec.Command("bash", scriptPath)
+			case "pgsrip":
+				// Get the script path relative to the executable
+				execPath, err := os.Executable()
+				if err != nil {
+					fmt.Println("[ERROR] Failed to get executable path:", err)
+					execPath = "."
+				}
+				execDir := filepath.Dir(execPath)
+				scriptPath := filepath.Join(execDir, "install_pgsrip.sh")
 				cmd = exec.Command("bash", scriptPath)
 			default:
 				fmt.Printf("[ERROR] Unknown tool: %s\n", tool)

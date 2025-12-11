@@ -161,6 +161,34 @@ func checkPgsrip() bool {
 		}
 	}
 
+	// If still not found, try python3 -m pgsrip as fallback
+	if !pgsripFound {
+		fmt.Println("[DEBUG] Trying python3 -m pgsrip as fallback...")
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "Trying python3 -m pgsrip as fallback...\n")
+		}
+
+		// Check if python3 exists
+		if pythonPath, err := exec.LookPath("python3"); err == nil {
+			// Try running pgsrip via python3 -m
+			cmd := exec.Command(pythonPath, "-m", "pgsrip", "--version")
+			output, err := cmd.CombinedOutput()
+			if err == nil && len(output) > 0 {
+				pgsripFound = true
+				// Store "python3 -m pgsrip" as the command to use
+				pgsripBinaryPath = "python3 -m pgsrip"
+				fmt.Println("[DEBUG] pgsrip found via python3 module:", string(output))
+				if debugLogger != nil {
+					fmt.Fprintf(debugLogger, "pgsrip found via python3 module: %s\n", string(output))
+				}
+			} else if debugLogger != nil {
+				fmt.Fprintf(debugLogger, "python3 -m pgsrip failed: %v\n", err)
+			}
+		} else if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "python3 not found: %v\n", err)
+		}
+	}
+
 	// Print the final status
 	fmt.Println("[DEBUG] Final pgsrip found status:", pgsripFound, "Path:", pgsripBinaryPath)
 	if debugLogger != nil {
@@ -202,8 +230,16 @@ func convertPgsWithPgsrip(pgsFilePath, outFilePath, langCode string, result *wid
 		result.SetText(result.Text + "\nCommand: " + commandStr)
 	})
 
-	// Run the command
-	cmd := exec.Command(pgsripBinaryPath, cmdArgs...)
+	// Run the command - handle both direct executable and "python3 -m pgsrip" format
+	var cmd *exec.Cmd
+	if pgsripBinaryPath == "python3 -m pgsrip" {
+		// Use python3 -m pgsrip format
+		args := append([]string{"-m", "pgsrip"}, cmdArgs...)
+		cmd = exec.Command("python3", args...)
+	} else {
+		// Use direct executable path
+		cmd = exec.Command(pgsripBinaryPath, cmdArgs...)
+	}
 	cmd.Dir = filepath.Dir(pgsFilePath) // Set working directory to where the PGS file is
 
 	// Set up a pipe to capture output
