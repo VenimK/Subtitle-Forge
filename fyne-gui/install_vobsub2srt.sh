@@ -97,11 +97,24 @@ fi
 
 # Install (may require sudo)
 echo "Installing (may require sudo)..."
-sudo make install
-if [ $? -ne 0 ]; then
-    echo "Failed to install. Try running this script with sudo."
-    echo "Command: sudo ./install_vobsub2srt.sh"
-    exit 1
+
+# Check if we're running in a GUI context (no TTY)
+if [ ! -t 0 ]; then
+    # Running from GUI - use osascript for graphical sudo prompt
+    echo "Running from GUI context - using graphical password prompt..."
+    osascript -e 'do shell script "cd '"$(pwd)"' && make install" with administrator privileges'
+    if [ $? -ne 0 ]; then
+        echo "Failed to install via osascript."
+        exit 1
+    fi
+else
+    # Running from terminal - use regular sudo
+    sudo make install
+    if [ $? -ne 0 ]; then
+        echo "Failed to install. Try running this script with sudo."
+        echo "Command: sudo ./install_vobsub2srt.sh"
+        exit 1
+    fi
 fi
 
 # Verify installation
