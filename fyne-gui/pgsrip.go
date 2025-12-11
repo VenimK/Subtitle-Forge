@@ -39,7 +39,7 @@ func checkPgsrip() bool {
 	gopathBin := filepath.Join(homeDir, "go", "bin")
 	homebrewBin := "/opt/homebrew/bin"
 	userLocalBin := "/usr/local/bin"
-	
+
 	// Add these directories to PATH if they're not already there
 	newPath := currentPath
 	if !strings.Contains(newPath, gopathBin) {
@@ -51,10 +51,10 @@ func checkPgsrip() bool {
 	if !strings.Contains(newPath, userLocalBin) {
 		newPath += ":" + userLocalBin
 	}
-	
+
 	// Set the updated PATH
 	os.Setenv("PATH", newPath)
-	
+
 	// Set TESSDATA_PREFIX to point to tessdata_best in user's home directory
 	tessdataPath := filepath.Join(homeDir, "tessdata_best")
 	os.Setenv("TESSDATA_PREFIX", tessdataPath)
@@ -62,13 +62,13 @@ func checkPgsrip() bool {
 		fmt.Fprintf(debugLogger, "Set TESSDATA_PREFIX to: %s\n", tessdataPath)
 	}
 	fmt.Println("[DEBUG] Set TESSDATA_PREFIX to:", tessdataPath)
-	
+
 	// Debug the PATH
 	fmt.Println("[DEBUG] Extended PATH: " + newPath)
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "Extended PATH: %s\n", newPath)
 	}
-	
+
 	// Try to find pgsrip in the updated PATH
 	if pgsripPath, err := exec.LookPath("pgsrip"); err == nil {
 		fmt.Println("[DEBUG] pgsrip found in PATH:", pgsripPath)
@@ -114,6 +114,18 @@ func checkPgsrip() bool {
 				filepath.Join(homeDir, "bin", "pgsrip"),
 				filepath.Join(homeDir, "go", "bin", "pgsrip"),
 			}
+
+			// Check for Python user bin directories (common on macOS)
+			// Try to find pgsrip in Python user site-packages bin
+			pythonLibPath := filepath.Join(homeDir, "Library", "Python")
+			if pythonDirs, err := os.ReadDir(pythonLibPath); err == nil {
+				for _, pythonDir := range pythonDirs {
+					if pythonDir.IsDir() {
+						userPaths = append(userPaths, filepath.Join(pythonLibPath, pythonDir.Name(), "bin", "pgsrip"))
+					}
+				}
+			}
+
 			commonPaths = append(commonPaths, userPaths...)
 		}
 
