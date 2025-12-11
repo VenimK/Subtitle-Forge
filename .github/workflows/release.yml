@@ -87,6 +87,14 @@ jobs:
             echo "✅ macOS ${{ matrix.arch }} app bundle created successfully"
             file "Subtitle Forge.app/Contents/MacOS/${{ matrix.output_name }}"
             
+            # Copy installation scripts into the app bundle
+            echo "Copying installation scripts into app bundle..."
+            cp install_vobsub2srt.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  install_vobsub2srt.sh not found"
+            cp install_pgsrip.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  install_pgsrip.sh not found"
+            cp install_tessdata.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  install_tessdata.sh not found"
+            chmod +x "Subtitle Forge.app/Contents/MacOS/"*.sh 2>/dev/null || true
+            echo "✅ Installation scripts copied"
+            
             # Create zip archive
             zip -r ${{ matrix.artifact_name }}.zip "Subtitle Forge.app"
             echo "✅ macOS ${{ matrix.arch }} archive created"
