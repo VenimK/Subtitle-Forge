@@ -49,6 +49,247 @@ type TrackItem struct {
 // Global debug logger for dependency checks
 var debugLogger *os.File
 
+// ============================================================================
+// Application Logging System
+// ============================================================================
+
+var (
+	appLogFile        *os.File
+	appLogger         *log.Logger
+	appLogPath        string
+	appLogBuffer      strings.Builder
+	appLogMutex       sync.Mutex
+	logUpdateCallback func() // Callback to update UI when new log entry is added
+)
+
+// initAppLogger initializes the application logging system
+func initAppLogger() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println("[WARN] Could not get home directory for logging:", err)
+		return
+	}
+
+	logDir := filepath.Join(homeDir, ".subtitle-forge", "logs")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		fmt.Println("[WARN] Could not create log directory:", err)
+		return
+	}
+
+	appLogPath = filepath.Join(logDir, fmt.Sprintf("subtitle_forge_%s.log", time.Now().Format("20060102_150405")))
+	f, err := os.OpenFile(appLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Println("[WARN] Could not create log file:", err)
+		appLogPath = ""
+		return
+	}
+
+	appLogFile = f
+	appLogger = log.New(appLogFile, "", log.LstdFlags)
+
+	// Log startup info
+	AppLog("INFO", "Subtitle Forge started")
+	AppLog("INFO", "Log file: %s", appLogPath)
+	AppLog("INFO", "Working Directory: %s", getCurrentDir())
+	AppLog("INFO", "Executable: %s", getExecutablePath())
+}
+
+// closeAppLogger closes the application log file
+func closeAppLogger() {
+	if appLogger != nil {
+		AppLog("INFO", "Subtitle Forge exiting")
+	}
+	if appLogFile != nil {
+		appLogFile.Close()
+		appLogFile = nil
+	}
+}
+
+// AppLog logs a message to both file and in-memory buffer for UI display
+func AppLog(level string, format string, args ...any) {
+	appLogMutex.Lock()
+	defer appLogMutex.Unlock()
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	message := fmt.Sprintf(format, args...)
+	logLine := fmt.Sprintf("[%s] [%s] %s\n", timestamp, level, message)
+
+	// Write to file if available
+	if appLogger != nil {
+		appLogger.Printf("[%s] %s", level, message)
+	}
+
+	// Write to in-memory buffer for UI
+	appLogBuffer.WriteString(logLine)
+
+	// Trigger UI update callback if set
+	if logUpdateCallback != nil {
+		go func() {
+			fyne.Do(func() {
+				logUpdateCallback()
+			})
+		}()
+	}
+}
+
+// AppLogCmd logs an external command execution with its result
+func AppLogCmd(cmd *exec.Cmd, output []byte, err error) {
+	if cmd == nil {
+		return
+	}
+
+	cmdStr := strings.Join(cmd.Args, " ")
+	AppLog("CMD", "Execute: %s", cmdStr)
+
+	if cmd.Dir != "" {
+		AppLog("CMD", "Working dir: %s", cmd.Dir)
+	}
+
+	if err != nil {
+		AppLog("ERROR", "Command failed: %v", err)
+	}
+
+	if len(output) > 0 {
+		// Truncate very long output
+		outputStr := string(output)
+		if len(outputStr) > 5000 {
+			outputStr = outputStr[:5000] + "\n... [truncated]"
+		}
+		AppLog("OUTPUT", "%s", outputStr)
+	}
+}
+
+// GetLogBuffer returns the current log buffer contents
+func GetLogBuffer() string {
+	appLogMutex.Lock()
+	defer appLogMutex.Unlock()
+	return appLogBuffer.String()
+}
+
+// ClearLogBuffer clears the in-memory log buffer (not the file)
+func ClearLogBuffer() {
+	appLogMutex.Lock()
+	defer appLogMutex.Unlock()
+	appLogBuffer.Reset()
+	AppLog("INFO", "Log buffer cleared")
+}
+
+// GetLogPath returns the current log file path
+func GetLogPath() string {
+	return appLogPath
+}
+
+// SetLogUpdateCallback sets the callback function for UI updates
+func SetLogUpdateCallback(callback func()) {
+	logUpdateCallback = callback
+}
+
+// createLogsTab creates the dedicated Logs tab
+func createLogsTab(w fyne.Window) *fyne.Container {
+	// Title
+	logsTitle := widget.NewLabel("Application Logs")
+	logsTitle.TextStyle = fyne.TextStyle{Bold: true}
+	logsTitle.Alignment = fyne.TextAlignCenter
+
+	// Log file path display
+	logPathLabel := widget.NewLabel("Log file: (initializing...)")
+	logPathLabel.Wrapping = fyne.TextWrapWord
+	if appLogPath != "" {
+		logPathLabel.SetText("Log file: " + appLogPath)
+	}
+
+	// Log viewer (text area - kept enabled for clear text visibility)
+	logViewer := widget.NewMultiLineEntry()
+	logViewer.Wrapping = fyne.TextWrapWord
+	logViewer.SetText(GetLogBuffer())
+
+	logViewerScroll := container.NewScroll(logViewer)
+	logViewerScroll.SetMinSize(fyne.NewSize(800, 400))
+
+	// Set up callback to update log viewer when new entries are added
+	SetLogUpdateCallback(func() {
+		logViewer.SetText(GetLogBuffer())
+		// Scroll to bottom
+		logViewerScroll.ScrollToBottom()
+	})
+
+	// Buttons
+	copyPathBtn := widget.NewButton("Copy Log Path", func() {
+		if appLogPath == "" {
+			dialog.ShowInformation("Not Available", "Log file is not available", w)
+			return
+		}
+		w.Clipboard().SetContent(appLogPath)
+		dialog.ShowInformation("Copied", "Log path copied to clipboard", w)
+	})
+	copyPathBtn.Importance = widget.MediumImportance
+
+	openFolderBtn := widget.NewButton("Open Log Folder", func() {
+		if appLogPath == "" {
+			dialog.ShowInformation("Not Available", "Log file is not available", w)
+			return
+		}
+		logDir := filepath.Dir(appLogPath)
+		// Use open command on macOS
+		cmd := exec.Command("open", logDir)
+		if err := cmd.Run(); err != nil {
+			dialog.ShowError(fmt.Errorf("Could not open folder: %v", err), w)
+		}
+	})
+	openFolderBtn.Importance = widget.MediumImportance
+
+	refreshBtn := widget.NewButton("Refresh", func() {
+		logViewer.SetText(GetLogBuffer())
+		logViewerScroll.ScrollToBottom()
+	})
+	refreshBtn.Importance = widget.LowImportance
+
+	clearBufferBtn := widget.NewButton("Clear Display", func() {
+		ClearLogBuffer()
+		logViewer.SetText(GetLogBuffer())
+	})
+	clearBufferBtn.Importance = widget.LowImportance
+
+	copyLogsBtn := widget.NewButton("Copy All Logs", func() {
+		logs := GetLogBuffer()
+		if logs == "" {
+			dialog.ShowInformation("Empty", "No logs to copy", w)
+			return
+		}
+		w.Clipboard().SetContent(logs)
+		dialog.ShowInformation("Copied", "All logs copied to clipboard", w)
+	})
+	copyLogsBtn.Importance = widget.MediumImportance
+
+	// Button row
+	buttonRow := container.NewHBox(
+		copyPathBtn,
+		openFolderBtn,
+		layout.NewSpacer(),
+		refreshBtn,
+		clearBufferBtn,
+		copyLogsBtn,
+	)
+
+	// Info section
+	infoLabel := widget.NewLabel("Logs are automatically saved to disk. Share the log file when reporting issues.")
+	infoLabel.Wrapping = fyne.TextWrapWord
+	infoLabel.TextStyle = fyne.TextStyle{Italic: true}
+
+	// Assemble the tab
+	logsTabContent := container.NewVBox(
+		container.NewPadded(logsTitle),
+		logPathLabel,
+		widget.NewSeparator(),
+		buttonRow,
+		widget.NewSeparator(),
+		logViewerScroll,
+		infoLabel,
+	)
+
+	return logsTabContent
+}
+
 // findHomebrewPath checks for Homebrew installation in common locations
 func findHomebrewPath() (string, error) {
 	// Log to debug file if available
@@ -3566,6 +3807,10 @@ func setLogMessage(logType, title, message string) string {
 }
 
 func main() {
+	// Initialize logging system
+	initAppLogger()
+	defer closeAppLogger()
+
 	trackList := container.NewVBox()
 	// Create a scrollable container for the track list
 	trackListScroll := container.NewScroll(trackList)
@@ -4487,13 +4732,17 @@ func main() {
 						}
 						extractCmd.Dir = outDir
 
-						_, err := extractCmd.CombinedOutput()
+						AppLog("EXTRACT", "Batch extraction: Track %d (%s) from %s", track.Num, track.Lang, filepath.Base(currentMkvPath))
+						output, err := extractCmd.CombinedOutput()
+						AppLogCmd(extractCmd, output, err)
 						if err != nil {
 							fileSuccess = false
+							AppLog("ERROR", "Batch extraction failed for track %d: %v", track.Num, err)
 							fyne.Do(func() {
 								track.Status.SetText("Failed")
 							})
 						} else {
+							AppLog("SUCCESS", "Batch extraction completed: %s", outFile)
 							fyne.Do(func() {
 								track.Status.SetText("Done")
 							})
@@ -4616,8 +4865,10 @@ func main() {
 					}
 					cmd.Dir = outDir
 
+					AppLog("EXTRACT", "PGS extraction: Track %d (%s) from %s", t.Num, t.Lang, filepath.Base(mkvPath))
 					// Run the command and capture output
 					output, err = cmd.CombinedOutput()
+					AppLogCmd(cmd, output, err)
 
 					// Debug output - show command result
 					fyne.Do(func() {
@@ -5342,8 +5593,10 @@ func main() {
 					}
 					cmd.Dir = outDir
 
+					AppLog("EXTRACT", "ASS/SSA extraction: Track %d (%s) from %s", t.Num, t.Lang, filepath.Base(mkvPath))
 					// Run the command and capture output
 					output, err = cmd.CombinedOutput()
+					AppLogCmd(cmd, output, err)
 
 					// Debug output - show command result
 					fyne.Do(func() {
@@ -5465,8 +5718,10 @@ func main() {
 						cmd = exec.Command(ffmpegPath, "-i", absInputPath, "-f", "srt", absOutputPath)
 						cmd.Dir = outDir
 
+						AppLog("CONVERT", "ASS/SSA to SRT conversion: %s -> %s", filepath.Base(absInputPath), filepath.Base(absOutputPath))
 						// Run the command and capture output
 						output, err = cmd.CombinedOutput()
+						AppLogCmd(cmd, output, err)
 
 						// Stop the ticker
 						ticker.Stop()
@@ -5476,6 +5731,7 @@ func main() {
 							result.SetText(result.Text + "\nffmpeg output: " + string(output))
 
 							if err != nil {
+								AppLog("ERROR", "ASS/SSA to SRT conversion failed: %v", err)
 								result.SetText(result.Text + "\nError converting ASS/SSA to SRT: " + err.Error())
 								statusLabel.SetText("Conversion failed!")
 								conversionProgress.SetValue(0)
@@ -5542,8 +5798,10 @@ func main() {
 					}
 					cmd.Dir = outDir
 
+					AppLog("EXTRACT", "VobSub extraction: Track %d (%s) from %s", t.Num, t.Lang, filepath.Base(mkvPath))
 					// Run the command and capture output
 					output, err = cmd.CombinedOutput()
+					AppLogCmd(cmd, output, err)
 
 					// Debug output - show command result
 					fyne.Do(func() {
@@ -5859,7 +6117,9 @@ func main() {
 						result.SetText(result.Text + fmt.Sprintf("\nExtracting to: %s", absOutFile))
 					})
 
+					AppLog("EXTRACT", "Generic extraction: Track %d (%s/%s) from %s", t.Num, t.Lang, t.Codec, filepath.Base(mkvPath))
 					output, err = cmd.CombinedOutput()
+					AppLogCmd(cmd, output, err)
 
 					// Set proper file permissions for subtitle files (read/write for user, read for group/others)
 					if err == nil {
@@ -5872,6 +6132,7 @@ func main() {
 				fyne.Do(func() {
 					if err != nil {
 						t.State = "Error"
+						AppLog("ERROR", "Track %d (%s) extraction/conversion failed: %v", t.Num, t.Name, err)
 						t.Status.SetText(setLogMessage(LogError, fmt.Sprintf("Error Extracting Track %s", t.Name), err.Error()))
 						if t.ConvertOCR != nil && t.ConvertOCR.Checked {
 							result.SetText(result.Text + setLogMessage(LogError, "Conversion Failed", err.Error()))
@@ -5881,9 +6142,11 @@ func main() {
 					} else {
 						t.State = "Done"
 						if t.ConvertOCR != nil && t.ConvertOCR.Checked {
+							AppLog("SUCCESS", "Track %d (%s) converted to SRT", t.Num, t.Name)
 							t.Status.SetText("Converted")
 							result.SetText(result.Text + setLogMessage(LogSuccess, "Conversion Complete", fmt.Sprintf("Successfully converted %s to SRT.", t.Name)))
 						} else {
+							AppLog("SUCCESS", "Track %d (%s) extracted", t.Num, t.Name)
 							t.Status.SetText("Extracted")
 							result.SetText(result.Text + setLogMessage(LogSuccess, "Track Extracted", t.Name))
 						}
@@ -7061,12 +7324,17 @@ func main() {
 	aiTranslationTabContent := createAITranslationTab(w, a)
 	aiTranslationScroll := container.NewScroll(aiTranslationTabContent)
 
+	// Create Logs tab
+	logsTabContent := createLogsTab(w)
+	logsScroll := container.NewScroll(logsTabContent)
+
 	// Create tabs with scrollable content
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Extract Subtitles", extractScroll),
 		container.NewTabItem("Insert Subtitles", insertScroll),
 		container.NewTabItem("Convert Subtitles", convertScroll),
 		container.NewTabItem("🤖 AI Translate", aiTranslationScroll),
+		container.NewTabItem("📋 Logs", logsScroll),
 		container.NewTabItem("Settings", settingsScroll),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
