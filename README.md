@@ -58,6 +58,24 @@ This project provides two applications:
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
 
+## What's New in v2.0.13 ✨
+
+### 📋 Dedicated Logs Tab - Better Debugging & Support!
+
+**v2.0.13** introduces a comprehensive logging system to help diagnose issues:
+
+- **📁 Persistent Log Files**: Automatically saved to `~/.subtitle-forge/logs/` with timestamped filenames
+- **📋 New Logs Tab**: Real-time log viewer between AI Translate and Settings tabs
+- **🔍 Full Command Logging**: All external tool executions (mkvextract, ffmpeg, pgsrip, etc.) logged with output
+- **🛠️ Easy Debugging**: Copy Log Path, Open Log Folder, Copy All Logs buttons
+- **📤 Share with Support**: Users can now easily share log files when reporting issues
+
+Logged operations include:
+- Batch extraction with per-track details
+- PGS, ASS/SSA, VobSub extraction
+- FFmpeg ASS/SSA to SRT conversion
+- All errors with full context
+
 ## What's New in v2.0.12 ✨
 
 ### 🐍 GST Integration - Professional Terminal-Based Translation!
