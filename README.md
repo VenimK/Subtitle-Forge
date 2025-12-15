@@ -71,9 +71,10 @@ This project provides two applications:
 - **📤 Share with Support**: Users can now easily share log files when reporting issues
 
 Logged operations include:
-- Batch extraction with per-track details
-- PGS, ASS/SSA, VobSub extraction
-- FFmpeg ASS/SSA to SRT conversion
+- **Extract Subtitles**: Batch extraction, PGS/ASS/SSA/VobSub extraction, generic tracks
+- **Insert Subtitles**: mkvmerge commands and results
+- **Convert Subtitles**: Format conversion, PGS OCR, batch processing
+- **AI Translate**: GST translation commands, progress, completion
 - All errors with full context
 
 ## What's New in v2.0.12 ✨
