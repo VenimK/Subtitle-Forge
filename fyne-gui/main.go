@@ -2543,6 +2543,8 @@ func parseInt(s string, defaultVal int) int {
 func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir string,
 	options ConversionOptions, progress *widget.ProgressBar, result *widget.Label) bool {
 
+	AppLog("CONVERT", "Starting conversion: %s (%s) -> %s", filepath.Base(inputPath), inputFormat, outputFormat)
+
 	// Determine output path
 	var outputPath string
 	if outputDir != "" {
@@ -2552,6 +2554,8 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 		outputPath = strings.TrimSuffix(inputPath, filepath.Ext(inputPath)) + "." + outputFormat
 	}
 
+	AppLog("CONVERT", "Output path: %s", outputPath)
+
 	fyne.Do(func() {
 		progress.SetValue(0.1)
 		result.SetText(fmt.Sprintf("🔄 Converting %s to %s...", inputFormat, strings.ToUpper(outputFormat)))
@@ -2560,6 +2564,7 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 	// Read input file
 	inputData, err := os.ReadFile(inputPath)
 	if err != nil {
+		AppLog("ERROR", "Convert: Failed to read input file %s: %v", filepath.Base(inputPath), err)
 		fyne.Do(func() {
 			result.SetText(fmt.Sprintf("❌ Error reading input file: %v", err))
 		})
@@ -2609,13 +2614,17 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 			result.SetText(fmt.Sprintf("🔍 Converting PGS using %s...\nCommand: %s %s %s --verbose", conversionMethod, pgsripBinaryPath, inputPath, tempSrtPath))
 		})
 
+		AppLog("CONVERT", "PGS OCR conversion using %s", conversionMethod)
+		AppLogCmd(cmd, nil, nil)
 		err := cmd.Run()
 		if err != nil {
+			AppLog("ERROR", "Convert: PGS OCR failed with %s: %v", conversionMethod, err)
 			fyne.Do(func() {
 				result.SetText(fmt.Sprintf("❌ Error converting PGS with %s: %v\n\nTry using the Extract Subtitles tab for PGS conversion, or check the Utilities tab for installation help.", conversionMethod, err))
 			})
 			return false
 		}
+		AppLog("SUCCESS", "PGS OCR conversion completed")
 
 		// Read the converted SRT file
 		srtData, err := os.ReadFile(tempSrtPath)
@@ -3130,6 +3139,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 					}
 				}
 
+				AppLog("CONVERT", "Batch conversion completed: %d/%d files to %s", successCount, totalFiles, outputFormat)
 				fyne.Do(func() {
 					convertProgress.SetValue(1.0)
 					convertProgress.Hide()
@@ -3144,6 +3154,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 				fyne.Do(func() {
 					convertProgress.Hide()
 					if success {
+						AppLog("SUCCESS", "Single file conversion completed: %s to %s", filepath.Base(inputFile), outputFormat)
 						convertResult.SetText(fmt.Sprintf("✅ Successfully converted %s to %s format",
 							filepath.Base(inputFile), strings.ToUpper(outputFormat)))
 					}
@@ -6826,14 +6837,18 @@ func main() {
 				fmt.Println("[DEBUG] No stored mkvmerge path for subtitle addition, using default PATH lookup")
 			}
 
+			AppLog("INSERT", "Adding subtitle to MKV: %s -> %s", filepath.Base(subtitlePath), filepath.Base(outputPath))
 			output, err := cmd.CombinedOutput()
+			AppLogCmd(cmd, output, err)
 
 			fyne.Do(func() {
 				if err != nil {
+					AppLog("ERROR", "Insert subtitle failed: %v", err)
 					insertResultLabel.SetText(insertResultLabel.Text + "\nError: " + err.Error() + "\n" + string(output))
 					return
 				}
 
+				AppLog("SUCCESS", "Subtitle inserted successfully: %s", filepath.Base(outputPath))
 				insertResultLabel.SetText(insertResultLabel.Text + "\nSubtitle added successfully!\nOutput file: " + outputPath + "\n" + string(output))
 			})
 		}()

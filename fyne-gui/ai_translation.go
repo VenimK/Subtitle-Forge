@@ -266,10 +266,13 @@ func translateWithGST(inputFile, outputFile, targetLang string, config AITransla
 		args = append(args, "-d", desc)
 	}
 
+	AppLog("TRANSLATE", "Starting GST translation: %s -> %s (lang: %s, model: %s)", filepath.Base(inputFile), filepath.Base(outputFile), targetLang, config.Model)
 	cmd := exec.Command(gstPath, args...)
+	AppLog("CMD", "Execute: %s %s", gstPath, strings.Join(args, " "))
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
+		AppLog("ERROR", "AI Translation: Failed to start gst: %v", err)
 		return false, fmt.Errorf("failed to start gst: %v", err)
 	}
 
@@ -296,9 +299,11 @@ func translateWithGST(inputFile, outputFile, targetLang string, config AITransla
 
 	err := cmd.Wait()
 	if err != nil {
+		AppLog("ERROR", "AI Translation: gst failed: %v", err)
 		return false, fmt.Errorf("gst failed: %v", err)
 	}
 	// gst writes the output file itself; treat as success if it completed
+	AppLog("SUCCESS", "AI Translation completed: %s", filepath.Base(outputFile))
 	return true, nil
 }
 
@@ -473,23 +478,23 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	// Create language map for system language detection
 	languageMap := map[string]string{
-		"English":           "eng",
-		"Spanish":           "spa",
-		"French":            "fre",
-		"German":            "ger",
-		"Italian":           "ita",
-		"Portuguese":        "por",
-		"Russian":           "rus",
-		"Japanese":          "jpn",
-		"Korean":            "kor",
-		"Chinese (Simplified)": "chi",
+		"English":               "eng",
+		"Spanish":               "spa",
+		"French":                "fre",
+		"German":                "ger",
+		"Italian":               "ita",
+		"Portuguese":            "por",
+		"Russian":               "rus",
+		"Japanese":              "jpn",
+		"Korean":                "kor",
+		"Chinese (Simplified)":  "chi",
 		"Chinese (Traditional)": "chi",
-		"Arabic":            "ara",
-		"Hindi":             "hin",
-		"Dutch":             "dut",
-		"Swedish":           "swe",
-		"Norwegian":         "nor",
-		"Danish":            "dan",
+		"Arabic":                "ara",
+		"Hindi":                 "hin",
+		"Dutch":                 "dut",
+		"Swedish":               "swe",
+		"Norwegian":             "nor",
+		"Danish":                "dan",
 	}
 
 	// Get system language and set as default target
