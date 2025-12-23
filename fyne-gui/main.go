@@ -1970,6 +1970,31 @@ func parseSRTTime(timeStr string) (time.Duration, error) {
 	return duration, nil
 }
 
+// convertASSTagsToSRT converts ASS formatting tags to SRT-compatible HTML tags
+func convertASSTagsToSRT(text string) string {
+	// Convert line breaks
+	text = strings.ReplaceAll(text, "\\N", "\n")
+	text = strings.ReplaceAll(text, "\\n", "\n")
+
+	// Convert italic tags
+	text = strings.ReplaceAll(text, "{\\i1}", "<i>")
+	text = strings.ReplaceAll(text, "{\\i0}", "</i>")
+
+	// Convert bold tags
+	text = strings.ReplaceAll(text, "{\\b1}", "<b>")
+	text = strings.ReplaceAll(text, "{\\b0}", "</b>")
+
+	// Convert underline tags
+	text = strings.ReplaceAll(text, "{\\u1}", "<u>")
+	text = strings.ReplaceAll(text, "{\\u0}", "</u>")
+
+	// Remove other ASS tags (position, alignment, color, etc.)
+	re := regexp.MustCompile(`\{[^}]*\}`)
+	text = re.ReplaceAllString(text, "")
+
+	return strings.TrimSpace(text)
+}
+
 // parseASS parses ASS/SSA format (simplified)
 func parseASS(content string) ([]SubtitleEntry, error) {
 	var entries []SubtitleEntry
@@ -2002,6 +2027,9 @@ func parseASS(content string) ([]SubtitleEntry, error) {
 				// Text is everything after the 9th comma
 				textParts := parts[9:]
 				text := strings.Join(textParts, ",")
+
+				// Convert ASS tags to SRT-compatible HTML tags
+				text = convertASSTagsToSRT(text)
 
 				entries = append(entries, SubtitleEntry{
 					Index:     index,
