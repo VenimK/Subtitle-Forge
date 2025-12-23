@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.15
+# Subtitle Forge v2.0.17
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -57,6 +57,20 @@ This project provides two applications:
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v2.0.17 ✨
+
+### 🚀 Gemini 3.0 Support & GST v3.0.0!
+
+**v2.0.17** adds support for the latest Gemini 3.0 models and upgrades GST:
+
+- **🆕 Gemini 3.0 Models**: Support for `gemini-3-flash-preview` (Latest 3.0)
+- **⚡ GST v3.0.0**: Upgraded gemini-srt-translator to latest version
+- **🧠 Smart Thinking**: Auto-applies correct thinking settings per model:
+  - Gemini 2.5: Uses `thinking_budget` (default: 2048)
+  - Gemini 3.0: Uses `thinking_level` (default: low)
+- **🔧 Advanced Controls**: Thinking Budget and Thinking Level in Advanced Settings
+- **✨ Translation Spacing Fix**: Post-processing fixes spacing after punctuation
 
 ## What's New in v2.0.15 ✨
 
