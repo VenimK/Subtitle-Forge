@@ -30,6 +30,8 @@ type AITranslationConfig struct {
 	ResumeMode      bool
 	ProgressLog     bool
 	ThoughtsLog     bool
+	ThinkingBudget  int    // For Gemini 2.5 models (0-24576 for Flash, 128-32768 for Pro)
+	ThinkingLevel   string // For Gemini 3.0 models (minimal, low, medium, high)
 }
 
 // findGSTPath tries to find the gst executable. Prefers the user's venv path, then PATH.
@@ -79,6 +81,12 @@ func translateWithGSTInTerminal(inputFile, outputFile, targetLang string, config
 	}
 	if config.ThoughtsLog {
 		args = append(args, "--thoughts-log")
+	}
+	if config.ThinkingBudget > 0 {
+		args = append(args, "--thinking-budget", fmt.Sprintf("%d", config.ThinkingBudget))
+	}
+	if config.ThinkingLevel != "" {
+		args = append(args, "--thinking-level", config.ThinkingLevel)
 	}
 	if config.ResumeMode {
 		args = append(args, "--resume")
@@ -274,6 +282,12 @@ func translateWithGST(inputFile, outputFile, targetLang string, config AITransla
 	}
 	if config.ThoughtsLog {
 		args = append(args, "--thoughts-log")
+	}
+	if config.ThinkingBudget > 0 {
+		args = append(args, "--thinking-budget", fmt.Sprintf("%d", config.ThinkingBudget))
+	}
+	if config.ThinkingLevel != "" {
+		args = append(args, "--thinking-level", config.ThinkingLevel)
 	}
 	if config.ResumeMode {
 		args = append(args, "--resume")
@@ -487,6 +501,8 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	modelSelect := widget.NewSelect([]string{
 		"gemini-2.5-flash (Recommended)",
 		"gemini-2.5-pro (Higher Quality)",
+		"gemini-3-flash-preview (Latest 3.0)",
+		"gemini-3-pro-image-preview (3.0 Image)",
 		"gemini-1.5-flash (Fast & Cheap)",
 		"gemini-1.5-pro (Balanced)",
 	}, nil)
@@ -670,6 +686,16 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	descriptionEntry.SetPlaceHolder("Optional: Describe the content context (e.g., 'Medical TV series, use medical terminology')")
 	descriptionEntry.Resize(fyne.NewSize(400, 60))
 
+	// Thinking controls
+	thinkingBudgetEntry := widget.NewEntry()
+	thinkingBudgetEntry.SetText("2048")
+	thinkingBudgetEntry.SetPlaceHolder("Thinking budget (0-24576 for Flash, 128-32768 for Pro)")
+
+	thinkingLevelSelect := widget.NewSelect([]string{
+		"", "minimal", "low", "medium", "high",
+	}, nil)
+	thinkingLevelSelect.SetSelected("")
+
 	// Logging options
 	progressLogCheck := widget.NewCheck("Save progress log", nil)
 	progressLogCheck.SetChecked(true)
@@ -693,6 +719,13 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewLabel("Content Context"),
 		widget.NewLabel("Description:"),
 		descriptionEntry,
+		widget.NewSeparator(),
+
+		widget.NewLabel("AI Thinking Settings"),
+		container.NewHBox(widget.NewLabel("Thinking Budget (2.5):"), thinkingBudgetEntry),
+		container.NewHBox(widget.NewLabel("Thinking Level (3.0):"), thinkingLevelSelect),
+		widget.NewLabel("💡 Tip: Budget for 2.5 models (0-24576 Flash, 128-32768 Pro)"),
+		widget.NewLabel("💡 Tip: Level for 3.0 models (minimal/low/medium/high)"),
 		widget.NewSeparator(),
 
 		widget.NewLabel("Logging & Resume"),
@@ -753,18 +786,40 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 		// Always save GST path when starting translation
 		a.Preferences().SetString("ai_gst_path", gstPathEntry.Text)
 
+		// Get model name and apply smart thinking defaults
+		modelName := strings.Split(modelSelect.Selected, " ")[0]
+		thinkingBudget := parseInt(thinkingBudgetEntry.Text, 2048)
+		thinkingLevel := thinkingLevelSelect.Selected
+
+		// Apply smart defaults based on model
+		if strings.Contains(modelName, "3-") {
+			// Gemini 3.0 models: use thinking_level, ignore thinking_budget
+			if thinkingLevel == "" {
+				thinkingLevel = "low" // Default for Gemini 3.0
+			}
+			thinkingBudget = 0 // Don't send thinking_budget for 3.0 models
+		} else if strings.Contains(modelName, "2.5-") {
+			// Gemini 2.5 models: use thinking_budget, ignore thinking_level
+			if thinkingBudget == 0 {
+				thinkingBudget = 2048 // Default for Gemini 2.5
+			}
+			thinkingLevel = "" // Don't send thinking_level for 2.5 models
+		}
+
 		// Create translation config
 		config := AITranslationConfig{
 			GSTPath:         gstPathEntry.Text,
 			APIKey:          apiKeyEntry.Text,
 			SecondaryAPIKey: secondaryKeyEntry.Text,
-			Model:           strings.Split(modelSelect.Selected, " ")[0],
+			Model:           modelName,
 			Temperature:     parseFloat(temperatureEntry.Text, 0.3),
 			BatchSize:       parseInt(batchSizeEntry.Text, 100),
 			Description:     descriptionEntry.Text,
 			ResumeMode:      resumeModeCheck.Checked,
 			ProgressLog:     progressLogCheck.Checked,
 			ThoughtsLog:     thoughtsLogCheck.Checked,
+			ThinkingBudget:  thinkingBudget,
+			ThinkingLevel:   thinkingLevel,
 		}
 
 		// Create/show results window
