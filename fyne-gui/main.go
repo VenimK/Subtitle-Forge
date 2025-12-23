@@ -1916,11 +1916,21 @@ func parseSRT(content string) ([]SubtitleEntry, error) {
 		}
 
 		if len(textLines) > 0 {
+			// Join text lines with proper spacing for GST compatibility
+			text := strings.Join(textLines, "\n")
+			// Add explicit spaces after commas to help GST
+			text = regexp.MustCompile(`,(\S)`).ReplaceAllString(text, ", $1")
+			// Add explicit spaces after periods to help GST
+			text = regexp.MustCompile(`\.(\S)`).ReplaceAllString(text, ". $1")
+			// Add explicit spaces after question marks and exclamation marks
+			text = regexp.MustCompile(`\?(\S)`).ReplaceAllString(text, "? $1")
+			text = regexp.MustCompile(`!(\S)`).ReplaceAllString(text, "! $1")
+
 			entries = append(entries, SubtitleEntry{
 				Index:     index,
 				StartTime: startTime,
 				EndTime:   endTime,
-				Text:      strings.Join(textLines, "\n"),
+				Text:      text,
 			})
 		}
 	}
@@ -2030,6 +2040,10 @@ func parseASS(content string) ([]SubtitleEntry, error) {
 
 				// Convert ASS tags to SRT-compatible HTML tags
 				text = convertASSTagsToSRT(text)
+
+				// Ensure proper spacing after commas and punctuation for better GST translation
+				text = regexp.MustCompile(`,(\S)`).ReplaceAllString(text, ", $1")
+				text = regexp.MustCompile(`\.(\S)`).ReplaceAllString(text, ". $1")
 
 				entries = append(entries, SubtitleEntry{
 					Index:     index,

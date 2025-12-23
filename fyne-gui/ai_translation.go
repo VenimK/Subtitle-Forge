@@ -219,6 +219,24 @@ end tell`, tmpScriptPath)
 	return nil
 }
 
+// postProcessSRT fixes common spacing and line break issues in translated SRT files
+func postProcessSRT(filePath string) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	// Fix spacing after commas and punctuation
+	text := string(content)
+	text = regexp.MustCompile(`,(\S)`).ReplaceAllString(text, ", $1")
+	text = regexp.MustCompile(`\.(\S)`).ReplaceAllString(text, ". $1")
+	text = regexp.MustCompile(`\?(\S)`).ReplaceAllString(text, "? $1")
+	text = regexp.MustCompile(`!(\S)`).ReplaceAllString(text, "! $1")
+
+	// Write the fixed content back
+	return os.WriteFile(filePath, []byte(text), 0644)
+}
+
 // translateWithGST shells out to gst translate and streams output
 func translateWithGST(inputFile, outputFile, targetLang string, config AITranslationConfig, progressCallback func(string)) (bool, error) {
 	gstPath := config.GSTPath
@@ -304,6 +322,13 @@ func translateWithGST(inputFile, outputFile, targetLang string, config AITransla
 	}
 	// gst writes the output file itself; treat as success if it completed
 	AppLog("SUCCESS", "AI Translation completed: %s", filepath.Base(outputFile))
+
+	// Post-process the translated SRT file to fix spacing issues
+	if err := postProcessSRT(outputFile); err != nil {
+		AppLog("WARNING", "Failed to post-process SRT file: %v", err)
+		// Don't fail the translation, just log the warning
+	}
+
 	return true, nil
 }
 
