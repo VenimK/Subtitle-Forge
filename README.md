@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.14
+# Subtitle Forge v2.0.15
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -57,6 +57,18 @@ This project provides two applications:
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v2.0.15 ✨
+
+### 🔄 ASS to SRT Conversion Fix!
+
+**v2.0.15** fixes the ASS to SRT conversion in the Convert subtitles tab:
+
+- **🎯 Fixed Convert Tab**: ASS formatting tags now properly convert to SRT HTML tags
+- **📝 Tag Support**: Converts `{\i1}` → `<i>`, `{\b1}` → `<b>`, `{\u1}` → `<u>`
+- **🔤 Line Breaks**: Converts `\N` and `\n` to proper newlines
+- **🧹 Clean Output**: Removes other ASS tags (position, alignment, color)
+- **✅ Consistency**: Convert tab now works identically to Extract tab
 
 ## What's New in v2.0.13 ✨
 
