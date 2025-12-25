@@ -69,6 +69,9 @@ jobs:
       # Build macOS binaries (native for each architecture)
       - name: Build macOS binary (${{ matrix.arch }})
         if: startsWith(matrix.os, 'macos')
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+          CGO_ENABLED: "1"
         working-directory: ./fyne-gui
         run: |
           echo "Building macOS binary natively for ${{ matrix.arch }}..."
