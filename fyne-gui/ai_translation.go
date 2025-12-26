@@ -36,10 +36,44 @@ type AITranslationConfig struct {
 
 // findGSTPath tries to find the gst executable. Prefers the user's venv path, then PATH.
 func findGSTPath() string {
-	preferred := "/Users/venimk/subsvenv/bin/gst"
-	if _, err := os.Stat(preferred); err == nil {
-		return preferred
+	if gstPath, err := exec.LookPath("gst"); err == nil {
+		return gstPath
 	}
+
+	candidates := []string{
+		"/opt/homebrew/bin/gst",
+		"/usr/local/bin/gst",
+		"/usr/bin/gst",
+		"/bin/gst",
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		candidates = append(candidates,
+			filepath.Join(homeDir, "bin", "gst"),
+			filepath.Join(homeDir, ".local", "bin", "gst"),
+			filepath.Join(homeDir, ".subtitle-forge", "gst-venv", "bin", "gst"),
+			filepath.Join(homeDir, "subsvenv", "bin", "gst"),
+			filepath.Join(homeDir, "venv", "bin", "gst"),
+			filepath.Join(homeDir, ".venv", "bin", "gst"),
+		)
+
+		pythonLibPath := filepath.Join(homeDir, "Library", "Python")
+		if pythonDirs, err := os.ReadDir(pythonLibPath); err == nil {
+			for _, pythonDir := range pythonDirs {
+				if pythonDir.IsDir() {
+					candidates = append(candidates, filepath.Join(pythonLibPath, pythonDir.Name(), "bin", "gst"))
+				}
+			}
+		}
+	}
+
+	for _, candidate := range candidates {
+		if fileInfo, err := os.Stat(candidate); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
+			return candidate
+		}
+	}
+
 	return "gst"
 }
 
@@ -497,6 +531,93 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 		a.Preferences().SetString("ai_gst_path", newPath)
 	}
 
+	var installGSTBtn *widget.Button
+	installGSTBtn = widget.NewButton("Install/Update GST", func() {
+		pythonCmds := []string{"python3", "python", "py"}
+		var python string
+		for _, candidate := range pythonCmds {
+			if p, err := exec.LookPath(candidate); err == nil {
+				python = p
+				break
+			}
+		}
+		if python == "" {
+			dialog.ShowError(fmt.Errorf("could not find python (tried: python3, python, py)"), w)
+			return
+		}
+
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("could not resolve home directory: %v", err), w)
+			return
+		}
+
+		venvDir := filepath.Join(homeDir, ".subtitle-forge", "gst-venv")
+		venvBin := filepath.Join(venvDir, "bin")
+		venvPython := filepath.Join(venvBin, "python3")
+		venvGST := filepath.Join(venvBin, "gst")
+
+		installGSTBtn.Disable()
+		progress := dialog.NewProgressInfinite("GST", "Installing/updating GST in a local virtual environment...", w)
+		progress.Show()
+
+		go func() {
+			_ = os.MkdirAll(filepath.Dir(venvDir), 0755)
+
+			if _, err := os.Stat(venvPython); err != nil {
+				cmd := exec.Command(python, "-m", "venv", venvDir)
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					fyne.Do(func() {
+						progress.Hide()
+						installGSTBtn.Enable()
+						dialog.ShowError(fmt.Errorf("GST venv creation failed: %v\n\n%s", err, string(output)), w)
+					})
+					return
+				}
+			}
+
+			cmdUpgradePip := exec.Command(venvPython, "-m", "pip", "install", "--upgrade", "pip")
+			upgradePipOut, upgradePipErr := cmdUpgradePip.CombinedOutput()
+			if upgradePipErr != nil {
+				fyne.Do(func() {
+					progress.Hide()
+					installGSTBtn.Enable()
+					dialog.ShowError(fmt.Errorf("pip upgrade failed: %v\n\n%s", upgradePipErr, string(upgradePipOut)), w)
+				})
+				return
+			}
+
+			cmdInstall := exec.Command(venvPython, "-m", "pip", "install", "--upgrade", "gemini-srt-translator")
+			installOut, installErr := cmdInstall.CombinedOutput()
+
+			fyne.Do(func() {
+				progress.Hide()
+				installGSTBtn.Enable()
+
+				if installErr != nil {
+					dialog.ShowError(fmt.Errorf("GST install failed: %v\n\n%s", installErr, string(installOut)), w)
+					return
+				}
+
+				if _, err := os.Stat(venvGST); err == nil {
+					gstPathEntry.SetText(venvGST)
+					a.Preferences().SetString("ai_gst_path", venvGST)
+					dialog.ShowInformation("GST", "GST installed/updated successfully.", w)
+					return
+				}
+
+				newPath := findGSTPath()
+				gstPathEntry.SetText(newPath)
+				a.Preferences().SetString("ai_gst_path", newPath)
+				dialog.ShowInformation("GST", "GST installed/updated successfully.", w)
+			})
+		}()
+	})
+	installGSTBtn.Importance = widget.MediumImportance
+
+	gstPathRow := container.NewBorder(nil, nil, nil, installGSTBtn, gstPathEntry)
+
 	// Model selection for GST
 	modelSelect := widget.NewSelect([]string{
 		"gemini-2.5-flash (Recommended)",
@@ -861,16 +982,11 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	configSection := container.NewVBox(
 		widget.NewLabel("GST Configuration"),
 		container.New(layout.NewFormLayout(),
-			gstPathLabel, gstPathEntry,
+			gstPathLabel, gstPathRow,
 			widget.NewLabel("API Key:"), apiKeyEntry,
 			widget.NewLabel("Secondary Key:"), secondaryKeyEntry,
 			widget.NewLabel(""), rememberAPIKeyCheck,
 			widget.NewLabel("Model:"), modelSelect,
-		),
-		widget.NewSeparator(),
-
-		widget.NewLabel("Languages"),
-		container.New(layout.NewFormLayout(),
 			widget.NewLabel("Source:"), sourceLanguageSelect,
 			widget.NewLabel("Target:"), targetLanguageSelect,
 		),
@@ -1003,7 +1119,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 			if resultsArea != nil {
 				fyne.Do(func() {
 					resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n🔄 Processing: %s", fileName))
-					resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n   📖 Reading subtitle file..."))
+					resultsArea.SetText(resultsArea.Text + "\n   📖 Reading subtitle file...")
 					// Only auto-scroll if user is near bottom
 					if resultsScroll != nil && isNearBottom() {
 						resultsScroll.ScrollToBottom()

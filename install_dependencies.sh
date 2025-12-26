@@ -38,6 +38,7 @@ run_cmd() { echo "[CMD] $*"; if [ "$DRY_RUN" != "1" ]; then eval "$@"; fi }
 
 REPORT_FILE="$HOME/subtitle_forge_install_report.txt"
 TESSDATA_DIR="$HOME/tessdata_best"
+GST_VENV_DIR="$HOME/.subtitle-forge/gst-venv"
 COMMON_LANGS=(eng fra deu spa ita nld)
 
 log() { echo "[INFO] $*"; }
@@ -128,6 +129,42 @@ install_pgsrip() {
   run_cmd "$py -m pip install --user --break-system-packages --ignore-installed pgsrip || $py -m pip install --user pgsrip"
 }
 
+install_gst() {
+  log "Installing GST (gemini-srt-translator) into: $GST_VENV_DIR"
+
+  local py=python3
+  if ! require_cmd python3 && require_cmd python; then py=python; fi
+  if ! require_cmd "$py"; then
+    err "Python not found after installation step."
+    return 1
+  fi
+
+  run_cmd "mkdir -p \"$(dirname \"$GST_VENV_DIR\")\""
+
+  # Create venv if missing (or if python is missing inside it)
+  if [ ! -x "$GST_VENV_DIR/bin/python3" ] && [ ! -x "$GST_VENV_DIR/bin/python" ]; then
+    run_cmd "$py -m venv \"$GST_VENV_DIR\""
+  fi
+
+  local vpy="$GST_VENV_DIR/bin/python3"
+  if [ ! -x "$vpy" ]; then vpy="$GST_VENV_DIR/bin/python"; fi
+  if [ ! -x "$vpy" ]; then
+    err "Failed to create GST virtual environment (python not found in venv)."
+    return 1
+  fi
+
+  # Upgrade pip inside venv and install/upgrade GST
+  run_cmd "$vpy -m pip install --upgrade pip"
+  run_cmd "$vpy -m pip install --upgrade gemini-srt-translator"
+
+  if [ -x "$GST_VENV_DIR/bin/gst" ]; then
+    log "GST installed at: $GST_VENV_DIR/bin/gst"
+  else
+    warn "GST install completed but gst binary not found at expected path: $GST_VENV_DIR/bin/gst"
+    return 1
+  fi
+}
+
 setup_tessdata() {
   log "Setting up tessdata at $TESSDATA_DIR"
   mkdir -p "$TESSDATA_DIR"
@@ -149,6 +186,7 @@ write_report() {
     echo "OS: $(uname -a)"
     echo "PATH: $PATH"
     echo "TESSDATA_PREFIX: $TESSDATA_DIR"
+    echo "GST_VENV_DIR: $GST_VENV_DIR"
     echo
     echo "-- Versions --"
     (ffmpeg -version | head -n1) 2>/dev/null || true
@@ -159,6 +197,7 @@ write_report() {
     (tesseract --version | head -n1) 2>/dev/null || true
     (python3 --version || python --version) 2>/dev/null || true
     (pgsrip --version || echo "pgsrip: try 'python3 -m pgsrip --version'") 2>/dev/null || true
+    ([ -x "$GST_VENV_DIR/bin/gst" ] && "$GST_VENV_DIR/bin/gst" --version | head -n1) 2>/dev/null || true
     echo
     echo "-- Locations --"
     command -v ffmpeg || true
@@ -169,6 +208,7 @@ write_report() {
     command -v tesseract || true
     command -v python3 || command -v python || true
     command -v pgsrip || true
+    [ -x "$GST_VENV_DIR/bin/gst" ] && echo "$GST_VENV_DIR/bin/gst" || true
   } > "$REPORT_FILE" || warn "Could not write report"
 }
 
@@ -183,6 +223,9 @@ main() {
 
   setup_tessdata
   install_pgsrip || warn "pgsrip installation reported an issue"
+
+
+  install_gst || warn "GST installation reported an issue"
 
   # Export for current shell; app also sets this internally
   export TESSDATA_PREFIX="$TESSDATA_DIR"
