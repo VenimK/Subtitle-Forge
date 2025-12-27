@@ -139,6 +139,11 @@ install_gst() {
     return 1
   fi
 
+  log "GST debug: base python command: $py"
+  (command -v "$py") 2>/dev/null || true
+  ("$py" --version) 2>/dev/null || true
+  ("$py" -m pip -V) 2>/dev/null || true
+
   run_cmd "mkdir -p \"$(dirname \"$GST_VENV_DIR\")\""
 
   # Create venv if missing (or if python is missing inside it)
@@ -153,9 +158,18 @@ install_gst() {
     return 1
   fi
 
+  log "GST debug: venv python: $vpy"
+  ("$vpy" --version) 2>/dev/null || true
+  ("$vpy" -m pip -V) 2>/dev/null || true
+
   # Upgrade pip inside venv and install/upgrade GST
   run_cmd "$vpy -m pip install --upgrade pip"
   run_cmd "$vpy -m pip install --upgrade gemini-srt-translator"
+
+  log "GST debug: pip show gemini-srt-translator (venv)"
+  ("$vpy" -m pip show gemini-srt-translator) 2>/dev/null || true
+  log "GST debug: listing venv bin directory (top entries):"
+  (ls -la "$GST_VENV_DIR/bin" | head -n 60) 2>/dev/null || true
 
   local gst_bin=""
   if [ -x "$GST_VENV_DIR/bin/gst" ]; then
@@ -172,6 +186,7 @@ install_gst() {
     # Try to resolve via PATH when venv bin is prefixed
     local resolved
     resolved=$(PATH="$GST_VENV_DIR/bin:$PATH" command -v gst 2>/dev/null || true)
+    log "GST debug: command -v gst with venv PATH => ${resolved:-<empty>}"
     if [ -n "$resolved" ] && [ -x "$resolved" ]; then
       gst_bin="$resolved"
     fi
@@ -182,10 +197,25 @@ install_gst() {
     ("$gst_bin" --version | head -n1) 2>/dev/null || true
   else
     warn "GST install completed but gst binary not found in venv bin: $GST_VENV_DIR/bin"
-    warn "Debug: listing venv bin directory (top entries):"
-    (ls -la "$GST_VENV_DIR/bin" | head -n 30) 2>/dev/null || true
-    warn "Debug: pip show gemini-srt-translator:"
+    warn "Debug: base python: $py"
+    ("$py" --version) 2>/dev/null || true
+    ("$py" -m pip -V) 2>/dev/null || true
+
+    warn "Debug: venv python: $vpy"
+    ("$vpy" --version) 2>/dev/null || true
+    ("$vpy" -m pip -V) 2>/dev/null || true
+
+    warn "Debug: pip show gemini-srt-translator (venv):"
     ("$vpy" -m pip show gemini-srt-translator) 2>/dev/null || true
+
+    warn "Debug: pip list (filtered for gst/gemini) (venv):"
+    ("$vpy" -m pip list | grep -iE "gemini|gst" || true) 2>/dev/null || true
+
+    warn "Debug: venv bin directory listing (top entries):"
+    (ls -la "$GST_VENV_DIR/bin" | head -n 120) 2>/dev/null || true
+
+    warn "Debug: resolving gst via PATH with venv bin prefixed:"
+    (PATH="$GST_VENV_DIR/bin:$PATH" command -v gst && PATH="$GST_VENV_DIR/bin:$PATH" gst --version | head -n 1) 2>/dev/null || true
     return 1
   fi
 }
