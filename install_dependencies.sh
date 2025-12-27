@@ -194,7 +194,8 @@ install_gst() {
 
   if [ -n "$gst_bin" ]; then
     log "GST installed at: $gst_bin"
-    ("$gst_bin" --version | head -n1) 2>/dev/null || true
+    # GST has no --version flag; use --help to verify it runs
+    ("$gst_bin" --help | head -n3) 2>/dev/null || true
     log "GST usage: run '$gst_bin translate ...' (works even if 'gst' is not on your shell PATH)"
     log "GST usage: to use 'gst' directly, either run 'source \"$GST_VENV_DIR/bin/activate\"' or add '$GST_VENV_DIR/bin' to your PATH"
   else
@@ -217,7 +218,7 @@ install_gst() {
     (ls -la "$GST_VENV_DIR/bin" | head -n 120) 2>/dev/null || true
 
     warn "Debug: resolving gst via PATH with venv bin prefixed:"
-    (PATH="$GST_VENV_DIR/bin:$PATH" command -v gst && PATH="$GST_VENV_DIR/bin:$PATH" gst --version | head -n 1) 2>/dev/null || true
+    (PATH="$GST_VENV_DIR/bin:$PATH" command -v gst && PATH="$GST_VENV_DIR/bin:$PATH" gst --help | head -n 3) 2>/dev/null || true
     return 1
   fi
 }
@@ -254,7 +255,8 @@ write_report() {
     (tesseract --version | head -n1) 2>/dev/null || true
     (python3 --version || python --version) 2>/dev/null || true
     (pgsrip --version || echo "pgsrip: try 'python3 -m pgsrip --version'") 2>/dev/null || true
-    ([ -x "$GST_VENV_DIR/bin/gst" ] && "$GST_VENV_DIR/bin/gst" --version | head -n1) 2>/dev/null || true
+    # GST has no --version; show path if exists
+    ([ -x "$GST_VENV_DIR/bin/gst" ] && echo "gst: $GST_VENV_DIR/bin/gst") 2>/dev/null || true
     echo
     echo "-- Locations --"
     command -v ffmpeg || true
