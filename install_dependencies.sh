@@ -195,6 +195,8 @@ install_gst() {
   if [ -n "$gst_bin" ]; then
     log "GST installed at: $gst_bin"
     ("$gst_bin" --version | head -n1) 2>/dev/null || true
+    log "GST usage: run '$gst_bin translate ...' (works even if 'gst' is not on your shell PATH)"
+    log "GST usage: to use 'gst' directly, either run 'source \"$GST_VENV_DIR/bin/activate\"' or add '$GST_VENV_DIR/bin' to your PATH"
   else
     warn "GST install completed but gst binary not found in venv bin: $GST_VENV_DIR/bin"
     warn "Debug: base python: $py"
