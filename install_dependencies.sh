@@ -157,10 +157,35 @@ install_gst() {
   run_cmd "$vpy -m pip install --upgrade pip"
   run_cmd "$vpy -m pip install --upgrade gemini-srt-translator"
 
+  local gst_bin=""
   if [ -x "$GST_VENV_DIR/bin/gst" ]; then
-    log "GST installed at: $GST_VENV_DIR/bin/gst"
+    gst_bin="$GST_VENV_DIR/bin/gst"
+  elif [ -f "$GST_VENV_DIR/bin/gst" ]; then
+    # Sometimes the file exists but isn't marked executable
+    run_cmd "chmod +x \"$GST_VENV_DIR/bin/gst\" || true"
+    if [ -x "$GST_VENV_DIR/bin/gst" ]; then
+      gst_bin="$GST_VENV_DIR/bin/gst"
+    fi
+  fi
+
+  if [ -z "$gst_bin" ]; then
+    # Try to resolve via PATH when venv bin is prefixed
+    local resolved
+    resolved=$(PATH="$GST_VENV_DIR/bin:$PATH" command -v gst 2>/dev/null || true)
+    if [ -n "$resolved" ] && [ -x "$resolved" ]; then
+      gst_bin="$resolved"
+    fi
+  fi
+
+  if [ -n "$gst_bin" ]; then
+    log "GST installed at: $gst_bin"
+    ("$gst_bin" --version | head -n1) 2>/dev/null || true
   else
-    warn "GST install completed but gst binary not found at expected path: $GST_VENV_DIR/bin/gst"
+    warn "GST install completed but gst binary not found in venv bin: $GST_VENV_DIR/bin"
+    warn "Debug: listing venv bin directory (top entries):"
+    (ls -la "$GST_VENV_DIR/bin" | head -n 30) 2>/dev/null || true
+    warn "Debug: pip show gemini-srt-translator:"
+    ("$vpy" -m pip show gemini-srt-translator) 2>/dev/null || true
     return 1
   fi
 }
