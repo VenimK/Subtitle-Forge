@@ -31,6 +31,50 @@ This project provides two applications:
    ```
 4. Move the app to your Applications folder
 
+#### Optional: Dependency Installer (macOS)
+
+If you want the app to also install common dependencies (and the **Gemini SRT Translator** CLI used for AI Translate), you can run:
+
+```bash
+bash ./install_dependencies.sh
+```
+
+This script:
+
+- **Installs Homebrew packages** (if missing): `mkvtoolnix`, `ffmpeg`, `deno`, `tesseract`, `git`, `cmake`, `unzip`, `curl`, `wget`, `python@3.14`
+- **Creates a dedicated virtual environment** for Gemini SRT Translator (GST):
+  - `~/.subtitle-forge/gst-venv/`
+- **Installs/updates GST** inside that venv:
+  - `git+https://github.com/MaKTaiL/gemini-srt-translator.git`
+- **Downloads common Tesseract language data** into:
+  - `~/tessdata_best/`
+- **Adds configuration to `~/.zshrc`** (if not already present):
+  - `export PATH="~/.subtitle-forge/gst-venv/bin:$PATH"`
+  - `export TESSDATA_PREFIX="$HOME/tessdata_best"`
+
+After running it, restart your terminal (or `source ~/.zshrc`) and verify:
+
+```bash
+gst --help
+gst translate --help
+```
+
+#### Uninstall (macOS)
+
+To remove the user-scoped items created by the installer, run:
+
+```bash
+bash ./uninstall_dependencies.sh
+```
+
+This script (safe by default):
+
+- Removes `~/.subtitle-forge/gst-venv/`
+- Removes `~/tessdata_best/`
+- Removes the installer-added lines from `~/.zshrc` (PATH + `TESSDATA_PREFIX`)
+
+**Note:** Homebrew packages (ffmpeg, python, tesseract, etc.) are **NOT removed** by default, since they may have been installed before Subtitle Forge or used by other software. If you want to remove them, edit the script and uncomment section 5.
+
 ### Windows
 1. Download the latest release for Windows
 2. Unzip the file

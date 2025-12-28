@@ -38,19 +38,25 @@ else
     echo "[INFO] No .zshrc file found, skipping cleanup."
 fi
 
-# 5️⃣ Optionally remove Homebrew dependencies (uncomment to use)
-# WARNING: This will remove dependencies that may affect other software.
-echo "[INFO] Removing Homebrew dependencies installed for GST..."
-BREW_DEPS=(mkvtoolnix ffmpeg deno tesseract git cmake unzip curl wget python@3.14)
-for dep in "${BREW_DEPS[@]}"; do
-    if brew list "$dep" &>/dev/null; then
-        echo "[INFO] Uninstalling $dep..."
-        brew uninstall --ignore-dependencies "$dep"
-    else
-        echo "[INFO] $dep not installed, skipping"
-    fi
-done
+# 5️⃣ Homebrew dependencies are NOT removed by default
+# These packages may have been installed before Subtitle Forge and could be used by other software.
+# Uncomment the section below ONLY if you are sure you want to remove them.
 
+# echo "[WARN] Removing Homebrew dependencies installed for GST..."
+# BREW_DEPS=(mkvtoolnix ffmpeg deno tesseract git cmake unzip curl wget python@3.14)
+# for dep in "${BREW_DEPS[@]}"; do
+#     if brew list "$dep" &>/dev/null; then
+#         echo "[INFO] Uninstalling $dep..."
+#         brew uninstall --ignore-dependencies "$dep"
+#     else
+#         echo "[INFO] $dep not installed, skipping"
+#     fi
+# done
+
+echo ""
 echo "[INFO] Uninstallation complete!"
+echo "[INFO] Removed: gst-venv, tessdata_best, and related .zshrc entries."
+echo "[INFO] Homebrew packages (ffmpeg, python, etc.) were NOT removed."
+echo "[INFO] If you want to remove them, edit uninstall_dependencies.sh and uncomment section 5."
 echo "[INFO] Please restart your terminal to finalize changes."
 
