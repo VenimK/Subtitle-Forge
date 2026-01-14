@@ -105,11 +105,11 @@ This script (safe by default):
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
 
-## What's New in v2.0.50 ✨
+## What's New in v2.0.52 ✨
 
 ### 🎙️ Whisper Transcription - Generate Subtitles from Audio/Video!
 
-**v2.0.50** introduces powerful speech-to-text transcription using [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with Apple Silicon CoreML acceleration:
+**v2.0.52** introduces powerful speech-to-text transcription using [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with Apple Silicon CoreML acceleration:
 
 - **🎤 Audio/Video Transcription**: Generate SRT, VTT, or TXT subtitles from any media file
 - **⚡ CoreML Acceleration**: Up to 3x faster on Apple Silicon using the Neural Engine
