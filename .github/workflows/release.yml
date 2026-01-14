@@ -95,6 +95,10 @@ jobs:
             cp install_vobsub2srt.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  install_vobsub2srt.sh not found"
             cp install_pgsrip.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  install_pgsrip.sh not found"
             cp install_tessdata.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  install_tessdata.sh not found"
+            # Copy new Whisper and LibreTranslate scripts from root directory
+            cp ../Whisper-mac-coreml.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  Whisper-mac-coreml.sh not found"
+            cp ../Libre-mac.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  Libre-mac.sh not found"
+            cp ../batch_translate.sh "Subtitle Forge.app/Contents/MacOS/" 2>/dev/null || echo "⚠️  batch_translate.sh not found"
             chmod +x "Subtitle Forge.app/Contents/MacOS/"*.sh 2>/dev/null || true
             echo "✅ Installation scripts copied"
             
@@ -143,6 +147,10 @@ jobs:
           cp install_vobsub2srt.sh build/linux/ 2>/dev/null || echo "install_vobsub2srt.sh not found"
           cp install_pgsrip.sh build/linux/ 2>/dev/null || echo "install_pgsrip.sh not found"
           cp install_tessdata.sh build/linux/ 2>/dev/null || echo "install_tessdata.sh not found"
+          # Copy new Whisper and LibreTranslate scripts from root directory
+          cp ../Whisper-mac-coreml.sh build/linux/ 2>/dev/null || echo "Whisper-mac-coreml.sh not found"
+          cp ../Libre-mac.sh build/linux/ 2>/dev/null || echo "Libre-mac.sh not found"
+          cp ../batch_translate.sh build/linux/ 2>/dev/null || echo "batch_translate.sh not found"
           
           # Copy documentation
           cp ../README.md build/linux/ 2>/dev/null || echo "README.md not found"
@@ -162,6 +170,9 @@ jobs:
           echo "- install_vobsub2srt.sh - VobSub2SRT installation script" >> build/linux/INSTALL.md
           echo "- install_pgsrip.sh - PGSRip installation script" >> build/linux/INSTALL.md
           echo "- install_tessdata.sh - Tesseract language data installer" >> build/linux/INSTALL.md
+          echo "- Whisper-mac-coreml.sh - Whisper with CoreML setup (macOS)" >> build/linux/INSTALL.md
+          echo "- Libre-mac.sh - LibreTranslate server setup" >> build/linux/INSTALL.md
+          echo "- batch_translate.sh - Batch subtitle translation" >> build/linux/INSTALL.md
           echo "" >> build/linux/INSTALL.md
           echo "## What's New in v2.0.6" >> build/linux/INSTALL.md
           echo "- Fixed GST path persistence - custom paths are now saved" >> build/linux/INSTALL.md
