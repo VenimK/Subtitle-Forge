@@ -233,13 +233,18 @@ jobs:
           Write-Host "Listing files in build directory:"
           Get-ChildItem -Path build -ErrorAction SilentlyContinue
           
+          # Stage files into a single folder so the ZIP includes the exe + scripts
+          $stagingDir = Join-Path $PWD "dist"
+          if (Test-Path $stagingDir) { Remove-Item -Recurse -Force $stagingDir }
+          New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+          
           # Try to find the executable and create archive
           if (Test-Path "Subtitle Forge.exe") {
             Write-Host "Found Subtitle Forge.exe in current directory"
-            Compress-Archive -Path "Subtitle Forge.exe" -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
+            Copy-Item -Force "Subtitle Forge.exe" (Join-Path $stagingDir "Subtitle Forge.exe")
           } elseif (Test-Path "build\subtitle-forge-windows.exe") {
             Write-Host "Found subtitle-forge-windows.exe in build directory"
-            Compress-Archive -Path "build\subtitle-forge-windows.exe" -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
+            Copy-Item -Force "build\subtitle-forge-windows.exe" (Join-Path $stagingDir "subtitle-forge-windows.exe")
           } else {
             # Find any exe files
             Write-Host "Searching for any .exe files..."
@@ -251,12 +256,31 @@ jobs:
               }
               # Use the first exe file found
               Write-Host "Using $($exeFiles[0].FullName) for archive"
-              Compress-Archive -Path $exeFiles[0].FullName -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
+              Copy-Item -Force $exeFiles[0].FullName (Join-Path $stagingDir $exeFiles[0].Name)
             } else {
               Write-Error "No executable files found!"
               exit 1
             }
           }
+          
+          # Copy scripts from repo root (working-directory is ./fyne-gui)
+          $rootDir = Resolve-Path ".."
+          $scripts = @(
+            "Libre-mac.sh",
+            "Whisper-mac-coreml.sh",
+            "batch_translate.sh"
+          )
+          foreach ($s in $scripts) {
+            $src = Join-Path $rootDir $s
+            if (Test-Path $src) {
+              Copy-Item -Force $src (Join-Path $stagingDir $s)
+            } else {
+              Write-Host "WARN: $s not found at $src"
+            }
+          }
+          
+          # Create final archive
+          Compress-Archive -Path (Join-Path $stagingDir "*") -DestinationPath "${{ matrix.artifact_name }}.zip" -Force
 
       # Upload artifacts
       - name: Upload macOS app
