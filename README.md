@@ -1,5 +1,5 @@
-# Subtitle Forge v2.0.19
-> Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
+# Subtitle Forge v2.0.50
+> Powerful subtitle extraction, conversion, **AI translation**, **Whisper transcription**, and **LibreTranslate** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, transcribe, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
 > [![GitHub All Releases](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/total.svg)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -17,7 +17,9 @@ This project provides two applications:
    - **Extract Subtitles** - Extract from MKV files with batch processing and PGS to SRT conversion
    - **Insert Subtitles** - Insert subtitles (all formats) into video files
    - **Convert Subtitles** - Universal subtitle format converter with batch processing and advanced options
-   - **AI Translation** - 🆕 Translate subtitles using Google Gemini AI with intelligent batch processing
+   - **AI Translation** - Translate subtitles using Google Gemini AI with intelligent batch processing
+   - **Whisper Transcription** - 🆕 Transcribe audio/video to subtitles using whisper.cpp with CoreML acceleration (macOS)
+   - **LibreTranslate** - 🆕 Translate subtitles using local or remote LibreTranslate servers
    - **Settings** - Dependency management and seasonal dark themes
 
 ## Installation
@@ -102,6 +104,72 @@ This script (safe by default):
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v2.0.50 ✨
+
+### 🎙️ Whisper Transcription - Generate Subtitles from Audio/Video!
+
+**v2.0.50** introduces powerful speech-to-text transcription using [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with Apple Silicon CoreML acceleration:
+
+- **🎤 Audio/Video Transcription**: Generate SRT, VTT, or TXT subtitles from any media file
+- **⚡ CoreML Acceleration**: Up to 3x faster on Apple Silicon using the Neural Engine
+- **📦 Model Management**: Download and manage Whisper models directly from the GUI
+- **🔧 CoreML Encoder Generation**: Generate optimized CoreML encoders with one click
+- **🧵 Thread Control**: Adjustable thread count for performance tuning
+- **🖥️ Terminal Integration**: Runs transcription in macOS Terminal with live output
+
+### 🌍 LibreTranslate Integration - Local & Remote Translation!
+
+- **🏠 Local Translation**: Run LibreTranslate locally for private, offline translation
+- **🌐 Remote Servers**: Connect to any LibreTranslate server URL
+- **🔑 API Key Support**: Optional API key authentication
+- **📁 File Translation**: Translate entire subtitle files with preserved formatting
+- **🔄 Drag & Drop**: Drop .srt files directly onto the LibreTranslate tab
+
+### 📋 Setup Scripts for macOS
+
+Before using the new features, run these setup scripts:
+
+#### Whisper.cpp with CoreML (for Transcription)
+```bash
+# Install whisper.cpp with CoreML support
+bash ./Whisper-mac-coreml.sh install
+
+# Download a model (e.g., base.en, small, medium)
+bash ./Whisper-mac-coreml.sh download-model base.en
+
+# Generate CoreML encoder for faster inference
+bash ./Whisper-mac-coreml.sh generate-coreml base.en
+```
+
+#### Python Environment for CoreML Model Generation
+```bash
+# Create a Python 3.11 virtual environment
+python3.11 -m venv ~/py311-whisper
+source ~/py311-whisper/bin/activate
+
+# Install required packages
+pip install --upgrade pip
+pip install torch
+pip install ane_transformers openai-whisper coremltools
+```
+
+#### LibreTranslate (for Local Translation)
+```bash
+# Install LibreTranslate with language models
+bash ./Libre-mac.sh install
+
+# Start LibreTranslate server
+bash ./Libre-mac.sh start
+
+# Or run in background
+bash ./Libre-mac.sh start-bg
+
+# Check status and get API key
+bash ./Libre-mac.sh status
+```
+
+---
 
 ## What's New in v2.0.17 ✨
 

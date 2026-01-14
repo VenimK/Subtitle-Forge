@@ -7381,6 +7381,14 @@ func main() {
 	aiTranslationTabContent := createAITranslationTab(w, a)
 	aiTranslationScroll := container.NewScroll(aiTranslationTabContent)
 
+	// Create Whisper transcription tab
+	whisperTabContent := createWhisperTranscribeTab(w, a)
+	whisperScroll := container.NewScroll(whisperTabContent)
+
+	// Create LibreTranslate tab
+	libreTranslateTabContent := createLibreTranslateTab(w, a)
+	libreTranslateScroll := container.NewScroll(libreTranslateTabContent)
+
 	// Create Logs tab
 	logsTabContent := createLogsTab(w)
 	logsScroll := container.NewScroll(logsTabContent)
@@ -7390,6 +7398,8 @@ func main() {
 		container.NewTabItem("Extract Subtitles", extractScroll),
 		container.NewTabItem("Insert Subtitles", insertScroll),
 		container.NewTabItem("Convert Subtitles", convertScroll),
+		container.NewTabItem("🎙️ Transcribe", whisperScroll),
+		container.NewTabItem("🌍 LibreTranslate", libreTranslateScroll),
 		container.NewTabItem("🤖 AI Translate", aiTranslationScroll),
 		container.NewTabItem("📋 Logs", logsScroll),
 		container.NewTabItem("Settings", settingsScroll),
@@ -7398,6 +7408,8 @@ func main() {
 
 	// Set up tab change handler for drag and drop
 	tabs.OnChanged = func(tab *container.TabItem) {
+		// Default: clear any previous tab's drop handler
+		w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {})
 		if tab.Text == "Insert Subtitles" {
 			// Set up drag and drop for Insert Subtitles tab
 			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
@@ -7443,6 +7455,49 @@ func main() {
 							})
 						}
 					}
+				}
+			})
+		} else if tab.Text == "🎙️ Transcribe" {
+			// Drag & drop for Whisper transcription tab
+			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
+				if len(uris) == 0 {
+					return
+				}
+				filePath := uris[0].Path()
+				if filePath == "" {
+					return
+				}
+				if whisperTranscribeSetInputFile != nil {
+					whisperTranscribeSetInputFile(filePath)
+					a.SendNotification(&fyne.Notification{
+						Title:   "Media File Loaded",
+						Content: "Loaded for transcription: " + filepath.Base(filePath),
+					})
+				}
+			})
+		} else if tab.Text == "🌍 LibreTranslate" {
+			// Drag & drop for LibreTranslate tab (SRT only)
+			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
+				if len(uris) == 0 {
+					return
+				}
+				filePath := uris[0].Path()
+				if filePath == "" {
+					return
+				}
+				if strings.ToLower(filepath.Ext(filePath)) != ".srt" {
+					a.SendNotification(&fyne.Notification{
+						Title:   "Invalid File",
+						Content: "Please drop an .srt subtitle file.",
+					})
+					return
+				}
+				if libreTranslateSetInputFile != nil {
+					libreTranslateSetInputFile(filePath)
+					a.SendNotification(&fyne.Notification{
+						Title:   "Subtitle File Loaded",
+						Content: "Loaded for LibreTranslate: " + filepath.Base(filePath),
+					})
 				}
 			})
 		} else if tab.Text == "🤖 AI Translate" {
