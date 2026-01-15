@@ -22,6 +22,8 @@ import (
 
 var libreTranslateSetInputFile func(string)
 
+var libreTranslateAddInputFile func(string)
+
 type libreTranslateLanguagesResponse []struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
@@ -56,14 +58,74 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		}
 	}
 
-	var inputFile string
-	inputLabel := widget.NewLabel("No SRT file selected")
+	var inputFiles []string
+	inputLabel := widget.NewLabel("No SRT files selected")
 	inputLabel.Wrapping = fyne.TextWrapWord
 
-	libreTranslateSetInputFile = func(path string) {
-		inputFile = path
-		inputLabel.SetText("Selected: " + filepath.Base(inputFile))
+	fileList := container.NewVBox()
+	fileListScroll := container.NewScroll(fileList)
+	fileListScroll.SetMinSize(fyne.NewSize(0, 120))
+
+	var updateFileList func()
+	updateFileList = func() {
+		fileList.Objects = nil
+		for i, file := range inputFiles {
+			fileName := filepath.Base(file)
+			fileRow := container.NewHBox(
+				widget.NewLabel(fmt.Sprintf("%d.", i+1)),
+				widget.NewLabel(fileName),
+				layout.NewSpacer(),
+				widget.NewButton("Remove", func(index int) func() {
+					return func() {
+						inputFiles = append(inputFiles[:index], inputFiles[index+1:]...)
+						updateFileList()
+						if len(inputFiles) == 0 {
+							inputLabel.SetText("No SRT files selected")
+						} else if len(inputFiles) == 1 {
+							inputLabel.SetText("Selected: " + filepath.Base(inputFiles[0]))
+						} else {
+							inputLabel.SetText(fmt.Sprintf("%d SRT files selected", len(inputFiles)))
+						}
+					}
+				}(i)),
+			)
+			fileList.Add(fileRow)
+		}
+		fileList.Refresh()
 	}
+
+	addInputFile := func(path string) {
+		if strings.ToLower(filepath.Ext(path)) != ".srt" {
+			return
+		}
+		for _, existing := range inputFiles {
+			if existing == path {
+				return
+			}
+		}
+		inputFiles = append(inputFiles, path)
+		if len(inputFiles) == 1 {
+			inputLabel.SetText("Selected: " + filepath.Base(inputFiles[0]))
+		} else {
+			inputLabel.SetText(fmt.Sprintf("%d SRT files selected", len(inputFiles)))
+		}
+		updateFileList()
+	}
+
+	libreTranslateSetInputFile = func(path string) {
+		inputFiles = nil
+		addInputFile(path)
+	}
+
+	libreTranslateAddInputFile = func(path string) {
+		addInputFile(path)
+	}
+
+	clearBtn := widget.NewButton("Clear", func() {
+		inputFiles = nil
+		inputLabel.SetText("No SRT files selected")
+		updateFileList()
+	})
 
 	selectInputBtn := widget.NewButton("Select SRT File", func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
@@ -75,7 +137,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 				return
 			}
 			defer reader.Close()
-			libreTranslateSetInputFile(reader.URI().Path())
+			libreTranslateAddInputFile(reader.URI().Path())
 		}, w)
 		fd.Show()
 	})
@@ -155,19 +217,34 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	resultScroll := container.NewScroll(resultLabel)
 	resultScroll.SetMinSize(fyne.NewSize(0, 200))
 
+	statusLabel := widget.NewLabel("")
+	statusLabel.Wrapping = fyne.TextWrapWord
+	progressBar := widget.NewProgressBar()
+	progressBar.Hide()
+
+	logGrid := widget.NewTextGrid()
+	logScroll := container.NewScroll(logGrid)
+	logScroll.SetMinSize(fyne.NewSize(0, 140))
+	var logText string
+
+	appendLog := func(msg string) {
+		ts := time.Now().Format("15:04:05")
+		fyne.Do(func() {
+			logText += fmt.Sprintf("[%s] %s\n", ts, msg)
+			logGrid.SetText(logText)
+			logScroll.ScrollToBottom()
+		})
+	}
+
 	var translateBtn *widget.Button
 	translateBtn = widget.NewButton("Translate SRT", func() {
-		if inputFile == "" {
-			dialog.ShowError(fmt.Errorf("please select an SRT file"), w)
+		if len(inputFiles) == 0 {
+			dialog.ShowError(fmt.Errorf("please select one or more SRT files"), w)
 			return
 		}
 		baseURL := strings.TrimSpace(urlEntry.Text)
 		if baseURL == "" {
 			dialog.ShowError(fmt.Errorf("please set LibreTranslate URL"), w)
-			return
-		}
-		if strings.ToLower(filepath.Ext(inputFile)) != ".srt" {
-			dialog.ShowError(fmt.Errorf("please select an .srt file"), w)
 			return
 		}
 
@@ -178,39 +255,93 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 			return
 		}
 
-		outDir := outputDir
-		if outDir == "" {
-			outDir = filepath.Dir(inputFile)
-		}
-		baseName := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile))
-		outFile := filepath.Join(outDir, fmt.Sprintf("%s.%s.srt", baseName, tgt))
-
-		progress := dialog.NewProgressInfinite("LibreTranslate", "Translating…", w)
-		progress.Show()
 		translateBtn.Disable()
+		selectInputBtn.Disable()
+		selectOutputBtn.Disable()
+		clearBtn.Disable()
+		refreshLanguagesBtn.Disable()
+		fyne.Do(func() {
+			statusLabel.SetText("Starting…")
+			progressBar.SetValue(0)
+			progressBar.Show()
+		})
 
 		go func() {
 			apiKey := apiKeyEntry.Text
+			appendLog("Starting translation")
 
 			if err := checkLibreTranslateReachable(baseURL); err != nil {
 				fyne.Do(func() {
-					progress.Hide()
 					translateBtn.Enable()
+					selectInputBtn.Enable()
+					selectOutputBtn.Enable()
+					clearBtn.Enable()
+					refreshLanguagesBtn.Enable()
+					progressBar.Hide()
+					statusLabel.SetText("")
 					resultLabel.SetText(fmt.Sprintf("❌ Cannot reach LibreTranslate server: %v", err))
 				})
+				appendLog(fmt.Sprintf("Cannot reach server: %v", err))
 				return
 			}
+			appendLog("Server reachable")
 
-			err := libreTranslateTranslateFile(baseURL, apiKey, inputFile, src, tgt, outFile)
-			fyne.Do(func() {
-				progress.Hide()
-				translateBtn.Enable()
+			var okCount int
+			var failCount int
+			var lastOutFile string
+			for i, inFile := range inputFiles {
+				fyne.Do(func() {
+					statusLabel.SetText(fmt.Sprintf("Translating %d/%d: %s", i+1, len(inputFiles), filepath.Base(inFile)))
+					if len(inputFiles) > 0 {
+						progressBar.SetValue(float64(i) / float64(len(inputFiles)))
+					}
+				})
+				appendLog(fmt.Sprintf("[%d/%d] Translating %s", i+1, len(inputFiles), filepath.Base(inFile)))
+				outDir := outputDir
+				if outDir == "" {
+					outDir = filepath.Dir(inFile)
+				}
+				baseName := strings.TrimSuffix(filepath.Base(inFile), filepath.Ext(inFile))
+				outFile := filepath.Join(outDir, fmt.Sprintf("%s.%s.srt", baseName, tgt))
+				err := libreTranslateTranslateFile(baseURL, apiKey, inFile, src, tgt, outFile)
 				if err != nil {
-					resultLabel.SetText(fmt.Sprintf("❌ Translation failed: %v", err))
+					failCount++
+					appendLog(fmt.Sprintf("❌ Failed: %v", err))
+					continue
+				}
+				okCount++
+				lastOutFile = outFile
+				appendLog("✅ Completed: " + outFile)
+			}
+			fyne.Do(func() {
+				if len(inputFiles) > 0 {
+					progressBar.SetValue(1)
+				}
+			})
+
+			fyne.Do(func() {
+				translateBtn.Enable()
+				selectInputBtn.Enable()
+				selectOutputBtn.Enable()
+				clearBtn.Enable()
+				refreshLanguagesBtn.Enable()
+				progressBar.Hide()
+				statusLabel.SetText("")
+				if okCount > 0 && failCount == 0 {
+					if okCount == 1 {
+						resultLabel.SetText("✅ Translation completed\n\n" + lastOutFile)
+					} else {
+						resultLabel.SetText(fmt.Sprintf("✅ Translation completed: %d file(s)", okCount))
+					}
 					return
 				}
-				resultLabel.SetText("✅ Translation completed\n\n" + outFile)
+				if okCount == 0 {
+					resultLabel.SetText(fmt.Sprintf("❌ Translation failed: %d file(s)", failCount))
+					return
+				}
+				resultLabel.SetText(fmt.Sprintf("⚠️ Translation completed with errors: %d ok, %d failed", okCount, failCount))
 			})
+			appendLog(fmt.Sprintf("Finished: %d ok, %d failed", okCount, failCount))
 		}()
 	})
 	translateBtn.Importance = widget.HighImportance
@@ -229,7 +360,8 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewSeparator(),
 		widget.NewLabel("Input"),
 		inputLabel,
-		selectInputBtn,
+		container.NewHBox(selectInputBtn, clearBtn, layout.NewSpacer()),
+		fileListScroll,
 		widget.NewSeparator(),
 		widget.NewLabel("Languages"),
 		container.New(layout.NewFormLayout(),
@@ -242,6 +374,10 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		selectOutputBtn,
 		widget.NewSeparator(),
 		translateBtn,
+		statusLabel,
+		progressBar,
+		widget.NewLabel("Log"),
+		logScroll,
 		resultScroll,
 	)
 

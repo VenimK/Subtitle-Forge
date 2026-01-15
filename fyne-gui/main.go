@@ -7481,24 +7481,49 @@ func main() {
 				if len(uris) == 0 {
 					return
 				}
-				filePath := uris[0].Path()
-				if filePath == "" {
-					return
+
+				var srtFiles []string
+				for _, uri := range uris {
+					filePath := uri.Path()
+					if filePath == "" {
+						continue
+					}
+					if strings.ToLower(filepath.Ext(filePath)) == ".srt" {
+						srtFiles = append(srtFiles, filePath)
+					}
 				}
-				if strings.ToLower(filepath.Ext(filePath)) != ".srt" {
+
+				if len(srtFiles) == 0 {
 					a.SendNotification(&fyne.Notification{
-						Title:   "Invalid File",
-						Content: "Please drop an .srt subtitle file.",
+						Title:   "Invalid Files",
+						Content: "Please drop .srt subtitle file(s).",
 					})
 					return
 				}
-				if libreTranslateSetInputFile != nil {
-					libreTranslateSetInputFile(filePath)
+
+				if len(srtFiles) == 1 {
+					if libreTranslateSetInputFile != nil {
+						libreTranslateSetInputFile(srtFiles[0])
+					}
 					a.SendNotification(&fyne.Notification{
 						Title:   "Subtitle File Loaded",
-						Content: "Loaded for LibreTranslate: " + filepath.Base(filePath),
+						Content: "Loaded for LibreTranslate: " + filepath.Base(srtFiles[0]),
 					})
+					return
 				}
+
+				if libreTranslateAddInputFile != nil {
+					for _, filePath := range srtFiles {
+						libreTranslateAddInputFile(filePath)
+					}
+				} else if libreTranslateSetInputFile != nil {
+					libreTranslateSetInputFile(srtFiles[0])
+				}
+
+				a.SendNotification(&fyne.Notification{
+					Title:   "Batch Mode Enabled",
+					Content: fmt.Sprintf("Added %d SRT files for LibreTranslate", len(srtFiles)),
+				})
 			})
 		} else if tab.Text == "🤖 AI Translate" {
 			// Set up drag and drop for AI Translation tab (supports multiple files)

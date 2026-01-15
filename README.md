@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.52
+# Subtitle Forge v2.0.53
 > Powerful subtitle extraction, conversion, **AI translation**, **Whisper transcription**, and **LibreTranslate** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, transcribe, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -104,6 +104,20 @@ This script (safe by default):
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v2.0.53 ✨
+
+### 🌍 LibreTranslate Batch Mode & Enhanced UX!
+
+**v2.0.53** improves the LibreTranslate tab with batch translation and better visibility:
+
+- **📁 Multiple File Support**: Drop or select multiple .srt files for batch translation
+- **📋 File Queue UI**: View, remove, and clear queued files before translating
+- **📊 Inline Progress**: Real-time status and progress bar (no blocking popup)
+- **📝 Live Log Panel**: Monospace log showing each file's translation status with timestamps
+- **🔄 Drag & Drop Batch**: Drop multiple .srt files at once onto the LibreTranslate tab
+
+---
 
 ## What's New in v2.0.52 ✨
 
