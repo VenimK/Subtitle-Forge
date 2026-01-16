@@ -14,10 +14,11 @@ usage() {
 Usage:
   ./Whisper-mac-coreml.sh install
   ./Whisper-mac-coreml.sh install-deps
+  ./Whisper-mac-coreml.sh list-models
   ./Whisper-mac-coreml.sh download-model [model_name]
   ./Whisper-mac-coreml.sh generate-coreml [model_name]
   ./Whisper-mac-coreml.sh convert <input_media> <output_wav>
-  ./Whisper-mac-coreml.sh transcribe <input_media_or_wav> [--model <ggml_model_path>] [--out <output_prefix>] [--srt] [--vtt] [--txt]
+  ./Whisper-mac-coreml.sh transcribe <input_media_or_wav> [--model <ggml_model_path>] [--out <output_prefix>] [--lang <code>] [--srt] [--vtt] [--txt]
 
 Notes:
 - Installs whisper.cpp with Core ML support for Apple Silicon (ANE acceleration).
@@ -27,6 +28,36 @@ Notes:
 Environment variables:
   PREFIX_DIR         (default: ~/.whispercpp-coreml)
   MODEL_NAME_DEFAULT (default: base.en)
+EOF
+}
+
+list_models() {
+  cat <<'EOF'
+Supported whisper.cpp GGML model names (common):
+
+English-only (smaller / faster):
+  tiny.en
+  base.en
+  small.en
+  medium.en
+
+Multilingual (auto-detect language):
+  tiny
+  base
+  small
+  medium
+  large-v1
+  large-v2
+  large-v3
+  large-v3-turbo
+
+Tips:
+- Use *.en models if you ONLY need English (faster / smaller).
+- Use non-.en models for other languages or mixed language content.
+- Download example:
+    ./Whisper-mac-coreml.sh download-model medium
+- CoreML encoder example (Apple Silicon speedup):
+    ./Whisper-mac-coreml.sh generate-coreml medium
 EOF
 }
 
@@ -181,6 +212,7 @@ transcribe() {
 
   local model_file="$MODEL_FILE_DEFAULT"
   local out_prefix=""
+  local lang_code=""
   local want_srt=0
   local want_vtt=0
   local want_txt=0
@@ -193,6 +225,10 @@ transcribe() {
         ;;
       --out)
         out_prefix="$2"
+        shift 2
+        ;;
+      --lang)
+        lang_code="$2"
         shift 2
         ;;
       --srt)
@@ -243,6 +279,10 @@ transcribe() {
 
   local args=("-m" "$model_file" "-f" "$wav_input")
 
+  if [ -n "$lang_code" ]; then
+    args+=("-l" "$lang_code")
+  fi
+
   if [ -n "$out_prefix" ]; then
     out_dir="$(dirname "$out_prefix")"
     mkdir -p "$out_dir"
@@ -272,6 +312,9 @@ case "$cmd" in
     ;;
   install-deps)
     ensure_python_deps
+    ;;
+  list-models)
+    list_models
     ;;
   download-model)
     shift || true
