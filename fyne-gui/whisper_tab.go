@@ -1,7 +1,13 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
+	"math"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +25,27 @@ import (
 )
 
 var whisperTranscribeSetInputFile func(string)
+
+type progressReader struct {
+	r        io.Reader
+	total    int64
+	onUpdate func(sent int64)
+	sent     int64
+	last     time.Time
+}
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	if n > 0 {
+		p.sent += int64(n)
+		now := time.Now()
+		if p.onUpdate != nil && (p.last.IsZero() || now.Sub(p.last) > 500*time.Millisecond) {
+			p.last = now
+			p.onUpdate(p.sent)
+		}
+	}
+	return n, err
+}
 
 func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	title := widget.NewLabel("Whisper Transcription")
@@ -72,6 +99,43 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		}, w)
 	})
 
+	modeSelect := widget.NewSelect([]string{"Local (whisper-cli)", "Remote API"}, nil)
+	modeSelect.PlaceHolder = "Local (whisper-cli)"
+	modeSelect.SetSelected(a.Preferences().StringWithFallback("whisper_transcribe_mode", "Local (whisper-cli)"))
+	modeSelect.OnChanged = func(s string) {
+		if s == "" {
+			return
+		}
+		a.Preferences().SetString("whisper_transcribe_mode", s)
+	}
+
+	remoteURLEntry := widget.NewEntry()
+	remoteURLEntry.SetPlaceHolder("http://192.168.1.54:8000")
+	remoteURLEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_url", "http://127.0.0.1:8000"))
+	remoteURLEntry.OnChanged = func(s string) { a.Preferences().SetString("whisper_remote_url", s) }
+
+	remoteKeyEntry := widget.NewPasswordEntry()
+	remoteKeyEntry.SetPlaceHolder("Optional x-api-key")
+	remoteKeyEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_api_key", ""))
+
+	rememberRemoteKey := widget.NewCheck("Remember API key (saved locally)", nil)
+	rememberRemoteKey.Checked = a.Preferences().BoolWithFallback("whisper_remote_remember_api_key", false)
+	rememberRemoteKey.OnChanged = func(checked bool) {
+		a.Preferences().SetBool("whisper_remote_remember_api_key", checked)
+		if !checked {
+			a.Preferences().SetString("whisper_remote_api_key", "")
+			relaxed := strings.TrimSpace(remoteKeyEntry.Text)
+			if relaxed != "" {
+				remoteKeyEntry.SetText("")
+			}
+		}
+	}
+	remoteKeyEntry.OnChanged = func(s string) {
+		if rememberRemoteKey.Checked {
+			a.Preferences().SetString("whisper_remote_api_key", s)
+		}
+	}
+
 	defaultWhisperBin := a.Preferences().StringWithFallback("whisper_cli_path", "")
 	if defaultWhisperBin == "" {
 		homeDir, _ := os.UserHomeDir()
@@ -96,6 +160,47 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	modelEntry.SetText(defaultModel)
 	modelEntry.OnChanged = func(s string) {
 		a.Preferences().SetString("whisper_model_path", s)
+	}
+
+	langLabel := widget.NewLabel("Language: Auto")
+	langLabel.Wrapping = fyne.TextWrapWord
+	langOptions := []string{
+		"Auto",
+		"en",
+		"nl",
+		"de",
+		"fr",
+		"es",
+		"it",
+		"pt",
+		"sv",
+		"da",
+		"no",
+		"fi",
+		"pl",
+		"cs",
+		"tr",
+		"ru",
+		"uk",
+		"ar",
+		"hi",
+		"ja",
+		"ko",
+		"zh",
+	}
+	langSelect := widget.NewSelect(langOptions, nil)
+	langSelect.PlaceHolder = "Auto"
+	langSelect.SetSelected(a.Preferences().StringWithFallback("whisper_language", "Auto"))
+	langSelect.OnChanged = func(s string) {
+		if s == "" {
+			return
+		}
+		a.Preferences().SetString("whisper_language", s)
+		if s == "Auto" {
+			langLabel.SetText("Language: Auto")
+			return
+		}
+		langLabel.SetText("Language: " + s)
 	}
 
 	modelOptions := []string{}
@@ -312,11 +417,81 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	wantSRT.SetChecked(true)
 	wantVTT := widget.NewCheck("Generate VTT", nil)
 	wantTXT := widget.NewCheck("Generate TXT", nil)
+	wantSRTTimestampsOnly := widget.NewCheck("Timestamps-only SRT (extra file)", nil)
+	wantSRTTimestampsOnly.SetChecked(a.Preferences().BoolWithFallback("whisper_srt_timestamps_only", false))
+	wantSRTTimestampsOnly.OnChanged = func(b bool) {
+		a.Preferences().SetBool("whisper_srt_timestamps_only", b)
+	}
+	wantSRT.OnChanged = func(b bool) {
+		if b {
+			wantSRTTimestampsOnly.Enable()
+			return
+		}
+		wantSRTTimestampsOnly.Disable()
+		wantSRTTimestampsOnly.SetChecked(false)
+	}
 
 	resultLabel := widget.NewLabel("")
 	resultLabel.Wrapping = fyne.TextWrapWord
 	resultScroll := container.NewScroll(resultLabel)
 	resultScroll.SetMinSize(fyne.NewSize(0, 200))
+
+	logGrid := widget.NewTextGrid()
+	logScroll := container.NewScroll(logGrid)
+	logScroll.SetMinSize(fyne.NewSize(0, 120))
+	var logText string
+	appendLog := func(msg string) {
+		ts := time.Now().Format("15:04:05")
+		fyne.Do(func() {
+			logText += fmt.Sprintf("[%s] %s\n", ts, msg)
+			logGrid.SetText(logText)
+			logScroll.ScrollToBottom()
+		})
+	}
+
+	applyModeUI := func() {
+		isRemote := modeSelect.Selected == "Remote API"
+		if isRemote {
+			whisperBinEntry.Disable()
+			browseWhisperBtn.Disable()
+			modelEntry.Disable()
+			browseModelBtn.Disable()
+			modelSelect.Disable()
+			refreshModelsBtn.Disable()
+			modelNameSelect.Disable()
+			installModelBtn.Disable()
+			generateCoreMLBtn.Disable()
+			coremlCondaEnvEntry.Disable()
+			coremlVenvActivateEntry.Disable()
+			threadsSlider.Disable()
+			wantSRT.Enable()
+			wantVTT.Enable()
+			wantTXT.Enable()
+			langSelect.Disable()
+			return
+		}
+
+		whisperBinEntry.Enable()
+		browseWhisperBtn.Enable()
+		modelEntry.Enable()
+		browseModelBtn.Enable()
+		modelSelect.Enable()
+		refreshModelsBtn.Enable()
+		modelNameSelect.Enable()
+		installModelBtn.Enable()
+		generateCoreMLBtn.Enable()
+		coremlCondaEnvEntry.Enable()
+		coremlVenvActivateEntry.Enable()
+		threadsSlider.Enable()
+		langSelect.Enable()
+	}
+	modeSelect.OnChanged = func(s string) {
+		if s == "" {
+			return
+		}
+		a.Preferences().SetString("whisper_transcribe_mode", s)
+		applyModeUI()
+	}
 
 	var runBtn *widget.Button
 	runBtn = widget.NewButton("Start Transcription", func() {
@@ -324,13 +499,16 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			dialog.ShowError(fmt.Errorf("please select an input file"), w)
 			return
 		}
-		if strings.TrimSpace(whisperBinEntry.Text) == "" {
-			dialog.ShowError(fmt.Errorf("please set whisper-cli path"), w)
-			return
-		}
-		if strings.TrimSpace(modelEntry.Text) == "" {
-			dialog.ShowError(fmt.Errorf("please set a GGML model path"), w)
-			return
+
+		if modeSelect.Selected != "Remote API" {
+			if strings.TrimSpace(whisperBinEntry.Text) == "" {
+				dialog.ShowError(fmt.Errorf("please set whisper-cli path"), w)
+				return
+			}
+			if strings.TrimSpace(modelEntry.Text) == "" {
+				dialog.ShowError(fmt.Errorf("please set a GGML model path"), w)
+				return
+			}
 		}
 		if !wantSRT.Checked && !wantVTT.Checked && !wantTXT.Checked {
 			dialog.ShowError(fmt.Errorf("please select at least one output format (SRT/VTT/TXT)"), w)
@@ -353,6 +531,9 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		var outputs []string
 		if wantSRT.Checked {
 			outputs = append(outputs, outputPrefix+".srt")
+			if wantSRTTimestampsOnly.Checked {
+				outputs = append(outputs, outputPrefix+".timestamps.srt")
+			}
 		}
 		if wantVTT.Checked {
 			outputs = append(outputs, outputPrefix+".vtt")
@@ -362,9 +543,225 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		}
 
 		threads := int(threadsSlider.Value)
+		lang := strings.TrimSpace(langSelect.Selected)
+		if lang == "Auto" {
+			lang = ""
+		}
+
+		if modeSelect.Selected == "Remote API" {
+			baseURL := strings.TrimSpace(remoteURLEntry.Text)
+			if baseURL == "" {
+				dialog.ShowError(fmt.Errorf("please set Remote API URL"), w)
+				busyBar.Hide()
+				runBtn.Enable()
+				statusLabel.SetText("❌ Missing remote URL")
+				return
+			}
+			apiKey := strings.TrimSpace(remoteKeyEntry.Text)
+			if apiKey == "" {
+				appendLog("⚠️ No Remote API key set (x-api-key). If your server requires it, the request will fail.")
+				fyne.Do(func() {
+					statusLabel.SetText("⚠️ Remote mode: no API key")
+				})
+			}
+
+			appendLog("Remote mode selected")
+			appendLog("Input: " + inputFile)
+			appendLog("Remote URL: " + baseURL)
+
+			go func() {
+				defer fyne.Do(func() {
+					busyBar.Hide()
+					runBtn.Enable()
+				})
+
+				callOne := func(format, outFile string) error {
+					trimmed := strings.TrimSpace(baseURL)
+					if trimmed == "" {
+						return fmt.Errorf("remote URL is empty")
+					}
+					endpoint := strings.TrimRight(trimmed, "/")
+					lower := strings.ToLower(endpoint)
+					// Allow user to paste either:
+					//  - http://host:8000
+					//  - http://host:8000/transcribe
+					//  - http://host:8000/transcribe/srt
+					if strings.Contains(lower, "/transcribe/") {
+						// If they already provided /transcribe/{something}, replace the tail with the requested format.
+						idx := strings.LastIndex(lower, "/transcribe/")
+						endpoint = endpoint[:idx+len("/transcribe/")] + format
+					} else if strings.HasSuffix(lower, "/transcribe") {
+						endpoint = endpoint + "/" + format
+					} else {
+						endpoint = endpoint + "/transcribe/" + format
+					}
+					f, err := os.Open(inputFile)
+					if err != nil {
+						return err
+					}
+					defer f.Close()
+
+					var fileSize int64
+					if st, err := f.Stat(); err == nil {
+						fileSize = st.Size()
+					}
+
+					appendLog("POST " + endpoint)
+					appendLog(fmt.Sprintf("Uploading file (%.2f MB)…", float64(fileSize)/1024.0/1024.0))
+					fyne.Do(func() {
+						statusLabel.SetText("Uploading…")
+					})
+
+					pr, pw := io.Pipe()
+					writer := multipart.NewWriter(pw)
+					contentType := writer.FormDataContentType()
+
+					go func() {
+						defer pw.Close()
+						part, err := writer.CreateFormFile("file", filepath.Base(inputFile))
+						if err != nil {
+							_ = writer.Close()
+							_ = pw.CloseWithError(err)
+							return
+						}
+						p := &progressReader{
+							r:     f,
+							total: fileSize,
+							onUpdate: func(sent int64) {
+								if fileSize > 0 {
+									pct := (float64(sent) / float64(fileSize)) * 100
+									pct = math.Max(0, math.Min(100, pct))
+									appendLog(fmt.Sprintf("Upload progress: %.1f%% (%.2f/%.2f MB)", pct, float64(sent)/1024.0/1024.0, float64(fileSize)/1024.0/1024.0))
+								} else {
+									appendLog(fmt.Sprintf("Upload progress: %.2f MB", float64(sent)/1024.0/1024.0))
+								}
+							},
+						}
+						if _, err := io.Copy(part, p); err != nil {
+							_ = writer.Close()
+							_ = pw.CloseWithError(err)
+							return
+						}
+						_ = writer.Close()
+					}()
+
+					req, err := http.NewRequest("POST", endpoint, pr)
+					if err != nil {
+						return err
+					}
+					req.Header.Set("Content-Type", contentType)
+					if apiKey != "" {
+						req.Header.Set("x-api-key", apiKey)
+					}
+
+					transport := http.DefaultTransport.(*http.Transport).Clone()
+					transport.ForceAttemptHTTP2 = false
+					client := &http.Client{Timeout: 2 * time.Hour, Transport: transport}
+					resp, err := client.Do(req)
+					if err != nil {
+						return err
+					}
+					defer resp.Body.Close()
+					appendLog("Waiting for server response…")
+
+					respBody, err := io.ReadAll(resp.Body)
+					if err != nil {
+						return err
+					}
+					if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+						return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+					}
+					appendLog(fmt.Sprintf("Response: HTTP %d (%d bytes)", resp.StatusCode, len(respBody)))
+
+					payload := strings.TrimSpace(string(respBody))
+					// Some servers return raw SRT/VTT/text; others return JSON like {"srt": "..."}.
+					if strings.HasPrefix(payload, "{") {
+						var m map[string]any
+						if err := json.Unmarshal(respBody, &m); err == nil {
+							var key string
+							switch format {
+							case "srt":
+								key = "srt"
+							case "vtt":
+								key = "vtt"
+							case "txt":
+								key = "text"
+							}
+							if key != "" {
+								if v, ok := m[key]; ok {
+									if s, ok := v.(string); ok {
+										appendLog("Parsed JSON response key: " + key)
+										respBody = []byte(s)
+									}
+								}
+							}
+						}
+					}
+
+					appendLog("Saving output: " + outFile)
+					if err := os.WriteFile(outFile, respBody, 0644); err != nil {
+						return err
+					}
+					if format == "srt" && wantSRTTimestampsOnly.Checked {
+						timestampsOut := strings.TrimSuffix(outFile, ".srt") + ".timestamps.srt"
+						appendLog("Generating timestamps-only SRT: " + timestampsOut)
+						if err := writeTimestampsOnlySRT(outFile, timestampsOut); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+
+				fyne.Do(func() {
+					statusLabel.SetText("Uploading to remote server…")
+				})
+
+				var done []string
+				var errs []string
+
+				if wantSRT.Checked {
+					outFile := outputPrefix + ".srt"
+					if err := callOne("srt", outFile); err != nil {
+						errs = append(errs, "SRT: "+err.Error())
+					} else {
+						done = append(done, outFile)
+						if wantSRTTimestampsOnly.Checked {
+							done = append(done, strings.TrimSuffix(outFile, ".srt")+".timestamps.srt")
+						}
+					}
+				}
+				if wantVTT.Checked {
+					outFile := outputPrefix + ".vtt"
+					if err := callOne("vtt", outFile); err != nil {
+						errs = append(errs, "VTT: "+err.Error())
+					} else {
+						done = append(done, outFile)
+					}
+				}
+				if wantTXT.Checked {
+					outFile := outputPrefix + ".txt"
+					if err := callOne("txt", outFile); err != nil {
+						errs = append(errs, "TXT: "+err.Error())
+					} else {
+						done = append(done, outFile)
+					}
+				}
+
+				fyne.Do(func() {
+					if len(errs) > 0 {
+						statusLabel.SetText("❌ Remote transcription failed")
+						resultLabel.SetText("❌ Errors:\n\n" + strings.Join(errs, "\n"))
+						return
+					}
+					statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(startTime).Round(time.Second)))
+					resultLabel.SetText("✅ Outputs:\n\n" + strings.Join(done, "\n"))
+				})
+			}()
+			return
+		}
 
 		if runtime.GOOS == "darwin" {
-			cmdFile, err := createWhisperCommandFile(inputFile, outDir, whisperBinEntry.Text, modelEntry.Text, outputPrefix, wantSRT.Checked, wantVTT.Checked, wantTXT.Checked, threads)
+			cmdFile, err := createWhisperCommandFile(inputFile, outDir, whisperBinEntry.Text, modelEntry.Text, outputPrefix, wantSRT.Checked, wantVTT.Checked, wantTXT.Checked, threads, lang)
 			if err != nil {
 				fyne.Do(func() {
 					busyBar.Hide()
@@ -396,20 +793,22 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			// Best-effort completion detection: watch for output file(s) appearing.
 			// We can't reliably get Terminal process exit status, so we observe filesystem outputs.
 			go func(expected []string, started time.Time) {
-				// Prefer SRT for completion if selected; otherwise first expected file.
-				watchList := make([]string, 0, len(expected))
+				// Prefer the main SRT for completion if selected. Note that *.timestamps.srt also ends in .srt,
+				// so we must avoid accidentally watching the timestamps file (it doesn't exist until after).
+				watched := ""
+				mainSRT := outputPrefix + ".srt"
 				for _, p := range expected {
-					if strings.HasSuffix(strings.ToLower(p), ".srt") {
-						watchList = append([]string{p}, watchList...)
-					} else {
-						watchList = append(watchList, p)
+					if p == mainSRT {
+						watched = p
+						break
 					}
 				}
-				if len(watchList) == 0 {
-					return
+				if watched == "" {
+					if len(expected) == 0 {
+						return
+					}
+					watched = expected[0]
 				}
-
-				watched := watchList[0]
 
 				// Poll for up to 2 hours.
 				deadline := time.Now().Add(2 * time.Hour)
@@ -432,6 +831,15 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 					}
 					lastSize = info.Size()
 					if stableCount >= 2 {
+						if wantSRTTimestampsOnly.Checked {
+							srtOut := outputPrefix + ".srt"
+							timestampsOut := outputPrefix + ".timestamps.srt"
+							if _, err := os.Stat(srtOut); err == nil {
+								if err := writeTimestampsOnlySRT(srtOut, timestampsOut); err != nil {
+									appendLog("❌ Failed to generate timestamps-only SRT: " + err.Error())
+								}
+							}
+						}
 						fyne.Do(func() {
 							statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(started).Round(time.Second)))
 							resultLabel.SetText("✅ Outputs:\n\n" + strings.Join(expected, "\n"))
@@ -451,6 +859,9 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			})
 
 			args := []string{"-m", modelEntry.Text, "-f", inputFile, "-of", outputPrefix}
+			if lang != "" {
+				args = append(args, "-l", lang)
+			}
 			if wantTXT.Checked {
 				args = append(args, "-otxt")
 			}
@@ -470,6 +881,15 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 					resultLabel.SetText(fmt.Sprintf("❌ Error: %v\n\n%s", err, string(out)))
 					return
 				}
+				if wantSRT.Checked && wantSRTTimestampsOnly.Checked {
+					srtOut := outputPrefix + ".srt"
+					timestampsOut := outputPrefix + ".timestamps.srt"
+					if err := writeTimestampsOnlySRT(srtOut, timestampsOut); err != nil {
+						resultLabel.SetText("⚠️ Transcription finished, but timestamps-only SRT generation failed:\n\n" + err.Error() + "\n\nOutputs:\n\n" + strings.Join(outputs, "\n"))
+						statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(startTime).Round(time.Second)))
+						return
+					}
+				}
 				statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(startTime).Round(time.Second)))
 				resultLabel.SetText("✅ Outputs:\n\n" + strings.Join(outputs, "\n"))
 			})
@@ -479,6 +899,15 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	config := container.NewVBox(
 		title,
+		widget.NewSeparator(),
+		widget.NewLabel("Mode"),
+		modeSelect,
+		container.New(layout.NewFormLayout(),
+			widget.NewLabel("Remote URL:"), remoteURLEntry,
+			widget.NewLabel("Remote API key:"), remoteKeyEntry,
+			widget.NewLabel(""), rememberRemoteKey,
+		),
+		widget.NewLabel("Remote API: POST {url}/transcribe/{srt|vtt|txt} (or paste a full /transcribe/... URL). Upload field: file. Header: x-api-key (optional). Response can be raw SRT/VTT/TXT or JSON with keys srt/vtt/text (auto-detected)."),
 		widget.NewSeparator(),
 		widget.NewLabel("Status"),
 		statusLabel,
@@ -497,6 +926,9 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewLabel("Model"),
 		container.NewHBox(modelSelect, refreshModelsBtn),
 		container.NewBorder(nil, nil, nil, browseModelBtn, modelEntry),
+		widget.NewSeparator(),
+		langLabel,
+		langSelect,
 		widget.NewLabel("Model Tools (macOS)"),
 		modelNameSelect,
 		widget.NewLabel("CoreML Env (optional)"),
@@ -508,16 +940,76 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		threadsSlider,
 		widget.NewSeparator(),
 		widget.NewLabel("Formats"),
-		container.NewHBox(wantSRT, wantVTT, wantTXT, layout.NewSpacer()),
+		container.NewVBox(
+			container.NewHBox(wantSRT, wantVTT, wantTXT, layout.NewSpacer()),
+			wantSRTTimestampsOnly,
+		),
 		widget.NewSeparator(),
 		runBtn,
 		widget.NewLabel("Result"),
 		resultScroll,
+		widget.NewLabel("Log"),
+		logScroll,
 	)
 
 	refreshModelOptions()
+	applyModeUI()
 
 	return config
+}
+
+func writeTimestampsOnlySRT(inPath, outPath string) error {
+	in, err := os.Open(inPath)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	s := bufio.NewScanner(in)
+	// Default scanner token limit (64K) can be too small for some subtitle lines.
+	s.Buffer(make([]byte, 1024*1024), 10*1024*1024)
+	for {
+		if !s.Scan() {
+			break
+		}
+		line := strings.TrimSpace(s.Text())
+		if line == "" {
+			continue
+		}
+		isDigits := true
+		for _, r := range line {
+			if r < '0' || r > '9' {
+				isDigits = false
+				break
+			}
+		}
+		if !isDigits {
+			continue
+		}
+
+		idxLine := line
+		if !s.Scan() {
+			break
+		}
+		timeLine := strings.TrimSpace(s.Text())
+		if !strings.Contains(timeLine, " --> ") {
+			continue
+		}
+
+		if _, err := out.WriteString(idxLine + "\n" + timeLine + "\n\n"); err != nil {
+			return err
+		}
+	}
+	if err := s.Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func shellQuote(s string) string {
@@ -607,7 +1099,7 @@ func createTerminalCommandFile(workingDir, title string, cmd []string) (string, 
 	return tmp.Name(), nil
 }
 
-func createWhisperCommandFile(inputFile, outDir, whisperBin, modelPath, outputPrefix string, wantSRT, wantVTT, wantTXT bool, threads int) (string, error) {
+func createWhisperCommandFile(inputFile, outDir, whisperBin, modelPath, outputPrefix string, wantSRT, wantVTT, wantTXT bool, threads int, langCode string) (string, error) {
 	if strings.TrimSpace(outDir) == "" {
 		return "", fmt.Errorf("output directory is empty")
 	}
@@ -628,6 +1120,10 @@ func createWhisperCommandFile(inputFile, outDir, whisperBin, modelPath, outputPr
 	defer tmp.Close()
 
 	args := []string{"-m", "\"$MODEL\"", "-f", "\"$AUDIO\"", "-of", "\"$OUTPREFIX\""}
+
+	if strings.TrimSpace(langCode) != "" {
+		args = append(args, "-l", shellQuote(strings.TrimSpace(langCode)))
+	}
 
 	// Add threads option
 	if threads > 0 {

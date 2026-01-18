@@ -9,7 +9,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +46,16 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	apiKeyEntry := widget.NewPasswordEntry()
 	apiKeyEntry.SetPlaceHolder("Optional API key")
 	apiKeyEntry.SetText(a.Preferences().StringWithFallback("libretranslate_api_key", ""))
+
+	threadsEntry := widget.NewEntry()
+	threadsEntry.SetPlaceHolder("8")
+	threadsEntry.SetText(a.Preferences().StringWithFallback("libretranslate_threads", "8"))
+	threadsEntry.OnChanged = func(s string) { a.Preferences().SetString("libretranslate_threads", s) }
+
+	reqLimitEntry := widget.NewEntry()
+	reqLimitEntry.SetPlaceHolder("60")
+	reqLimitEntry.SetText(a.Preferences().StringWithFallback("libretranslate_req_limit", "60"))
+	reqLimitEntry.OnChanged = func(s string) { a.Preferences().SetString("libretranslate_req_limit", s) }
 
 	rememberKey := widget.NewCheck("Remember API key (saved locally)", nil)
 	rememberKey.Checked = a.Preferences().BoolWithFallback("libretranslate_remember_api_key", false)
@@ -236,6 +249,63 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		})
 	}
 
+	findLibreMacScript := func() string {
+		candidates := []string{"../Libre-mac.sh", "Libre-mac.sh"}
+		for _, p := range candidates {
+			if st, err := os.Stat(p); err == nil && !st.IsDir() {
+				return p
+			}
+		}
+		return ""
+	}
+
+	parsePositiveInt := func(label, raw string) (int, error) {
+		n, err := strconv.Atoi(strings.TrimSpace(raw))
+		if err != nil || n <= 0 {
+			return 0, fmt.Errorf("%s must be a positive integer", label)
+		}
+		return n, nil
+	}
+
+	runLibreMac := func(subcmd string) {
+		if runtime.GOOS != "darwin" {
+			dialog.ShowError(fmt.Errorf("local server helper is only available on macOS"), w)
+			return
+		}
+		script := findLibreMacScript()
+		if script == "" {
+			dialog.ShowError(fmt.Errorf("Libre-mac.sh not found. Make sure it exists next to the app or in the repo root."), w)
+			return
+		}
+
+		threads, err := parsePositiveInt("THREADS", threadsEntry.Text)
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		reqLimit, err := parsePositiveInt("REQ_LIMIT", reqLimitEntry.Text)
+		if err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+
+		appendLog(fmt.Sprintf("Running local server: %s (THREADS=%d, REQ_LIMIT=%d)", subcmd, threads, reqLimit))
+		cmd := exec.Command("bash", script, subcmd)
+		cmd.Env = append(os.Environ(),
+			fmt.Sprintf("THREADS=%d", threads),
+			fmt.Sprintf("REQ_LIMIT=%d", reqLimit),
+		)
+		out, err := cmd.CombinedOutput()
+		if len(out) > 0 {
+			appendLog(strings.TrimSpace(string(out)))
+		}
+		if err != nil {
+			appendLog(fmt.Sprintf("❌ Command failed: %v", err))
+			return
+		}
+		appendLog("✅ Done")
+	}
+
 	var translateBtn *widget.Button
 	translateBtn = widget.NewButton("Translate SRT", func() {
 		if len(inputFiles) == 0 {
@@ -355,6 +425,11 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 			widget.NewLabel("API key:"), apiKeyEntry,
 			widget.NewLabel(""), rememberKey,
 		),
+		widget.NewLabel("Advanced (local server)"),
+		container.New(layout.NewFormLayout(),
+			widget.NewLabel("THREADS:"), threadsEntry,
+			widget.NewLabel("REQ_LIMIT:"), reqLimitEntry,
+		),
 		container.NewHBox(refreshLanguagesBtn, layout.NewSpacer()),
 		languagesLabel,
 		widget.NewSeparator(),
@@ -376,6 +451,24 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		translateBtn,
 		statusLabel,
 		progressBar,
+		func() *fyne.Container {
+			hint := widget.NewLabel("THREADS/REQ_LIMIT apply only to a local LibreTranslate server started via Libre-mac.sh (macOS). For remote servers, change these on the server.")
+			hint.Wrapping = fyne.TextWrapWord
+			startBtn := widget.NewButton("Start Local Server (bg)", func() { go runLibreMac("start-bg") })
+			statusBtn := widget.NewButton("Status", func() { go runLibreMac("status") })
+			stopBtn := widget.NewButton("Stop", func() { go runLibreMac("stop") })
+
+			if runtime.GOOS != "darwin" || findLibreMacScript() == "" {
+				startBtn.Disable()
+				statusBtn.Disable()
+				stopBtn.Disable()
+			}
+
+			return container.NewVBox(
+				hint,
+				container.NewHBox(startBtn, statusBtn, stopBtn),
+			)
+		}(),
 		widget.NewLabel("Log"),
 		logScroll,
 		resultScroll,

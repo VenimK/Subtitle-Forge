@@ -19,6 +19,9 @@ usage() {
   cat <<'EOF'
 Usage:
   ./Libre-mac.sh install
+  ./Libre-mac.sh list-models
+  ./Libre-mac.sh list-installed
+  ./Libre-mac.sh install-model <from> <to>
   ./Libre-mac.sh start
   ./Libre-mac.sh start-bg
   ./Libre-mac.sh stop
@@ -113,11 +116,79 @@ PY
   echo "LibreTranslate binary: $VENV_DIR/bin/libretranslate"
 }
 
+need_venv() {
+  if [ ! -x "$VENV_DIR/bin/python" ]; then
+    echo "LibreTranslate not installed. Run: ./Libre-mac.sh install" >&2
+    exit 1
+  fi
+}
+
+list_models() {
+  need_venv
+  "$VENV_DIR/bin/python" - <<'PY'
+from argostranslate import package
+
+package.update_package_index()
+available = package.get_available_packages()
+for p in available:
+    try:
+        print(f"{p.from_code}->{p.to_code}\t{p.from_name} -> {p.to_name}")
+    except Exception:
+        print(f"{p.from_code}->{p.to_code}")
+PY
+}
+
+list_installed() {
+  need_venv
+  "$VENV_DIR/bin/python" - <<'PY'
+from argostranslate import translate
+
+langs = translate.get_installed_languages()
+if not langs:
+    print("No languages installed")
+else:
+    for l in langs:
+        try:
+            print(f"{l.code}\t{l.name}")
+        except Exception:
+            print(str(l))
+PY
+}
+
+install_model() {
+  local from_code="${1:-}"
+  local to_code="${2:-}"
+  if [ -z "$from_code" ] || [ -z "$to_code" ]; then
+    echo "Usage: ./Libre-mac.sh install-model <from> <to>" >&2
+    exit 1
+  fi
+  need_venv
+  "$VENV_DIR/bin/python" - <<PY
+from argostranslate import package
+
+from_code = ${from_code@Q}
+to_code = ${to_code@Q}
+
+package.update_package_index()
+available = package.get_available_packages()
+
+pkg = next((p for p in available if p.from_code == from_code and p.to_code == to_code), None)
+if not pkg:
+    raise SystemExit(f"Model {from_code}->{to_code} not found. Run: ./Libre-mac.sh list-models")
+
+print(f"Installing {pkg.from_name} -> {pkg.to_name} ({from_code}->{to_code})")
+download_path = pkg.download()
+package.install_from_path(download_path)
+print("Installed successfully")
+PY
+}
+
 ensure_api_key() {
   if [ "$API_KEYS" != "true" ]; then
     return 0
   fi
 
+  ensure_dirs
   need_cmd openssl
 
   if [ ! -f "$API_KEY_FILE" ]; then
@@ -128,11 +199,24 @@ ensure_api_key() {
   local key
   key="$(cat "$API_KEY_FILE")"
 
+  # Initialize API keys database if it doesn't exist
+  local db_file="$DB_DIR/api_keys.db"
   if [ -x "$VENV_DIR/bin/ltmanage" ]; then
-    (
-      cd "$PREFIX_DIR" && \
-      LT_API_KEYS_DB_PATH="$DB_DIR/api_keys.db" "$VENV_DIR/bin/ltmanage" keys add 999999 --key "$key"
-    ) || true
+    if [ ! -f "$db_file" ]; then
+      echo "Initializing API keys database..."
+      (
+        cd "$PREFIX_DIR" && \
+        LT_API_KEYS_DB_PATH="$db_file" "$VENV_DIR/bin/ltmanage" keys add 999999 --key "$key"
+      ) 2>&1 || echo "Warning: Failed to initialize API key database. LibreTranslate may prompt for setup."
+    else
+      # Database exists, try to add/update key (ignore errors if key already exists)
+      (
+        cd "$PREFIX_DIR" && \
+        LT_API_KEYS_DB_PATH="$db_file" "$VENV_DIR/bin/ltmanage" keys add 999999 --key "$key"
+      ) 2>/dev/null || true
+    fi
+  else
+    echo "Warning: ltmanage not found, cannot initialize API keys" >&2
   fi
 }
 
@@ -218,6 +302,9 @@ status() {
 cmd="${1:-}"
 case "$cmd" in
   install) install_libretranslate ;;
+  list-models) list_models ;;
+  list-installed) list_installed ;;
+  install-model) shift; install_model "${1:-}" "${2:-}" ;;
   start) start_libretranslate ;;
   start-bg) start_bg ;;
   stop) stop_bg ;;

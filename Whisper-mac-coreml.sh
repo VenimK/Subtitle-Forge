@@ -5,6 +5,7 @@ PREFIX_DIR="${PREFIX_DIR:-$HOME/.whispercpp-coreml}"
 REPO_DIR="${REPO_DIR:-$PREFIX_DIR/whisper.cpp}"
 BUILD_DIR="${BUILD_DIR:-$REPO_DIR/build}"
 MODELS_DIR="${MODELS_DIR:-$REPO_DIR/models}"
+VENV_DIR="${VENV_DIR:-$PREFIX_DIR/venv}"
 
 MODEL_NAME_DEFAULT="${MODEL_NAME_DEFAULT:-base.en}"
 MODEL_FILE_DEFAULT="${MODEL_FILE_DEFAULT:-$MODELS_DIR/ggml-${MODEL_NAME_DEFAULT}.bin}"
@@ -76,7 +77,7 @@ ensure_brew_deps() {
 ensure_python_deps() {
   need_cmd python3
   # Prefer using a python3.11 if available; otherwise use system python3
-  PYTHON_CMD=""
+  local PYTHON_CMD=""
   if command -v python3.11 >/dev/null 2>&1; then
     PYTHON_CMD=python3.11
   elif command -v python3 >/dev/null 2>&1; then
@@ -87,9 +88,19 @@ ensure_python_deps() {
   fi
 
   echo "Using Python: $("$PYTHON_CMD" --version)"
-  "$PYTHON_CMD" -m pip install --upgrade pip setuptools wheel
-  "$PYTHON_CMD" -m pip install torch torchvision torchaudio
-  "$PYTHON_CMD" -m pip install ane_transformers openai-whisper coremltools
+
+  # Create isolated venv for CoreML dependencies (avoids conflicts with other venvs)
+  if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating isolated venv at $VENV_DIR..."
+    "$PYTHON_CMD" -m venv "$VENV_DIR"
+  fi
+
+  # Use venv Python for all installs
+  local VENV_PY="$VENV_DIR/bin/python"
+  echo "Installing CoreML dependencies into venv..."
+  "$VENV_PY" -m pip install --upgrade pip setuptools wheel
+  "$VENV_PY" -m pip install 'numpy<2' torch torchvision torchaudio
+  "$VENV_PY" -m pip install ane_transformers openai-whisper coremltools
 }
 
 install_whispercpp() {
@@ -148,19 +159,15 @@ generate_coreml_model() {
     exit 1
   fi
 
-  # Determine correct Python
-  local PYTHON_CMD=""
-  if command -v python3.11 >/dev/null 2>&1; then
-    PYTHON_CMD=python3.11
-  elif command -v python3 >/dev/null 2>&1; then
-    PYTHON_CMD=python3
-  else
-    echo "Python3 not found." >&2
+  # Use the isolated venv Python (must have CoreML deps installed)
+  local VENV_PY="$VENV_DIR/bin/python"
+  if [ ! -x "$VENV_PY" ]; then
+    echo "Venv not found. Run: ./Whisper-mac-coreml.sh install-deps" >&2
     exit 1
   fi
 
-  echo "Generating Core ML model for $model_name using $PYTHON_CMD..."
-  (cd "$REPO_DIR/models" && "$PYTHON_CMD" ./convert-whisper-to-coreml.py --model "$model_name" --encoder-only True)
+  echo "Generating Core ML model for $model_name using venv Python..."
+  (cd "$REPO_DIR/models" && "$VENV_PY" ./convert-whisper-to-coreml.py --model "$model_name" --encoder-only True)
   
   # Compile the mlpackage to mlmodelc
   local mlpackage="$MODELS_DIR/models/coreml-encoder-${model_name}.mlpackage"
