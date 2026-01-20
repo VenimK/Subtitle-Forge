@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.1
+# Subtitle Forge v2.0.60
 > Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -44,6 +44,20 @@ This project provides two applications:
    sudo ./install_dependencies.sh
    ```
 4. Launch the application
+
+## What's New in v2.0.60 ✨
+
+### 🎙️ Whisper Remote API Enhancements
+
+**v2.0.60** improves the remote Whisper workflow and logging UX:
+
+- **🌐 Remote model discovery**: Fetch and list models from the server
+- **🔧 Remote parameter support**: Model, threads, best-of, beam size, language
+- **📡 Live server logs (SSE)**: Stream remote logs in real-time
+- **🖥️ macOS Terminal logging**: Optional Terminal window with live tail
+- **✅ Clear completion flow**: Status updates, output save indicator, done footer
+
+---
 
 ## What's New in v2.0.1 ✨
 

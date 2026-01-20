@@ -8,12 +8,14 @@ import (
 	"math"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -114,9 +116,127 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	remoteURLEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_url", "http://127.0.0.1:8000"))
 	remoteURLEntry.OnChanged = func(s string) { a.Preferences().SetString("whisper_remote_url", s) }
 
+	appendLog := func(msg string) {}
+
 	remoteKeyEntry := widget.NewPasswordEntry()
 	remoteKeyEntry.SetPlaceHolder("Optional x-api-key")
 	remoteKeyEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_api_key", ""))
+
+	remoteDebugLog := widget.NewCheck("Show server response (debug)", nil)
+	remoteDebugLog.Checked = a.Preferences().BoolWithFallback("whisper_remote_debug", false)
+	remoteDebugLog.OnChanged = func(checked bool) {
+		a.Preferences().SetBool("whisper_remote_debug", checked)
+	}
+
+	remoteStreamLogs := widget.NewCheck("Stream server logs (SSE)", nil)
+	remoteStreamLogs.Checked = a.Preferences().BoolWithFallback("whisper_remote_stream", false)
+	remoteStreamLogs.OnChanged = func(checked bool) {
+		a.Preferences().SetBool("whisper_remote_stream", checked)
+	}
+
+	var applyModeUI func()
+
+	remoteTerminalLogs := widget.NewCheck("Stream logs in Terminal (macOS)", nil)
+	remoteTerminalLogs.Checked = a.Preferences().BoolWithFallback("whisper_remote_terminal_logs", false)
+	remoteTerminalLogs.OnChanged = func(checked bool) {
+		a.Preferences().SetBool("whisper_remote_terminal_logs", checked)
+		applyModeUI()
+	}
+
+	remoteModelEntry := widget.NewEntry()
+	remoteModelEntry.SetPlaceHolder("model name (e.g. base.en, small, ggml-base.en.bin)")
+	remoteModelEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_model", ""))
+	remoteModelEntry.OnChanged = func(s string) {
+		a.Preferences().SetString("whisper_remote_model", s)
+	}
+
+	remoteModelSelect := widget.NewSelect(nil, func(s string) {
+		if s == "" {
+			return
+		}
+		remoteModelEntry.SetText(s)
+	})
+	remoteModelSelect.PlaceHolder = "Fetch remote models"
+
+	refreshRemoteModels := widget.NewButton("Refresh Remote Models", func() {
+		baseURL := strings.TrimSpace(remoteURLEntry.Text)
+		if baseURL == "" {
+			appendLog("Remote URL is empty; cannot fetch models")
+			return
+		}
+		lowerURL := strings.ToLower(baseURL)
+		if idx := strings.Index(lowerURL, "/transcribe"); idx != -1 {
+			baseURL = baseURL[:idx]
+		}
+		modelURL := strings.TrimRight(baseURL, "/") + "/models"
+		req, err := http.NewRequest("GET", modelURL, nil)
+		if err != nil {
+			appendLog("Failed to build model request: " + err.Error())
+			return
+		}
+		key := strings.TrimSpace(remoteKeyEntry.Text)
+		if key != "" {
+			req.Header.Set("x-api-key", key)
+		}
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			appendLog("Failed to fetch models: " + err.Error())
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			appendLog(fmt.Sprintf("Model fetch failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body))))
+			return
+		}
+		var payload struct {
+			Models  []string `json:"models"`
+			Default string   `json:"default"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			appendLog("Failed to parse models: " + err.Error())
+			return
+		}
+		if len(payload.Models) == 0 {
+			appendLog("Remote models list is empty")
+			return
+		}
+		remoteModelSelect.Options = payload.Models
+		remoteModelSelect.Refresh()
+		appendLog(fmt.Sprintf("Loaded %d remote models", len(payload.Models)))
+		if remoteModelEntry.Text == "" && payload.Default != "" {
+			remoteModelEntry.SetText(payload.Default)
+		}
+	})
+
+	remoteThreadsEntry := widget.NewEntry()
+	remoteThreadsEntry.SetPlaceHolder("threads (e.g. 6)")
+	remoteThreadsEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_threads", ""))
+	remoteThreadsEntry.OnChanged = func(s string) {
+		a.Preferences().SetString("whisper_remote_threads", s)
+	}
+
+	remoteBeamEntry := widget.NewEntry()
+	remoteBeamEntry.SetPlaceHolder("beam size (e.g. 1)")
+	remoteBeamEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_beam", ""))
+	remoteBeamEntry.OnChanged = func(s string) {
+		a.Preferences().SetString("whisper_remote_beam", s)
+	}
+
+	remoteBestOfEntry := widget.NewEntry()
+	remoteBestOfEntry.SetPlaceHolder("best-of (e.g. 1)")
+	remoteBestOfEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_bestof", ""))
+	remoteBestOfEntry.OnChanged = func(s string) {
+		a.Preferences().SetString("whisper_remote_bestof", s)
+	}
+
+	remoteLangEntry := widget.NewEntry()
+	remoteLangEntry.SetPlaceHolder("language code (e.g. en)")
+	remoteLangEntry.SetText(a.Preferences().StringWithFallback("whisper_remote_language", ""))
+	remoteLangEntry.OnChanged = func(s string) {
+		a.Preferences().SetString("whisper_remote_language", s)
+	}
 
 	rememberRemoteKey := widget.NewCheck("Remember API key (saved locally)", nil)
 	rememberRemoteKey.Checked = a.Preferences().BoolWithFallback("whisper_remote_remember_api_key", false)
@@ -436,21 +556,31 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	resultScroll := container.NewScroll(resultLabel)
 	resultScroll.SetMinSize(fyne.NewSize(0, 200))
 
-	logGrid := widget.NewTextGrid()
-	logScroll := container.NewScroll(logGrid)
-	logScroll.SetMinSize(fyne.NewSize(0, 120))
+	logEntry := widget.NewMultiLineEntry()
+	logEntry.Wrapping = fyne.TextWrapWord
+	logScroll := container.NewScroll(logEntry)
+	logScroll.SetMinSize(fyne.NewSize(0, 520))
 	var logText string
-	appendLog := func(msg string) {
+	var logFile *os.File
+	var logMu sync.Mutex
+	appendLog = func(msg string) {
 		ts := time.Now().Format("15:04:05")
 		fyne.Do(func() {
 			logText += fmt.Sprintf("[%s] %s\n", ts, msg)
-			logGrid.SetText(logText)
+			logEntry.SetText(logText)
 			logScroll.ScrollToBottom()
 		})
+		logMu.Lock()
+		if logFile != nil {
+			_, _ = fmt.Fprintf(logFile, "[%s] %s\n", ts, msg)
+			_ = logFile.Sync()
+		}
+		logMu.Unlock()
 	}
 
-	applyModeUI := func() {
+	applyModeUI = func() {
 		isRemote := modeSelect.Selected == "Remote API"
+		showLog := !(runtime.GOOS == "darwin" && remoteTerminalLogs.Checked)
 		if isRemote {
 			whisperBinEntry.Disable()
 			browseWhisperBtn.Disable()
@@ -468,22 +598,26 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			wantVTT.Enable()
 			wantTXT.Enable()
 			langSelect.Disable()
-			return
+		} else {
+			whisperBinEntry.Enable()
+			browseWhisperBtn.Enable()
+			modelEntry.Enable()
+			browseModelBtn.Enable()
+			modelSelect.Enable()
+			refreshModelsBtn.Enable()
+			modelNameSelect.Enable()
+			installModelBtn.Enable()
+			generateCoreMLBtn.Enable()
+			coremlCondaEnvEntry.Enable()
+			coremlVenvActivateEntry.Enable()
+			threadsSlider.Enable()
+			langSelect.Enable()
 		}
-
-		whisperBinEntry.Enable()
-		browseWhisperBtn.Enable()
-		modelEntry.Enable()
-		browseModelBtn.Enable()
-		modelSelect.Enable()
-		refreshModelsBtn.Enable()
-		modelNameSelect.Enable()
-		installModelBtn.Enable()
-		generateCoreMLBtn.Enable()
-		coremlCondaEnvEntry.Enable()
-		coremlVenvActivateEntry.Enable()
-		threadsSlider.Enable()
-		langSelect.Enable()
+		if showLog {
+			logScroll.Show()
+		} else {
+			logScroll.Hide()
+		}
 	}
 	modeSelect.OnChanged = func(s string) {
 		if s == "" {
@@ -569,17 +703,51 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			appendLog("Input: " + inputFile)
 			appendLog("Remote URL: " + baseURL)
 
+			if runtime.GOOS == "darwin" && remoteTerminalLogs.Checked {
+				var logPath string
+				logMu.Lock()
+				if logFile == nil {
+					if tmp, err := os.CreateTemp("", "subtitle-forge-remote-log-*.log"); err == nil {
+						logFile = tmp
+						logPath = tmp.Name()
+					}
+				}
+				logMu.Unlock()
+				if logPath != "" {
+					appendLog("Remote log file: " + logPath)
+					script := "clear; echo 'Subtitle Forge - Remote Logs'; printf 'Log file: %s\\n' " + shellQuote(logPath) + "; echo ''; " +
+						"tail -f " + shellQuote(logPath) + " | awk '{ if ($0 ~ /__SF_DONE__/) exit; print }'; " +
+						"echo ''; echo '✅ Done.'; echo 'Closing in 3 seconds…'; sleep 3; " +
+						"osascript -e 'tell application \"Terminal\" to close front window' &>/dev/null &"
+					cmdFile, err := createTerminalCommandFile(filepath.Dir(logPath), "Remote transcription logs", []string{"bash", "-lc", script})
+					if err == nil {
+						_ = exec.Command("open", cmdFile).Start()
+					}
+				}
+			}
+
 			go func() {
 				defer fyne.Do(func() {
 					busyBar.Hide()
 					runBtn.Enable()
 				})
+				defer func() {
+					logMu.Lock()
+					if logFile != nil {
+						_, _ = fmt.Fprintln(logFile, "__SF_DONE__")
+						_ = logFile.Sync()
+						_ = logFile.Close()
+						logFile = nil
+					}
+					logMu.Unlock()
+				}()
 
 				callOne := func(format, outFile string) error {
 					trimmed := strings.TrimSpace(baseURL)
 					if trimmed == "" {
 						return fmt.Errorf("remote URL is empty")
 					}
+					useStream := remoteStreamLogs.Checked || (runtime.GOOS == "darwin" && remoteTerminalLogs.Checked)
 					endpoint := strings.TrimRight(trimmed, "/")
 					lower := strings.ToLower(endpoint)
 					// Allow user to paste either:
@@ -594,6 +762,35 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 						endpoint = endpoint + "/" + format
 					} else {
 						endpoint = endpoint + "/transcribe/" + format
+					}
+					if useStream {
+						endpoint = strings.Replace(endpoint, "/transcribe/", "/transcribe/stream/", 1)
+					}
+					params := []string{}
+					if remoteDebugLog.Checked {
+						params = append(params, "debug=1")
+					}
+					if model := strings.TrimSpace(remoteModelEntry.Text); model != "" {
+						params = append(params, "model="+url.QueryEscape(model))
+					}
+					if threads := strings.TrimSpace(remoteThreadsEntry.Text); threads != "" {
+						params = append(params, "threads="+url.QueryEscape(threads))
+					}
+					if beam := strings.TrimSpace(remoteBeamEntry.Text); beam != "" {
+						params = append(params, "beam_size="+url.QueryEscape(beam))
+					}
+					if bestOf := strings.TrimSpace(remoteBestOfEntry.Text); bestOf != "" {
+						params = append(params, "best_of="+url.QueryEscape(bestOf))
+					}
+					if lang := strings.TrimSpace(remoteLangEntry.Text); lang != "" {
+						params = append(params, "language="+url.QueryEscape(lang))
+					}
+					if len(params) > 0 {
+						sep := "?"
+						if strings.Contains(endpoint, "?") {
+							sep = "&"
+						}
+						endpoint = endpoint + sep + strings.Join(params, "&")
 					}
 					f, err := os.Open(inputFile)
 					if err != nil {
@@ -662,11 +859,84 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 						return err
 					}
 					defer resp.Body.Close()
+					fyne.Do(func() {
+						statusLabel.SetText("Transcribing…")
+					})
 					appendLog("Waiting for server response…")
+
+					if useStream {
+						if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+							body, _ := io.ReadAll(resp.Body)
+							return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+						}
+						scanner := bufio.NewScanner(resp.Body)
+						scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+						var resultContent string
+					sseLoop:
+						for scanner.Scan() {
+							line := strings.TrimSpace(scanner.Text())
+							if !strings.HasPrefix(line, "data: ") {
+								continue
+							}
+							payload := strings.TrimPrefix(line, "data: ")
+							var msg map[string]any
+							if err := json.Unmarshal([]byte(payload), &msg); err != nil {
+								continue
+							}
+							typeVal, _ := msg["type"].(string)
+							switch typeVal {
+							case "log":
+								if m, ok := msg["message"].(string); ok {
+									appendLog(m)
+								}
+							case "error":
+								if m, ok := msg["message"].(string); ok {
+									return fmt.Errorf("server error: %s", m)
+								}
+								return fmt.Errorf("server error")
+							case "result":
+								if c, ok := msg["content"].(string); ok {
+									resultContent = c
+									break sseLoop
+								}
+							}
+						}
+						if err := scanner.Err(); err != nil {
+							return err
+						}
+						if resultContent == "" {
+							return fmt.Errorf("no result content received from stream")
+						}
+						appendLog("Saving output: " + outFile)
+						fyne.Do(func() {
+							statusLabel.SetText("Saving output…")
+						})
+						if err := os.WriteFile(outFile, []byte(resultContent), 0644); err != nil {
+							return err
+						}
+						if format == "srt" && wantSRTTimestampsOnly.Checked {
+							timestampsOut := strings.TrimSuffix(outFile, ".srt") + ".timestamps.srt"
+							appendLog("Generating timestamps-only SRT: " + timestampsOut)
+							if err := writeTimestampsOnlySRT(outFile, timestampsOut); err != nil {
+								return err
+							}
+						}
+						return nil
+					}
 
 					respBody, err := io.ReadAll(resp.Body)
 					if err != nil {
 						return err
+					}
+					if remoteDebugLog.Checked {
+						preview := strings.TrimSpace(string(respBody))
+						if preview == "" {
+							appendLog("Response body (debug): <empty>")
+						} else if len(preview) > 4000 {
+							appendLog("Response body (debug, truncated): " + preview[:4000])
+						} else {
+							appendLog("Response body (debug): " + preview)
+						}
 					}
 					if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 						return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
@@ -678,6 +948,14 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 					if strings.HasPrefix(payload, "{") {
 						var m map[string]any
 						if err := json.Unmarshal(respBody, &m); err == nil {
+							if v, ok := m["_log"]; ok {
+								if s, ok := v.(string); ok {
+									trimmed := strings.TrimSpace(s)
+									if trimmed != "" {
+										appendLog("Server log:\n" + trimmed)
+									}
+								}
+							}
 							var key string
 							switch format {
 							case "srt":
@@ -699,6 +977,9 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 					}
 
 					appendLog("Saving output: " + outFile)
+					fyne.Do(func() {
+						statusLabel.SetText("Saving output…")
+					})
 					if err := os.WriteFile(outFile, respBody, 0644); err != nil {
 						return err
 					}
@@ -751,10 +1032,14 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 					if len(errs) > 0 {
 						statusLabel.SetText("❌ Remote transcription failed")
 						resultLabel.SetText("❌ Errors:\n\n" + strings.Join(errs, "\n"))
+						busyBar.Hide()
+						runBtn.Enable()
 						return
 					}
 					statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(startTime).Round(time.Second)))
 					resultLabel.SetText("✅ Outputs:\n\n" + strings.Join(done, "\n"))
+					busyBar.Hide()
+					runBtn.Enable()
 				})
 			}()
 			return
@@ -906,8 +1191,18 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			widget.NewLabel("Remote URL:"), remoteURLEntry,
 			widget.NewLabel("Remote API key:"), remoteKeyEntry,
 			widget.NewLabel(""), rememberRemoteKey,
+			widget.NewLabel(""), remoteDebugLog,
+			widget.NewLabel(""), remoteStreamLogs,
+			widget.NewLabel(""), remoteTerminalLogs,
+			widget.NewLabel("Remote model:"), remoteModelEntry,
+			widget.NewLabel("Remote model list:"), remoteModelSelect,
+			widget.NewLabel(""), refreshRemoteModels,
+			widget.NewLabel("Remote threads:"), remoteThreadsEntry,
+			widget.NewLabel("Remote beam size:"), remoteBeamEntry,
+			widget.NewLabel("Remote best-of:"), remoteBestOfEntry,
+			widget.NewLabel("Remote language:"), remoteLangEntry,
 		),
-		widget.NewLabel("Remote API: POST {url}/transcribe/{srt|vtt|txt} (or paste a full /transcribe/... URL). Upload field: file. Header: x-api-key (optional). Response can be raw SRT/VTT/TXT or JSON with keys srt/vtt/text (auto-detected)."),
+		widget.NewLabel("Remote API: POST {url}/transcribe/{srt|vtt|txt} or {url}/transcribe/stream/{srt|vtt|txt} for SSE logs. Upload field: file. Header: x-api-key (optional). Response can be raw SRT/VTT/TXT or JSON with keys srt/vtt/text (auto-detected). Optional query params: model, threads, beam_size, best_of, language."),
 		widget.NewSeparator(),
 		widget.NewLabel("Status"),
 		statusLabel,
@@ -1147,9 +1442,10 @@ func createWhisperCommandFile(inputFile, outDir, whisperBin, modelPath, outputPr
 		"WHISPER=" + shellQuote(whisperBin) + "\n" +
 		"MODEL=" + shellQuote(modelPath) + "\n" +
 		"INPUT=" + shellQuote(inputFile) + "\n" +
+		"OUTDIR=" + shellQuote(outDir) + "\n" +
 		"OUTPREFIX=" + shellQuote(outputPrefix) + "\n" +
 		"echo \"Input: $INPUT\"\n" +
-		"echo \"Output dir: " + shellQuote(outDir) + "\"\n" +
+		"echo \"Output dir: $OUTDIR\"\n" +
 		"echo \"\"\n" +
 		"AUDIO=\"$INPUT\"\n" +
 		"TMPWAV=\"\"\n" +

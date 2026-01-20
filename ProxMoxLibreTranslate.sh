@@ -114,7 +114,7 @@ pct create "$NEXTID" "local:vztmpl/$TEMPLATE" \
   --rootfs "$STORAGE:$DISK_SIZE" \
   --net0 name=eth0,bridge="$BRIDGE",ip=dhcp \
   --unprivileged 0 \
-  --features nesting=1 \
+  --features nesting=0 \
   --onboot 1
 
 # ─────────────────────────────────────────────────────────────
@@ -181,13 +181,14 @@ if [ "$GPU_DETECTED" -eq 1 ]; then
   # Install NVIDIA Container Toolkit
   echo "Installing NVIDIA Container Toolkit..."
   pct exec "$NEXTID" -- bash -c '
-    apt-get install -y gpg curl
+    apt-get update
+    apt-get install -y --no-install-recommends gpg curl ca-certificates
     curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
     curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
       sed "s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g" | \
       tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
     apt-get update
-    apt-get install -y nvidia-container-toolkit
+    apt-get install -y --no-install-recommends nvidia-container-toolkit
   ' || echo "WARNING: NVIDIA Container Toolkit installation had issues"
   
   # Configure NVIDIA Container Runtime
@@ -211,21 +212,16 @@ set -e
 echo "Updating system..."
 apt update && apt upgrade -y
 
-echo "Installing base dependencies..."
-apt install -y \
+echo "Installing base dependencies (minimal)..."
+apt install -y --no-install-recommends \
   python3 \
   python3-venv \
   python3-pip \
+  python3-dev \
   git \
   build-essential \
-  pkg-config \
-  cmake \
-  libsentencepiece-dev \
   curl \
-  ca-certificates \
-  pciutils \
-  wget \
-  unzip
+  ca-certificates
 
 # ─────────────────────────────────────────────────────────────
 # Detect GPU inside container
@@ -295,15 +291,10 @@ package.update_package_index()
 available = package.get_available_packages()
 print(f"Found {len(available)} available packages")
 
+# Minimal default set - add more later with: libretranslate-model install-model <from> <to>
 pairs = [
-    ("en", "ru"), ("ru", "en"),
-    ("en", "pl"), ("pl", "en"),
-    ("en", "es"), ("es", "en"),
-    ("en", "fr"), ("fr", "en"),
-    ("en", "de"), ("de", "en"),
-    ("en", "it"), ("it", "en"),
-    ("en", "pt"), ("pt", "en"),
     ("en", "nl"), ("nl", "en"),
+    ("en", "fr"), ("fr", "en"),
 ]
 
 for from_code, to_code in pairs:
