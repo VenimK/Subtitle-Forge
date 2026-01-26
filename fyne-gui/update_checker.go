@@ -112,50 +112,72 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 	var assetName string
 
 	// Look for platform-specific assets
-	for _, asset := range releaseInfo.Assets {
-		switch runtime.GOOS {
-		case "darwin": // macOS
-			// Determine the correct macOS asset based on architecture
-			var expectedName string
-			if runtime.GOARCH == "arm64" {
-				expectedName = "Subtitle-Forge-macOS-ARM64.zip"
-			} else {
-				expectedName = "Subtitle-Forge-macOS-Intel.zip"
-			}
+	switch runtime.GOOS {
+	case "darwin": // macOS
+		var expectedName string
+		var archHint string
+		if runtime.GOARCH == "arm64" {
+			expectedName = "Subtitle-Forge-macOS-ARM64.zip"
+			archHint = "arm64"
+		} else {
+			expectedName = "Subtitle-Forge-macOS-Intel.zip"
+			archHint = "intel"
+		}
 
-			// Try exact match first
+		// Pass 1: exact match
+		for _, asset := range releaseInfo.Assets {
 			if asset.Name == expectedName {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
 				goto FOUND_ASSET
 			}
+		}
 
-			// Fallback: try universal binary (for backward compatibility)
+		// Pass 2: architecture hint in filename
+		for _, asset := range releaseInfo.Assets {
+			lower := strings.ToLower(asset.Name)
+			if strings.Contains(lower, "macos") || strings.Contains(lower, "darwin") {
+				if strings.Contains(lower, archHint) {
+					downloadURL = asset.BrowserDownloadURL
+					assetName = asset.Name
+					goto FOUND_ASSET
+				}
+			}
+		}
+
+		// Pass 3: universal binary (backward compatibility)
+		for _, asset := range releaseInfo.Assets {
 			if asset.Name == "Subtitle-Forge-macOS.zip" {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
 				goto FOUND_ASSET
 			}
+		}
 
-			// Fallback: any macOS-related file
-			if strings.Contains(strings.ToLower(asset.Name), "macos") || strings.Contains(strings.ToLower(asset.Name), "darwin") {
+		// Pass 4: any macOS-related file
+		for _, asset := range releaseInfo.Assets {
+			lower := strings.ToLower(asset.Name)
+			if strings.Contains(lower, "macos") || strings.Contains(lower, "darwin") {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
+				goto FOUND_ASSET
 			}
-		case "windows":
+		}
+	case "windows":
+		for _, asset := range releaseInfo.Assets {
 			if strings.Contains(strings.ToLower(asset.Name), "windows") {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
+				break
 			}
-		case "linux":
+		}
+	case "linux":
+		for _, asset := range releaseInfo.Assets {
 			if strings.Contains(strings.ToLower(asset.Name), "linux") {
 				downloadURL = asset.BrowserDownloadURL
 				assetName = asset.Name
+				break
 			}
-		}
-
-		if downloadURL != "" {
-			break
 		}
 	}
 
