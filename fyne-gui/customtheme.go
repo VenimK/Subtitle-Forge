@@ -52,18 +52,18 @@ func ensureContrast(textColor, bgColor color.Color) color.Color {
 	// Extract RGBA values
 	r1, g1, b1, _ := textColor.RGBA()
 	r2, g2, b2, _ := bgColor.RGBA()
-	
+
 	// Convert to 8-bit values for easier calculation
 	r1, g1, b1 = r1>>8, g1>>8, b1>>8
 	r2, g2, b2 = r2>>8, g2>>8, b2>>8
-	
+
 	// Calculate relative luminance (simplified formula)
 	lum1 := 0.299*float64(r1) + 0.587*float64(g1) + 0.114*float64(b1)
 	lum2 := 0.299*float64(r2) + 0.587*float64(g2) + 0.114*float64(b2)
-	
+
 	// Calculate contrast ratio (simplified)
 	contrast := math.Abs(lum1 - lum2)
-	
+
 	// If contrast is too low, adjust the text color
 	if contrast < 75 { // Threshold for minimum contrast
 		// Invert the color for maximum contrast
@@ -74,7 +74,7 @@ func ensureContrast(textColor, bgColor color.Color) color.Color {
 			A: 255,
 		}
 	}
-	
+
 	return textColor
 }
 
@@ -222,4 +222,31 @@ func (t *CustomTheme) Size(name fyne.ThemeSizeName) float32 {
 	}
 
 	return t.defaultTheme.Size(name)
+}
+
+// ApplyThemeByName applies a theme to the app by its display name.
+// This centralizes the theme name -> theme preferences mapping.
+func ApplyThemeByName(a fyne.App, name string) {
+	switch name {
+	case "Light Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(LightTheme(), true))
+	case "Dark Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(DarkTheme(), true))
+	case "Blue Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(BlueCoolTheme(), true))
+	case "Warm Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(WarmToneTheme(), true))
+	case "Green Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(VibrantGreenTheme(), true))
+	case "Spring Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(SpringTheme(), true))
+	case "Summer Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(SummerTheme(), true))
+	case "Autumn Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(AutumnTheme(), true))
+	case "Winter Theme":
+		a.Settings().SetTheme(NewCustomThemeWithPrefs(WinterTheme(), true))
+	default:
+		a.Settings().SetTheme(theme.DefaultTheme())
+	}
 }

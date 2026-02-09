@@ -7,6 +7,6 @@ func AppInfo() fyne.AppMetadata {
 	return fyne.AppMetadata{
 		ID:      "com.gmm.subtitleforge",
 		Name:    "Subtitle Forge",
-		Version: "1.6.5",
+		Version: AppVersion,
 	}
 }
