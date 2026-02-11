@@ -107,7 +107,15 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 
 	langNames := SupportedLanguageNames()
 	langCodes := SupportedLanguageCodes()
-	langSelector := widget.NewSelect(langNames, func(selected string) {
+	langSelector := widget.NewSelect(langNames, nil)
+	// Set current language in dropdown BEFORE assigning callback to avoid dialog on startup
+	for i, code := range langCodes {
+		if code == GetLanguage() {
+			langSelector.SetSelected(langNames[i])
+			break
+		}
+	}
+	langSelector.OnChanged = func(selected string) {
 		// Extract code from "EN - English" format
 		for i, name := range langNames {
 			if name == selected {
@@ -117,13 +125,6 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 				dialog.ShowInformation(T("settings.language_restart"), T("settings.language_restart_msg"), w)
 				break
 			}
-		}
-	})
-	// Set current language in dropdown
-	for i, code := range langCodes {
-		if code == GetLanguage() {
-			langSelector.SetSelected(langNames[i])
-			break
 		}
 	}
 
