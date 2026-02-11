@@ -331,12 +331,6 @@ func main() {
 	w := a.NewWindow("Subtitle Forge")
 	// Set app metadata on window
 	w.SetMaster()
-	w.CenterOnScreen()
-	// Ensure window has adequate size
-	// In Fyne, windows are resizable by default unless explicitly set as fixed size
-	w.Resize(fyne.NewSize(1024, 768))
-	// Explicitly ensure the window is not fixed size
-	w.SetFixedSize(false)
 
 	// Setup keyboard shortcuts
 	setupKeyboardShortcuts := func(fileOpenFunc, dirChangeFunc, loadTracksFunc, startExtractFunc func()) {
@@ -371,18 +365,35 @@ func main() {
 	width := float32(a.Preferences().Float("window_width"))
 	height := float32(a.Preferences().Float("window_height"))
 
-	if width == 0 || height == 0 {
-		// Use default size for first launch
+	firstLaunch := width == 0 || height == 0
+	if firstLaunch {
 		width = defaultWidth
 		height = defaultHeight
 	}
 
 	// Resize window to saved or default size
+	AppLog("DEBUG", "Restoring window size: %.0fx%.0f (first launch: %v)", width, height, firstLaunch)
 	w.Resize(fyne.NewSize(width, height))
+	w.CenterOnScreen() // center first, then override with saved position below
+	w.SetFixedSize(false)
 
-	// Save window size when it changes
-	// Use a timer to periodically check and save window size
+	// Restore saved window position (macOS native API)
+	savedX := a.Preferences().Float("window_x")
+	savedY := a.Preferences().Float("window_y")
+	if !firstLaunch && savedX >= 0 && savedY >= 0 {
+		// Delay position restore slightly to ensure the window is fully created
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			fyne.Do(func() {
+				SetWindowPosition(savedX, savedY)
+				AppLog("DEBUG", "Restored window position: %.0f, %.0f", savedX, savedY)
+			})
+		}()
+	}
+
+	// Save window size and position periodically
 	var lastSize fyne.Size
+	var lastX, lastY float64
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -390,22 +401,36 @@ func main() {
 		for range ticker.C {
 			fyne.Do(func() {
 				currentSize := w.Canvas().Size()
-				// Only save if size has changed
 				if currentSize.Width != lastSize.Width || currentSize.Height != lastSize.Height {
 					a.Preferences().SetFloat("window_width", float64(currentSize.Width))
 					a.Preferences().SetFloat("window_height", float64(currentSize.Height))
 					lastSize = currentSize
 				}
+
+				// Save window position (macOS native)
+				x, y := GetWindowPosition()
+				if x >= 0 && y >= 0 && (x != lastX || y != lastY) {
+					a.Preferences().SetFloat("window_x", x)
+					a.Preferences().SetFloat("window_y", y)
+					lastX = x
+					lastY = y
+				}
 			})
 		}
 	}()
 
-	// Also save window size when closing
+	// Also save window size and position when closing
 	w.SetCloseIntercept(func() {
-		// Save current window size
 		currentSize := w.Canvas().Size()
 		a.Preferences().SetFloat("window_width", float64(currentSize.Width))
 		a.Preferences().SetFloat("window_height", float64(currentSize.Height))
+
+		// Save position
+		x, y := GetWindowPosition()
+		if x >= 0 && y >= 0 {
+			a.Preferences().SetFloat("window_x", x)
+			a.Preferences().SetFloat("window_y", y)
+		}
 
 		// Close the window
 		w.Close()
