@@ -1,22 +1,22 @@
 package main
 
 import (
-"bufio"
-"fmt"
-"image/color"
-"os"
-"os/exec"
-"path/filepath"
-"regexp"
-"strconv"
-"strings"
-"time"
+	"bufio"
+	"fmt"
+	"image/color"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
 
-"fyne.io/fyne/v2"
-"fyne.io/fyne/v2/canvas"
-"fyne.io/fyne/v2/container"
-"fyne.io/fyne/v2/dialog"
-"fyne.io/fyne/v2/widget"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/widget"
 )
 
 // detectSubtitleFormat detects the subtitle format based on file extension and content
@@ -1149,7 +1149,7 @@ func convertToFormatAdvanced(entries []SubtitleEntry, format string, options Con
 
 func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), func([]string)) {
 	// Title
-	convertTitle := widget.NewLabel("Convert Subtitles")
+	convertTitle := widget.NewLabel(T("convert.title"))
 	convertTitle.TextStyle = fyne.TextStyle{Bold: true}
 	convertTitle.Alignment = fyne.TextAlignCenter
 
@@ -1159,7 +1159,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	var convertFiles []string
 	var convertBatchMode bool
 
-	inputLabel := widget.NewLabel("No file selected")
+	inputLabel := widget.NewLabel(T("convert.no_file"))
 	inputLabel.Wrapping = fyne.TextWrapWord
 
 	// File list for batch mode (declare early)
@@ -1217,7 +1217,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	}
 
 	// Single file selection button
-	inputBtn := widget.NewButton("Select Subtitle File", func() {
+	inputBtn := widget.NewButton(T("convert.select_file"), func() {
 		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil || reader == nil {
 				return
@@ -1254,7 +1254,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	inputBtn.Importance = widget.MediumImportance
 
 	// Batch file selection button
-	batchBtn := widget.NewButton("Select Multiple Files (Batch)", func() {
+	batchBtn := widget.NewButton(T("ai.select_batch"), func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil || uri == nil {
 				return
@@ -1286,14 +1286,14 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	batchBtn.Importance = widget.MediumImportance
 
 	// Clear files button
-	clearBtn := widget.NewButton("Clear Files", func() {
+	clearBtn := widget.NewButton(T("extract.clear_files"), func() {
 		convertBatchMode = false
 		convertFiles = nil
 		inputFile = ""
 		inputFormat = ""
 		convertFileList.Objects = nil
 		convertFileList.Refresh()
-		inputLabel.SetText("No file selected")
+		inputLabel.SetText(T("convert.no_file"))
 	})
 	clearBtn.Importance = widget.LowImportance
 
@@ -1304,9 +1304,9 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 
 	// Output directory selection
 	var outputDir string
-	outputLabel := widget.NewLabel("Output: Same as input file")
+	outputLabel := widget.NewLabel(T("convert.output_dir"))
 
-	outputBtn := widget.NewButton("Choose Output Directory", func() {
+	outputBtn := widget.NewButton(T("convert.select_output"), func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil || uri == nil {
 				return
@@ -1434,7 +1434,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	convertResultScroll.SetMinSize(fyne.NewSize(0, 100))
 
 	// Convert button
-	convertBtn := widget.NewButton("Convert Subtitle", func() {
+	convertBtn := widget.NewButton(T("convert.start"), func() {
 		// Check if we have files to convert
 		if !convertBatchMode && inputFile == "" {
 			convertResult.SetText("❌ Please select an input file first")

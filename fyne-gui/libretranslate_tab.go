@@ -33,7 +33,7 @@ type libreTranslateLanguagesResponse []struct {
 }
 
 func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
-	title := widget.NewLabel("LibreTranslate")
+	title := widget.NewLabel(T("libre.title"))
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.Alignment = fyne.TextAlignCenter
 
@@ -72,7 +72,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	}
 
 	var inputFiles []string
-	inputLabel := widget.NewLabel("No SRT files selected")
+	inputLabel := widget.NewLabel(T("libre.no_files"))
 	inputLabel.Wrapping = fyne.TextWrapWord
 
 	fileList := container.NewVBox()
@@ -88,14 +88,14 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 				widget.NewLabel(fmt.Sprintf("%d.", i+1)),
 				widget.NewLabel(fileName),
 				layout.NewSpacer(),
-				widget.NewButton("Remove", func(index int) func() {
+				widget.NewButton(T("common.remove"), func(index int) func() {
 					return func() {
 						inputFiles = append(inputFiles[:index], inputFiles[index+1:]...)
 						updateFileList()
 						if len(inputFiles) == 0 {
-							inputLabel.SetText("No SRT files selected")
+							inputLabel.SetText(T("libre.no_files"))
 						} else if len(inputFiles) == 1 {
-							inputLabel.SetText("Selected: " + filepath.Base(inputFiles[0]))
+							inputLabel.SetText(T("whisper.selected") + filepath.Base(inputFiles[0]))
 						} else {
 							inputLabel.SetText(fmt.Sprintf("%d SRT files selected", len(inputFiles)))
 						}
@@ -118,7 +118,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		}
 		inputFiles = append(inputFiles, path)
 		if len(inputFiles) == 1 {
-			inputLabel.SetText("Selected: " + filepath.Base(inputFiles[0]))
+			inputLabel.SetText(T("whisper.selected") + filepath.Base(inputFiles[0]))
 		} else {
 			inputLabel.SetText(fmt.Sprintf("%d SRT files selected", len(inputFiles)))
 		}
@@ -134,13 +134,13 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		addInputFile(path)
 	}
 
-	clearBtn := widget.NewButton("Clear", func() {
+	clearBtn := widget.NewButton(T("common.clear"), func() {
 		inputFiles = nil
-		inputLabel.SetText("No SRT files selected")
+		inputLabel.SetText(T("libre.no_files"))
 		updateFileList()
 	})
 
-	selectInputBtn := widget.NewButton("Select SRT File", func() {
+	selectInputBtn := widget.NewButton(T("libre.select_file"), func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, w)
@@ -157,9 +157,9 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	selectInputBtn.Importance = widget.HighImportance
 
 	outputDir := ""
-	outputLabel := widget.NewLabel("Output: Same directory as input")
+	outputLabel := widget.NewLabel(T("libre.output_same_dir"))
 	outputLabel.Wrapping = fyne.TextWrapWord
-	selectOutputBtn := widget.NewButton("Select Output Directory", func() {
+	selectOutputBtn := widget.NewButton(T("libre.select_output"), func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
 				dialog.ShowError(err, w)
@@ -169,7 +169,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 				return
 			}
 			outputDir = uri.Path()
-			outputLabel.SetText("Output: " + outputDir)
+			outputLabel.SetText(T("libre.output_prefix") + outputDir)
 		}, w)
 	})
 

@@ -432,19 +432,19 @@ func createResultsWindow(a fyne.App) {
 
 	// Results area with scrolling
 	resultsArea = widget.NewMultiLineEntry()
-	resultsArea.SetText("🤖 Translation results will appear here...\n")
+	resultsArea.SetText(T("ai.results_placeholder"))
 	resultsArea.Wrapping = fyne.TextWrapWord
 	resultsScroll = container.NewScroll(resultsArea)
 
 	// Clear button
-	clearResultsBtn := widget.NewButton("Clear Results", func() {
-		resultsArea.SetText("🤖 Translation results cleared...\n")
+	clearResultsBtn := widget.NewButton(T("ai.clear_results"), func() {
+		resultsArea.SetText(T("ai.results_cleared"))
 	})
 
 	// Copy to clipboard button
-	copyBtn := widget.NewButton("Copy All", func() {
+	copyBtn := widget.NewButton(T("ai.copy_all"), func() {
 		resultsWindow.Clipboard().SetContent(resultsArea.Text)
-		dialog.ShowInformation("Copied", "Results copied to clipboard", resultsWindow)
+		dialog.ShowInformation(T("common.copied"), T("ai.results_copied"), resultsWindow)
 	})
 
 	// Layout
@@ -467,19 +467,19 @@ func createResultsWindow(a fyne.App) {
 // createAITranslationTab creates the AI translation interface
 func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	// Title
-	title := widget.NewLabel("GST Subtitle Translation")
+	title := widget.NewLabel(T("ai.title"))
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.Alignment = fyne.TextAlignCenter
 
 	// API Key configuration
 	apiKeyEntry := widget.NewPasswordEntry()
-	apiKeyEntry.SetPlaceHolder("Enter your API key...")
+	apiKeyEntry.SetPlaceHolder(T("ai.api_key_hint"))
 
 	secondaryKeyEntry := widget.NewPasswordEntry()
-	secondaryKeyEntry.SetPlaceHolder("Optional: Secondary API key for more quota")
+	secondaryKeyEntry.SetPlaceHolder(T("ai.secondary_key_hint"))
 
 	// Remember API Key checkbox
-	rememberAPIKeyCheck := widget.NewCheck("Remember API Keys (saved locally)", nil)
+	rememberAPIKeyCheck := widget.NewCheck(T("ai.remember_keys"), nil)
 	rememberAPIKeyCheck.Checked = a.Preferences().BoolWithFallback("ai_remember_api_key", false)
 
 	// Load saved API keys if "Remember" is enabled
@@ -513,9 +513,9 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	}
 
 	// gst path configuration
-	gstPathLabel := widget.NewLabel("GST Path:")
+	gstPathLabel := widget.NewLabel(T("ai.gst_path"))
 	gstPathEntry := widget.NewEntry()
-	gstPathEntry.SetPlaceHolder("/path/to/gst or 'gst' if on PATH")
+	gstPathEntry.SetPlaceHolder(T("ai.gst_path_hint"))
 
 	// Load saved GST path from preferences, fallback to findGSTPath()
 	savedGSTPath := a.Preferences().StringWithFallback("ai_gst_path", "")
@@ -673,7 +673,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	// File selection
 	var inputFiles []string
 
-	inputLabel := widget.NewLabel("No subtitle files selected")
+	inputLabel := widget.NewLabel(T("ai.no_files"))
 	inputLabel.Wrapping = fyne.TextWrapWord
 
 	// File list for batch mode
@@ -689,14 +689,14 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 			fileRow := container.NewHBox(
 				widget.NewLabel(fmt.Sprintf("%d.", i+1)),
 				widget.NewLabel(fileName),
-				widget.NewButton("Remove", func(index int) func() {
+				widget.NewButton(T("common.remove"), func(index int) func() {
 					return func() {
 						inputFiles = append(inputFiles[:index], inputFiles[index+1:]...)
 						updateFileList()
 						if len(inputFiles) == 0 {
-							inputLabel.SetText("No subtitle files selected")
+							inputLabel.SetText(T("ai.no_files"))
 						} else {
-							inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch translation", len(inputFiles)))
+							inputLabel.SetText(Tf("ai.files_selected", len(inputFiles)))
 						}
 					}
 				}(i)),
@@ -717,9 +717,9 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 		inputFiles = append(inputFiles, filePath)
 		if len(inputFiles) == 1 {
-			inputLabel.SetText("Selected: " + filepath.Base(filePath))
+			inputLabel.SetText(T("whisper.selected") + filepath.Base(filePath))
 		} else {
-			inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch translation", len(inputFiles)))
+			inputLabel.SetText(Tf("ai.files_selected", len(inputFiles)))
 		}
 		updateFileList()
 	}
@@ -728,7 +728,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	aiTranslationAddFile = addFileFromDragDrop
 
 	// Single file selection
-	selectSingleBtn := widget.NewButton("Select Subtitle File", func() {
+	selectSingleBtn := widget.NewButton(T("ai.select_file"), func() {
 		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil || reader == nil {
 				return
@@ -742,7 +742,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	})
 
 	// Batch file selection
-	selectBatchBtn := widget.NewButton("Select Multiple Files (Batch)", func() {
+	selectBatchBtn := widget.NewButton(T("ai.select_batch"), func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil || uri == nil {
 				return
@@ -769,7 +769,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 			})
 
 			updateFileList()
-			inputLabel.SetText(fmt.Sprintf("%d subtitle files selected for batch translation", len(inputFiles)))
+			inputLabel.SetText(Tf("ai.files_selected", len(inputFiles)))
 		}, w)
 	})
 
@@ -782,7 +782,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	temperatureEntry := widget.NewEntry()
 	temperatureEntry.SetText("0.3")
 	temperatureEntry.SetPlaceHolder("0.0-2.0")
-	temperatureLabel := widget.NewLabel("Temperature:")
+	temperatureLabel := widget.NewLabel(T("ai.temperature"))
 
 	// Sync slider -> entry
 	temperatureSlider.OnChanged = func(value float64) {
@@ -801,16 +801,16 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	batchSizeEntry := widget.NewEntry()
 	batchSizeEntry.SetText("100")
-	batchSizeEntry.SetPlaceHolder("Batch size (lines per request)")
+	batchSizeEntry.SetPlaceHolder(T("ai.batch_size_hint"))
 
 	descriptionEntry := widget.NewMultiLineEntry()
-	descriptionEntry.SetPlaceHolder("Optional: Describe the content context (e.g., 'Medical TV series, use medical terminology')")
+	descriptionEntry.SetPlaceHolder(T("ai.description_hint"))
 	descriptionEntry.Resize(fyne.NewSize(400, 60))
 
 	// Thinking controls
 	thinkingBudgetEntry := widget.NewEntry()
 	thinkingBudgetEntry.SetText("2048")
-	thinkingBudgetEntry.SetPlaceHolder("Thinking budget (0-24576 for Flash, 128-32768 for Pro)")
+	thinkingBudgetEntry.SetPlaceHolder(T("ai.thinking_budget_hint"))
 
 	thinkingLevelSelect := widget.NewSelect([]string{
 		"", "minimal", "low", "medium", "high",
@@ -818,69 +818,69 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	thinkingLevelSelect.SetSelected("")
 
 	// Logging options
-	progressLogCheck := widget.NewCheck("Save progress log", nil)
+	progressLogCheck := widget.NewCheck(T("ai.save_progress"), nil)
 	progressLogCheck.SetChecked(true)
 
-	thoughtsLogCheck := widget.NewCheck("Save AI thinking process log", nil)
+	thoughtsLogCheck := widget.NewCheck(T("ai.save_thoughts"), nil)
 
 	// Resume options
-	resumeModeCheck := widget.NewCheck("Auto-resume interrupted translations", nil)
+	resumeModeCheck := widget.NewCheck(T("ai.auto_resume"), nil)
 	resumeModeCheck.SetChecked(true)
 
 	startLineEntry := widget.NewEntry()
-	startLineEntry.SetPlaceHolder("Start from line (optional)")
+	startLineEntry.SetPlaceHolder(T("ai.start_line_hint"))
 
 	advancedSettings := container.NewVBox(
-		widget.NewLabel("Translation Quality"),
+		widget.NewLabel(T("ai.translation_quality")),
 		container.NewHBox(temperatureLabel, temperatureEntry, temperatureSlider),
-		widget.NewLabel("💡 Tip: Lower values (0.1-0.3) = more consistent, Higher (0.6-1.0) = more creative"),
-		container.NewHBox(widget.NewLabel("Batch Size:"), batchSizeEntry),
+		widget.NewLabel(T("ai.temp_tip")),
+		container.NewHBox(widget.NewLabel(T("ai.batch_size")), batchSizeEntry),
 		widget.NewSeparator(),
 
-		widget.NewLabel("Content Context"),
-		widget.NewLabel("Description:"),
+		widget.NewLabel(T("ai.content_context")),
+		widget.NewLabel(T("ai.description")),
 		descriptionEntry,
 		widget.NewSeparator(),
 
-		widget.NewLabel("AI Thinking Settings"),
-		container.NewHBox(widget.NewLabel("Thinking Budget (2.5):"), thinkingBudgetEntry),
-		container.NewHBox(widget.NewLabel("Thinking Level (3.0):"), thinkingLevelSelect),
-		widget.NewLabel("💡 Tip: Budget for 2.5 models (0-24576 Flash, 128-32768 Pro)"),
-		widget.NewLabel("💡 Tip: Level for 3.0 models (minimal/low/medium/high)"),
+		widget.NewLabel(T("ai.thinking_settings")),
+		container.NewHBox(widget.NewLabel(T("ai.thinking_budget")), thinkingBudgetEntry),
+		container.NewHBox(widget.NewLabel(T("ai.thinking_level")), thinkingLevelSelect),
+		widget.NewLabel(T("ai.thinking_budget_tip")),
+		widget.NewLabel(T("ai.thinking_level_tip")),
 		widget.NewSeparator(),
 
-		widget.NewLabel("Logging & Resume"),
+		widget.NewLabel(T("ai.logging_resume")),
 		progressLogCheck,
 		thoughtsLogCheck,
 		resumeModeCheck,
-		container.NewHBox(widget.NewLabel("Start Line:"), startLineEntry),
+		container.NewHBox(widget.NewLabel(T("ai.start_line")), startLineEntry),
 	)
 
-	advancedExpander.Append(widget.NewAccordionItem("Advanced Settings", advancedSettings))
+	advancedExpander.Append(widget.NewAccordionItem(T("ai.advanced_settings"), advancedSettings))
 
 	// Output directory selection
 	var outputDir string
-	outputLabel := widget.NewLabel("Output: Same directory as input files")
+	outputLabel := widget.NewLabel(T("ai.output_same_dir"))
 
-	selectOutputBtn := widget.NewButton("Select Output Directory", func() {
+	selectOutputBtn := widget.NewButton(T("ai.select_output"), func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil || uri == nil {
 				return
 			}
 			outputDir = uri.Path()
-			outputLabel.SetText("Output: " + outputDir)
+			outputLabel.SetText(T("ai.output_prefix") + outputDir)
 		}, w)
 	})
 
 	// Translation progress
 	progressBar := widget.NewProgressBar()
-	progressLabel := widget.NewLabel("Ready to translate")
+	progressLabel := widget.NewLabel(T("ai.ready"))
 
 	// Action buttons - declare first to avoid forward reference issues
 	var translateBtn, stopBtn *widget.Button
 
-	translateBtn = widget.NewButton("Start Translation", nil)
-	stopBtn = widget.NewButton("Stop Translation", nil)
+	translateBtn = widget.NewButton(T("ai.start_translation"), nil)
+	stopBtn = widget.NewButton(T("ai.stop_translation"), nil)
 
 	// Set button callbacks after declaration
 	translateBtn.OnTapped = func() {

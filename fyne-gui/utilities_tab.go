@@ -20,14 +20,14 @@ import (
 
 func createUtilitiesTab(result *widget.Label) *fyne.Container {
 	// Create a new Label for utilities tab results
-	utilitiesResult := widget.NewLabel("Results will appear here...")
+	utilitiesResult := widget.NewLabel(T("extract.results_placeholder"))
 	utilitiesResult.Wrapping = fyne.TextWrapWord
 	utilitiesResultScroll := container.NewScroll(utilitiesResult)
 	utilitiesResultScroll.SetMinSize(fyne.NewSize(850, 200))
 
 	// Create file selection widgets for MKV operations
-	mkvFileLabel := widget.NewLabel("No MKV file selected")
-	selectMkvBtn := widget.NewButton("Select MKV File", func() {
+	mkvFileLabel := widget.NewLabel(T("utilities.no_mkv"))
+	selectMkvBtn := widget.NewButton(T("utilities.select_mkv"), func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, fyne.CurrentApp().Driver().AllWindows()[0])
@@ -39,7 +39,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 
 			filePath := reader.URI().Path()
 			if !strings.HasSuffix(strings.ToLower(filePath), ".mkv") {
-				dialog.ShowInformation("Invalid File", "Please select an MKV file", fyne.CurrentApp().Driver().AllWindows()[0])
+				dialog.ShowInformation(T("common.error"), T("insert.invalid_video"), fyne.CurrentApp().Driver().AllWindows()[0])
 				return
 			}
 
@@ -76,10 +76,10 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 	})
 
 	// Create MKV utility operations
-	mkvInfoBtn := widget.NewButton("MKV Info", func() {
+	mkvInfoBtn := widget.NewButton(T("utilities.mkv_info"), func() {
 		mkvPath := mkvFileLabel.Text
-		if mkvPath == "No MKV file selected" {
-			dialog.ShowInformation("No File Selected", "Please select an MKV file first", fyne.CurrentApp().Driver().AllWindows()[0])
+		if mkvPath == T("utilities.no_mkv") {
+			dialog.ShowInformation(T("common.error"), T("utilities.no_mkv"), fyne.CurrentApp().Driver().AllWindows()[0])
 			return
 		}
 
@@ -122,10 +122,10 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 		}()
 	})
 
-	mkvExtractChaptersBtn := widget.NewButton("Extract Chapters", func() {
+	mkvExtractChaptersBtn := widget.NewButton(T("utilities.extract_chapters"), func() {
 		mkvPath := mkvFileLabel.Text
-		if mkvPath == "No MKV file selected" {
-			dialog.ShowInformation("No File Selected", "Please select an MKV file first", fyne.CurrentApp().Driver().AllWindows()[0])
+		if mkvPath == T("utilities.no_mkv") {
+			dialog.ShowInformation(T("common.error"), T("utilities.no_mkv"), fyne.CurrentApp().Driver().AllWindows()[0])
 			return
 		}
 
@@ -270,7 +270,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 
 	// Create layout for the Utilities tab
 	mkvSection := container.NewVBox(
-		widget.NewLabelWithStyle("MKV Utilities", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(T("utilities.title"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		container.NewHBox(selectMkvBtn, mkvFileLabel),
 		container.NewHBox(mkvInfoBtn, mkvExtractChaptersBtn),
 	)
@@ -286,7 +286,7 @@ func createUtilitiesTab(result *widget.Label) *fyne.Container {
 		widget.NewSeparator(),
 		srtSection,
 		widget.NewSeparator(),
-		widget.NewLabel("Results:"),
+		widget.NewLabel(T("utilities.results")),
 		utilitiesResultScroll,
 	)
 

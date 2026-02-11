@@ -50,25 +50,25 @@ func (p *progressReader) Read(b []byte) (int, error) {
 }
 
 func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
-	title := widget.NewLabel("Whisper Transcription")
+	title := widget.NewLabel(T("whisper.title"))
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.Alignment = fyne.TextAlignCenter
 
-	statusLabel := widget.NewLabel("Ready")
+	statusLabel := widget.NewLabel(T("whisper.ready"))
 	statusLabel.Wrapping = fyne.TextWrapWord
 	busyBar := widget.NewProgressBarInfinite()
 	busyBar.Hide()
 
 	var inputFile string
-	inputLabel := widget.NewLabel("No media/audio file selected")
+	inputLabel := widget.NewLabel(T("whisper.no_file"))
 	inputLabel.Wrapping = fyne.TextWrapWord
 
 	whisperTranscribeSetInputFile = func(path string) {
 		inputFile = path
-		inputLabel.SetText("Selected: " + filepath.Base(inputFile))
+		inputLabel.SetText(T("whisper.selected") + filepath.Base(inputFile))
 	}
 
-	selectInputBtn := widget.NewButton("Select Media/Audio File", func() {
+	selectInputBtn := widget.NewButton(T("whisper.select_file"), func() {
 		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, w)
@@ -84,10 +84,10 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	selectInputBtn.Importance = widget.HighImportance
 
 	outputDir := ""
-	outputLabel := widget.NewLabel("Output: Same directory as input")
+	outputLabel := widget.NewLabel(T("whisper.output_same_dir"))
 	outputLabel.Wrapping = fyne.TextWrapWord
 
-	selectOutputBtn := widget.NewButton("Select Output Directory", func() {
+	selectOutputBtn := widget.NewButton(T("whisper.select_output"), func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
 				dialog.ShowError(err, w)
@@ -97,7 +97,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 				return
 			}
 			outputDir = uri.Path()
-			outputLabel.SetText("Output: " + outputDir)
+			outputLabel.SetText(T("whisper.output_prefix") + outputDir)
 		}, w)
 	})
 
@@ -1076,10 +1076,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			})
 
 			// Best-effort completion detection: watch for output file(s) appearing.
-			// We can't reliably get Terminal process exit status, so we observe filesystem outputs.
 			go func(expected []string, started time.Time) {
-				// Prefer the main SRT for completion if selected. Note that *.timestamps.srt also ends in .srt,
-				// so we must avoid accidentally watching the timestamps file (it doesn't exist until after).
 				watched := ""
 				mainSRT := outputPrefix + ".srt"
 				for _, p := range expected {
@@ -1095,7 +1092,6 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 					watched = expected[0]
 				}
 
-				// Poll for up to 2 hours.
 				deadline := time.Now().Add(2 * time.Hour)
 				ticker := time.NewTicker(1 * time.Second)
 				defer ticker.Stop()
@@ -1136,16 +1132,53 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			return
 		}
 
-		// Non-macOS fallback: run without live output, capture output on completion.
+		// Non-macOS fallback: run in-process with live log streaming
 		go func() {
 			defer fyne.Do(func() {
 				busyBar.Hide()
 				runBtn.Enable()
 			})
 
-			args := []string{"-m", modelEntry.Text, "-f", inputFile, "-of", outputPrefix}
+			// Step 1: Convert to WAV if input is not already WAV
+			audioFile := inputFile
+			var tmpWav string
+			ext := strings.ToLower(filepath.Ext(inputFile))
+			if ext != ".wav" {
+				fyne.Do(func() {
+					statusLabel.SetText("Converting to WAV (16kHz mono)…")
+				})
+				appendLog("Converting to WAV (16kHz mono)…")
+
+				tmpWav = filepath.Join(os.TempDir(), fmt.Sprintf("subtitle-forge-whisper-%d.wav", time.Now().UnixNano()))
+				ffmpegCmd := exec.Command("ffmpeg", "-y", "-i", inputFile, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", tmpWav)
+				ffmpegOut, ffmpegErr := ffmpegCmd.CombinedOutput()
+				if ffmpegErr != nil {
+					appendLog("❌ FFmpeg conversion failed: " + ffmpegErr.Error())
+					if len(ffmpegOut) > 0 {
+						appendLog(string(ffmpegOut))
+					}
+					fyne.Do(func() {
+						statusLabel.SetText("❌ FFmpeg conversion failed")
+						resultLabel.SetText(fmt.Sprintf("❌ Error converting to WAV: %v\n\n%s", ffmpegErr, string(ffmpegOut)))
+					})
+					return
+				}
+				audioFile = tmpWav
+				appendLog("WAV conversion complete: " + tmpWav)
+			}
+
+			// Clean up temp WAV when done
+			if tmpWav != "" {
+				defer os.Remove(tmpWav)
+			}
+
+			// Step 2: Build whisper-cli arguments
+			args := []string{"-m", modelEntry.Text, "-f", audioFile, "-of", outputPrefix}
 			if lang != "" {
 				args = append(args, "-l", lang)
+			}
+			if threads > 0 {
+				args = append(args, "-t", fmt.Sprintf("%d", threads))
 			}
 			if wantTXT.Checked {
 				args = append(args, "-otxt")
@@ -1157,13 +1190,45 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 				args = append(args, "-ovtt")
 			}
 
+			// Step 3: Run whisper-cli with live output streaming
+			fyne.Do(func() {
+				statusLabel.SetText("Running whisper-cli…")
+			})
+			appendLog("Running: " + whisperBinEntry.Text + " " + strings.Join(args, " "))
+
 			cmd := exec.Command(whisperBinEntry.Text, args...)
 			cmd.Dir = outDir
-			out, err := cmd.CombinedOutput()
+
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("❌ Failed to start whisper-cli")
+					resultLabel.SetText("❌ Error: " + err.Error())
+				})
+				return
+			}
+			cmd.Stderr = cmd.Stdout
+
+			if err := cmd.Start(); err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("❌ Failed to start whisper-cli")
+					resultLabel.SetText("❌ Error: " + err.Error())
+				})
+				return
+			}
+
+			scanner := bufio.NewScanner(stdout)
+			scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+			for scanner.Scan() {
+				line := scanner.Text()
+				appendLog(line)
+			}
+
+			err = cmd.Wait()
 			fyne.Do(func() {
 				if err != nil {
 					statusLabel.SetText("❌ Transcription failed")
-					resultLabel.SetText(fmt.Sprintf("❌ Error: %v\n\n%s", err, string(out)))
+					resultLabel.SetText(fmt.Sprintf("❌ whisper-cli failed: %v", err))
 					return
 				}
 				if wantSRT.Checked && wantSRTTimestampsOnly.Checked {
@@ -1365,25 +1430,81 @@ func createTerminalCommandFile(workingDir, title string, cmd []string) (string, 
 		quoted = append(quoted, shellQuote(c))
 	}
 
-	script := "#!/bin/bash\n" +
-		"set -e\n" +
-		"echo \"" + strings.ReplaceAll(title, "\"", "\\\"") + "\"\n" +
-		"echo \"Working dir: " + workingDir + "\"\n" +
-		"echo \"\"\n" +
-		"cd " + shellQuote(workingDir) + "\n" +
-		"set +e\n" +
-		strings.Join(quoted, " ") + "\n" +
-		"EXITCODE=$?\n" +
-		"set -e\n" +
-		"echo \"\"\n" +
-		"if [ $EXITCODE -eq 0 ]; then\n" +
-		"  echo \"✅ Done.\"\n" +
-		"else\n" +
-		"  echo \"❌ Failed with exit code $EXITCODE\"\n" +
-		"fi\n" +
-		"echo \"\"\n" +
-		"echo \"Press Enter to close this window…\"\n" +
-		"read\n"
+	escapedTitle := strings.ReplaceAll(title, "\"", "\\\"")
+
+	script := `#!/bin/bash
+# ── Subtitle Forge ──────────────────────────────────────────
+set -e
+
+# ANSI color codes
+BOLD='\033[1m'
+DIM='\033[2m'
+CYAN='\033[36m'
+GREEN='\033[32m'
+RED='\033[31m'
+YELLOW='\033[33m'
+MAGENTA='\033[35m'
+RESET='\033[0m'
+
+clear
+printf "${BOLD}${CYAN}"
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║                                                              ║"
+echo "║              🔧  S U B T I T L E   F O R G E               ║"
+echo "║                                                              ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+printf "${RESET}\n"
+printf "${BOLD}${MAGENTA}  ▸ %s${RESET}\n\n" "` + escapedTitle + `"
+printf "${DIM}  Working dir: %s${RESET}\n" ` + shellQuote(workingDir) + `
+printf "${DIM}  Started:     $(date '+%H:%M:%S')${RESET}\n"
+echo ""
+printf "${CYAN}──────────────────────────────────────────────────────────────${RESET}\n\n"
+
+cd ` + shellQuote(workingDir) + `
+
+# Spinner for background task
+spin() {
+  local pid=$1
+  local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  local i=0
+  local start=$SECONDS
+  while kill -0 "$pid" 2>/dev/null; do
+    local elapsed=$(( SECONDS - start ))
+    local mins=$(( elapsed / 60 ))
+    local secs=$(( elapsed % 60 ))
+    printf "\r${BOLD}${YELLOW}  ${frames:i%${#frames}:1} Running...${RESET} ${DIM}[%02d:%02d]${RESET}  " "$mins" "$secs"
+    i=$(( i + 1 ))
+    sleep 0.1
+  done
+  printf "\r                                                    \r"
+}
+
+START_TIME=$SECONDS
+set +e
+` + strings.Join(quoted, " ") + ` &
+CMD_PID=$!
+spin $CMD_PID
+wait $CMD_PID
+EXITCODE=$?
+set -e
+
+ELAPSED=$(( SECONDS - START_TIME ))
+ELAPSED_MIN=$(( ELAPSED / 60 ))
+ELAPSED_SEC=$(( ELAPSED % 60 ))
+
+echo ""
+printf "${CYAN}──────────────────────────────────────────────────────────────${RESET}\n\n"
+if [ $EXITCODE -eq 0 ]; then
+  printf "${BOLD}${GREEN}  ✅ Completed successfully${RESET}\n"
+else
+  printf "${BOLD}${RED}  ❌ Failed with exit code $EXITCODE${RESET}\n"
+fi
+printf "${DIM}  Duration: %02d:%02d${RESET}\n" "$ELAPSED_MIN" "$ELAPSED_SEC"
+printf "${DIM}  Finished: $(date '+%H:%M:%S')${RESET}\n"
+echo ""
+printf "${DIM}  Press Enter to close this window…${RESET}"
+read
+`
 
 	if _, err := tmp.WriteString(script); err != nil {
 		return "", err
@@ -1420,59 +1541,130 @@ func createWhisperCommandFile(inputFile, outDir, whisperBin, modelPath, outputPr
 		args = append(args, "-l", shellQuote(strings.TrimSpace(langCode)))
 	}
 
-	// Add threads option
 	if threads > 0 {
 		args = append(args, "-t", fmt.Sprintf("%d", threads))
 	}
 
-	if wantTXT {
-		args = append(args, "-otxt")
-	}
+	// Build output format list for display
+	var fmtList []string
 	if wantSRT {
 		args = append(args, "-osrt")
+		fmtList = append(fmtList, "SRT")
 	}
 	if wantVTT {
 		args = append(args, "-ovtt")
+		fmtList = append(fmtList, "VTT")
+	}
+	if wantTXT {
+		args = append(args, "-otxt")
+		fmtList = append(fmtList, "TXT")
+	}
+	fmtDisplay := strings.Join(fmtList, ", ")
+
+	langDisplay := "Auto-detect"
+	if strings.TrimSpace(langCode) != "" {
+		langDisplay = strings.TrimSpace(langCode)
 	}
 
-	script := "#!/bin/bash\n" +
-		"set -e\n" +
-		"echo \"Subtitle Forge - Whisper Transcription\"\n" +
-		"cd " + shellQuote(outDir) + "\n" +
-		"WHISPER=" + shellQuote(whisperBin) + "\n" +
-		"MODEL=" + shellQuote(modelPath) + "\n" +
-		"INPUT=" + shellQuote(inputFile) + "\n" +
-		"OUTDIR=" + shellQuote(outDir) + "\n" +
-		"OUTPREFIX=" + shellQuote(outputPrefix) + "\n" +
-		"echo \"Input: $INPUT\"\n" +
-		"echo \"Output dir: $OUTDIR\"\n" +
-		"echo \"\"\n" +
-		"AUDIO=\"$INPUT\"\n" +
-		"TMPWAV=\"\"\n" +
-		"EXT=\"${INPUT##*.}\"\n" +
-		"EXT_LOWER=\"$(echo \"$EXT\" | tr '[:upper:]' '[:lower:]')\"\n" +
-		"if [ \"$EXT_LOWER\" != \"wav\" ]; then\n" +
-		"  TMPWAV=\"$(mktemp -t subtitle-forge-whisper-XXXXXX).wav\"\n" +
-		"  echo \"Converting to WAV (16kHz mono): $TMPWAV\"\n" +
-		"  ffmpeg -y -i \"$INPUT\" -ar 16000 -ac 1 -c:a pcm_s16le \"$TMPWAV\"\n" +
-		"  AUDIO=\"$TMPWAV\"\n" +
-		"fi\n" +
-		"echo \"\"\n" +
-		"echo \"Running whisper-cli…\"\n" +
-		"set +e\n" +
-		"\"$WHISPER\" " + strings.Join(args, " ") + "\n" +
-		"EXITCODE=$?\n" +
-		"set -e\n" +
-		"if [ -n \"$TMPWAV\" ]; then rm -f \"$TMPWAV\"; fi\n" +
-		"echo \"\"\n" +
-		"if [ $EXITCODE -eq 0 ]; then\n" +
-		"  echo \"✅ Done.\"\n" +
-		"else\n" +
-		"  echo \"❌ whisper-cli failed with exit code $EXITCODE\"\n" +
-		"fi\n" +
-		"echo \"\"\n" +
-		"echo \"Press Enter to close this window…\"\n" +
-		"read\n"
+	script := `#!/bin/bash
+# ── Subtitle Forge ──────────────────────────────────────────
+set -e
+
+# ANSI color codes
+BOLD='\033[1m'
+DIM='\033[2m'
+CYAN='\033[36m'
+GREEN='\033[32m'
+RED='\033[31m'
+YELLOW='\033[33m'
+MAGENTA='\033[35m'
+WHITE='\033[97m'
+RESET='\033[0m'
+
+clear
+printf "${BOLD}${CYAN}"
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║                                                              ║"
+echo "║              🔧  S U B T I T L E   F O R G E               ║"
+echo "║                                                              ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+printf "${RESET}\n"
+printf "${BOLD}${MAGENTA}  ▸ Whisper Transcription${RESET}\n\n"
+
+printf "${BOLD}${WHITE}  ┌─ Configuration ─────────────────────────────────────────┐${RESET}\n"
+printf "${WHITE}  │${RESET}  ${DIM}Input:${RESET}    %s\n" "$(basename ` + shellQuote(inputFile) + `)"
+printf "${WHITE}  │${RESET}  ${DIM}Model:${RESET}    %s\n" "$(basename ` + shellQuote(modelPath) + `)"
+printf "${WHITE}  │${RESET}  ${DIM}Language:${RESET}  ` + langDisplay + `\n"
+printf "${WHITE}  │${RESET}  ${DIM}Threads:${RESET}   ` + fmt.Sprintf("%d", threads) + `\n"
+printf "${WHITE}  │${RESET}  ${DIM}Formats:${RESET}   ` + fmtDisplay + `\n"
+printf "${WHITE}  │${RESET}  ${DIM}Output:${RESET}    %s\n" ` + shellQuote(outDir) + `
+printf "${BOLD}${WHITE}  └─────────────────────────────────────────────────────────┘${RESET}\n"
+printf "${DIM}  Started: $(date '+%H:%M:%S')${RESET}\n\n"
+
+cd ` + shellQuote(outDir) + `
+WHISPER=` + shellQuote(whisperBin) + `
+MODEL=` + shellQuote(modelPath) + `
+INPUT=` + shellQuote(inputFile) + `
+OUTPREFIX=` + shellQuote(outputPrefix) + `
+
+# ── Step 1: Audio conversion ────────────────────────────────
+AUDIO="$INPUT"
+TMPWAV=""
+EXT="${INPUT##*.}"
+EXT_LOWER="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
+if [ "$EXT_LOWER" != "wav" ]; then
+  TMPWAV="$(mktemp -t subtitle-forge-whisper-XXXXXX).wav"
+  printf "${YELLOW}  ⟳ Converting to WAV (16kHz mono)…${RESET}\n"
+  ffmpeg -y -loglevel warning -stats -i "$INPUT" -ar 16000 -ac 1 -c:a pcm_s16le "$TMPWAV" 2>&1 | while IFS= read -r line; do
+    printf "    ${DIM}%s${RESET}\n" "$line"
+  done
+  AUDIO="$TMPWAV"
+  printf "${GREEN}  ✓ Audio conversion complete${RESET}\n\n"
+else
+  printf "${GREEN}  ✓ Input is already WAV${RESET}\n\n"
+fi
+
+# ── Step 2: Whisper transcription ───────────────────────────
+printf "${CYAN}──────────────────────────────────────────────────────────────${RESET}\n"
+printf "${BOLD}${YELLOW}  ⟳ Transcribing…${RESET}\n\n"
+
+START_TIME=$SECONDS
+set +e
+"$WHISPER" ` + strings.Join(args, " ") + ` 2>&1 | while IFS= read -r line; do
+  printf "  ${DIM}│${RESET} %s\n" "$line"
+done
+EXITCODE=${PIPESTATUS[0]}
+set -e
+
+# Clean up temp WAV
+if [ -n "$TMPWAV" ]; then rm -f "$TMPWAV"; fi
+
+ELAPSED=$(( SECONDS - START_TIME ))
+ELAPSED_MIN=$(( ELAPSED / 60 ))
+ELAPSED_SEC=$(( ELAPSED % 60 ))
+
+echo ""
+printf "${CYAN}──────────────────────────────────────────────────────────────${RESET}\n\n"
+if [ $EXITCODE -eq 0 ]; then
+  printf "${BOLD}${GREEN}  ✅ Transcription completed successfully!${RESET}\n\n"
+  printf "${WHITE}  Output files:${RESET}\n"
+  for ext in srt vtt txt; do
+    f="${OUTPREFIX}.${ext}"
+    if [ -f "$f" ]; then
+      SIZE=$(du -h "$f" | cut -f1 | xargs)
+      printf "    ${GREEN}✓${RESET} %s ${DIM}(%s)${RESET}\n" "$(basename "$f")" "$SIZE"
+    fi
+  done
+else
+  printf "${BOLD}${RED}  ❌ Transcription failed (exit code $EXITCODE)${RESET}\n"
+fi
+echo ""
+printf "${DIM}  Duration:  %02d:%02d${RESET}\n" "$ELAPSED_MIN" "$ELAPSED_SEC"
+printf "${DIM}  Finished:  $(date '+%H:%M:%S')${RESET}\n"
+echo ""
+printf "${DIM}  Press Enter to close this window…${RESET}"
+read
+`
 
 	if _, err := tmp.WriteString(script); err != nil {
 		return "", err

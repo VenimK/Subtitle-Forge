@@ -1,5 +1,5 @@
-# Subtitle Forge v2.0.60
-> Powerful subtitle extraction, conversion, and **AI translation** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, and manage subtitles with ease 🔹
+# Subtitle Forge v2.3
+> Powerful subtitle extraction, conversion, **AI translation**, **Whisper transcription**, and **LibreTranslate** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, transcribe, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
 > [![GitHub All Releases](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/total.svg)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -16,8 +16,10 @@ This project provides two applications:
    - **Extract Subtitles** - Extract from MKV files with batch processing and PGS to SRT conversion
    - **Insert Subtitles** - Insert subtitles (all formats) into video files
    - **Convert Subtitles** - Universal subtitle format converter with batch processing and advanced options
-   - **AI Translation** - 🆕 Translate subtitles using Google Gemini AI with intelligent batch processing
-   - **Settings** - Dependency management and seasonal dark themes
+   - **AI Translation** - Translate subtitles using Google Gemini AI with intelligent batch processing
+   - **Whisper Transcription** - Transcribe audio/video to subtitles using whisper.cpp with CoreML acceleration (macOS)
+   - **LibreTranslate** - Translate subtitles using local or remote LibreTranslate servers
+   - **Settings** - Dependency management, seasonal dark themes, and UI language selection
 
 ## Installation
 
@@ -44,6 +46,33 @@ This project provides two applications:
    sudo ./install_dependencies.sh
    ```
 4. Launch the application
+
+## What's New in v2.3 ✨
+
+### 🌍 Full UI Localization (i18n)
+
+- **🇬🇧 English**, **🇳🇱 Dutch**, **🇫🇷 French**, **🇩🇪 German**, **🇪🇸 Spanish** — all UI strings localized
+- **🔤 Translation System**: `i18n.go` engine with `T()` lookup, per-language files, auto system locale detection
+- **⚙️ Language Selector**: Switch UI language from Settings — no restart required
+
+### 🎙️ Whisper Terminal Redesign
+
+- **💻 Professional Terminal Output**: ANSI-styled macOS Terminal with colored header, spinner, elapsed timer, summary footer
+- **🔄 Reverted to Terminal Mode**: Restored native Terminal experience on macOS
+
+### 🏗️ Major Code Refactoring
+
+- `main.go` reduced from **3,400 → 700 lines** (80% reduction)
+- Extraction logic split into `extract_tab.go`, `extract_load_tracks.go`, `extract_start.go`, `extract_convert.go`
+- New `i18n.go` + `translations_*.go` localization system
+- New `subtitle_preview.go` for track preview
+
+### 🐛 Bug Fixes
+
+- Drag-and-drop localization fix (was hardcoded English)
+- Localized remaining hardcoded strings across Convert, LibreTranslate, and Insert tabs
+
+---
 
 ## What's New in v2.0.60 ✨
 

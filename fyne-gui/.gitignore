@@ -1,0 +1,14 @@
+# Build binaries
+fyne-gui
+subtitle-forge
+*.exe
+*.app
+
+# Build output
+build/macos/*.app
+build/windows/
+build/linux/
+
+# OS files
+.DS_Store
+Thumbs.db

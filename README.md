@@ -1,4 +1,4 @@
-# Subtitle Forge v2.0.60
+# Subtitle Forge v2.3
 > Powerful subtitle extraction, conversion, **AI translation**, **Whisper transcription**, and **LibreTranslate** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, transcribe, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -104,6 +104,43 @@ This script (safe by default):
 - **Self-Contained Bundle**: Binary + bundled FFmpeg, Deno, Tesseract, and MKVToolNix (when available)
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
+
+## What's New in v2.3 ✨
+
+### 🌍 Full UI Localization (i18n)
+
+**v2.3** introduces complete multi-language support across the entire application:
+
+- **🇬🇧 English**, **🇳🇱 Dutch**, **🇫🇷 French**, **🇩🇪 German**, **🇪🇸 Spanish** — all UI strings localized
+- **🔤 Translation System**: New `i18n.go` engine with `T()` lookup, per-language translation files, and automatic system locale detection
+- **⚙️ Language Selector**: Switch UI language instantly from the Settings tab — no restart required
+- **📝 All Tabs Covered**: Extract, Insert, Convert, AI Translate, Whisper, LibreTranslate, Logs, and Settings tabs fully localized
+
+### 🎙️ Whisper Terminal Redesign
+
+- **💻 Professional Terminal Output**: ANSI-styled macOS Terminal window with colored header, spinner, elapsed timer, and clean summary footer
+- **📊 Configuration Display**: Shows input file, model, language, threads, and output formats in a styled box before transcription starts
+- **🔄 Reverted to Terminal Mode**: Restored the native Terminal experience on macOS (preferred by users over in-process streaming)
+
+### 🏗️ Major Code Refactoring
+
+`main.go` was **3,400+ lines / 117KB** — too large to maintain. This release splits it into focused modules:
+
+- **`extract_tab.go`** — UI setup, buttons, filtering, sorting, drag-and-drop
+- **`extract_load_tracks.go`** — Track loading for MKV (mkvmerge) and MP4 (ffprobe)
+- **`extract_start.go`** — Extraction engine + PGS→SRT OCR conversion
+- **`extract_convert.go`** — ASS/SSA→SRT and VobSub→SRT conversion
+- **`i18n.go`** + `translations_*.go` — Localization engine and language files
+- **`subtitle_preview.go`** — Subtitle track preview functionality
+
+**Result**: `main.go` reduced from **3,400 → 700 lines** (80% reduction), making the codebase far easier to navigate, debug, and extend.
+
+### 🐛 Bug Fixes
+
+- **🔧 Drag-and-Drop Localization Fix**: Extract tab drag-and-drop comparison was hardcoded in English — now uses `T()` so it works in all languages
+- **🔧 Localized UI Strings**: Replaced remaining hardcoded English strings across Convert, LibreTranslate, and Insert tabs with `T()` calls
+
+---
 
 ## What's New in v2.0.60 ✨
 

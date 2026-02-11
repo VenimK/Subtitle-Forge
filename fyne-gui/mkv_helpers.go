@@ -129,8 +129,10 @@ func NewMkvmergeCmd(args ...string) *exec.Cmd {
 	return exec.Command("mkvmerge", args...)
 }
 
-// CreateTrackRow creates a UI row for a TrackItem in the track list
-func CreateTrackRow(t *TrackItem) *fyne.Container {
+// CreateTrackRow creates a UI row for a TrackItem in the track list.
+// videoPath is the source video file (used for subtitle preview).
+// w is the app window (used for preview dialog). Both may be empty/nil to skip preview.
+func CreateTrackRow(t *TrackItem, videoPath string, w fyne.Window) *fyne.Container {
 	var trackInfoText string
 	if t.FilePath != "" {
 		// Include filename for batch processing
@@ -140,6 +142,20 @@ func CreateTrackRow(t *TrackItem) *fyne.Container {
 		trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name)
 	}
 	trackInfo := widget.NewLabel(trackInfoText)
+
+	// Create preview button for text-based subtitle codecs
+	var previewBtn *widget.Button
+	srcPath := videoPath
+	if t.FilePath != "" {
+		srcPath = t.FilePath
+	}
+	if srcPath != "" && w != nil && isPreviewableCodec(t.Codec) {
+		trackCopy := t // capture for closure
+		previewBtn = widget.NewButton("👁 Preview", func() {
+			ShowSubtitlePreview(srcPath, trackCopy, w)
+		})
+		previewBtn.Importance = widget.LowImportance
+	}
 
 	if t.ConvertOCR != nil {
 		// For PGS/VobSub subtitles, show OCR option and language selection
@@ -152,6 +168,9 @@ func CreateTrackRow(t *TrackItem) *fyne.Container {
 		// For ASS/SSA conversion (no OCR language needed)
 		return container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel)
 	}
-	// For other subtitle formats
+	// For other subtitle formats — include preview button if available
+	if previewBtn != nil {
+		return container.NewHBox(t.Check, t.Status, trackInfo, previewBtn)
+	}
 	return container.NewHBox(t.Check, t.Status, trackInfo)
 }

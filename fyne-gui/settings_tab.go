@@ -17,19 +17,19 @@ import (
 // It requires the app, window, and the dependencyButtons container from the extract tab.
 func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Container) *fyne.Container {
 	// Create a title with bold styling
-	settingsTitle := canvas.NewText("Application Settings", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	settingsTitle := canvas.NewText(T("settings.title"), color.NRGBA{R: 0, G: 0, B: 180, A: 255})
 	settingsTitle.TextSize = 18
 	settingsTitle.TextStyle.Bold = true
 
 	// Create a header for dependencies section
-	dependencyTitle := widget.NewLabelWithStyle("System Dependencies", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	dependencyTitle := widget.NewLabelWithStyle(T("settings.dependencies"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	// Create a placeholder for the dynamic dependency status updates
-	settingsLabel := widget.NewLabel("Checking dependencies...")
+	settingsLabel := widget.NewLabel(T("settings.checking"))
 	settingsLabel.Wrapping = fyne.TextWrapWord
 
 	// Create a card for theme settings
-	themeTitle := canvas.NewText("Theme Settings", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	themeTitle := canvas.NewText(T("settings.theme_settings"), color.NRGBA{R: 0, G: 0, B: 180, A: 255})
 	themeTitle.TextSize = 16
 	themeTitle.TextStyle.Bold = true
 
@@ -46,7 +46,7 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	themeSelector.SetSelected(selectedTheme)
 
 	// Create a styled theme label with custom color
-	themeLabel := widget.NewLabelWithStyle("Application Theme:", fyne.TextAlignLeading, fyne.TextStyle{
+	themeLabel := widget.NewLabelWithStyle(T("settings.theme_label"), fyne.TextAlignLeading, fyne.TextStyle{
 		Bold:      true,
 		Italic:    false,
 		Monospace: false,
@@ -60,11 +60,11 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	// Instead, we're using a colored background with the default text color
 
 	// Create a button to apply theme changes with custom styling and color
-	applyThemeBtn := widget.NewButtonWithIcon("Apply Theme", theme.ConfirmIcon(), func() {
+	applyThemeBtn := widget.NewButtonWithIcon(T("settings.apply_theme"), theme.ConfirmIcon(), func() {
 		selected := themeSelector.Selected
 		a.Preferences().SetString("theme", selected)
 		ApplyThemeByName(a, selected)
-		dialog.ShowInformation("Theme Applied", "Application theme has been updated and saved.", w)
+		dialog.ShowInformation(T("settings.theme_applied"), T("settings.theme_applied_msg"), w)
 	})
 	applyThemeBtn.Importance = widget.HighImportance
 
@@ -75,33 +75,68 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	// No theme customization option - using predefined themes only
 
 	// Help section
-	helpTitle := canvas.NewText("Help & Information", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	helpTitle := canvas.NewText(T("settings.help_info"), color.NRGBA{R: 0, G: 0, B: 180, A: 255})
 	helpTitle.TextSize = 16
 	helpTitle.TextStyle.Bold = true
 
 	// App information
 	versionInfo := widget.NewRichText(
 		&widget.TextSegment{Text: "Subtitle Forge " + AppVersion + "\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
-		&widget.TextSegment{Text: "A tool for extracting and converting subtitles from MKV and MP4 files.\n\n"},
+		&widget.TextSegment{Text: T("settings.app_desc") + "\n\n"},
 		&widget.TextSegment{Text: " 2025 VenimK@David Software\n", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Italic: true}}},
 	)
 	versionInfo.Wrapping = fyne.TextWrapWord
 
 	// Add a helpful description of dependencies
-	dependencyDescription := widget.NewLabel("The application requires these external tools to function properly:")
+	dependencyDescription := widget.NewLabel(T("settings.dep_desc"))
 	dependencyDescription.Wrapping = fyne.TextWrapWord
 
 	// Create a list of dependencies with descriptions
-	dependencyList := widget.NewLabel("• FFmpeg: Used for video and subtitle processing\n• vobsub2srt: Converts VobSub subtitles to SRT format\n• MKVMerge: Used for MKV file manipulation\n• MKVExtract: Extracts content from MKV files\n• Deno: JavaScript runtime for scripts\n• Tesseract: Optical character recognition for subtitles\n• Go: Required for building the application\n• PGStoSRT: Script for converting PGS subtitles to SRT format")
+	dependencyList := widget.NewLabel(T("settings.dep_list"))
 	dependencyList.Wrapping = fyne.TextWrapWord
 
 	// Instructions for missing dependencies
-	dependencyInstructions := widget.NewLabel("If any dependencies are missing, use the buttons below to install them.")
+	dependencyInstructions := widget.NewLabel(T("settings.dep_instructions"))
 	dependencyInstructions.Wrapping = fyne.TextWrapWord
 	dependencyInstructions.TextStyle = fyne.TextStyle{Italic: true}
 
+	// UI Language selector
+	langTitle := canvas.NewText(T("settings.ui_language"), color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	langTitle.TextSize = 16
+	langTitle.TextStyle.Bold = true
+
+	langNames := SupportedLanguageNames()
+	langCodes := SupportedLanguageCodes()
+	langSelector := widget.NewSelect(langNames, func(selected string) {
+		// Extract code from "EN - English" format
+		for i, name := range langNames {
+			if name == selected {
+				code := langCodes[i]
+				SetLanguage(code)
+				a.Preferences().SetString("ui_language", code)
+				dialog.ShowInformation(T("settings.language_restart"), T("settings.language_restart_msg"), w)
+				break
+			}
+		}
+	})
+	// Set current language in dropdown
+	for i, code := range langCodes {
+		if code == GetLanguage() {
+			langSelector.SetSelected(langNames[i])
+			break
+		}
+	}
+
+	langSection := container.NewVBox(
+		container.NewPadded(langTitle),
+		container.NewPadded(container.New(layout.NewFormLayout(),
+			widget.NewLabelWithStyle(T("settings.ui_language"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			langSelector,
+		)),
+	)
+
 	// Create a section for PGS to SRT script configuration
-	pgsToSrtTitle := canvas.NewText("PGS to SRT Script Configuration", color.NRGBA{R: 0, G: 0, B: 180, A: 255})
+	pgsToSrtTitle := canvas.NewText(T("settings.pgs_config"), color.NRGBA{R: 0, G: 0, B: 180, A: 255})
 	pgsToSrtTitle.TextSize = 16
 	pgsToSrtTitle.TextStyle.Bold = true
 
@@ -133,12 +168,12 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 
 	// Create a form layout for the PGS to SRT script configuration
 	pgsToSrtForm := container.New(layout.NewFormLayout(),
-		widget.NewLabel("Script Path:"),
+		widget.NewLabel(T("settings.script_path")),
 		container.NewBorder(nil, nil, nil, pgsToSrtBrowseBtn, pgsToSrtPathLabel),
 	)
 
 	// Add a description for the PGS to SRT script
-	pgsToSrtDescription := widget.NewLabel("The PGS to SRT script is used to convert PGS subtitles to SRT format. It requires Deno runtime.")
+	pgsToSrtDescription := widget.NewLabel(T("settings.pgs_desc"))
 	pgsToSrtDescription.Wrapping = fyne.TextWrapWord
 
 	// Combine all dependency components
@@ -156,11 +191,11 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	)
 
 	// Custom themed button for resetting to default settings
-	resetSettingsBtn := widget.NewButtonWithIcon("Reset to Defaults", theme.ViewRefreshIcon(), func() {
+	resetSettingsBtn := widget.NewButtonWithIcon(T("settings.reset_defaults"), theme.ViewRefreshIcon(), func() {
 		// Reset theme to dark theme
 		a.Settings().SetTheme(theme.DarkTheme())
 		themeSelector.SetSelected("Dark Theme")
-		dialog.ShowInformation("Settings Reset", "Settings have been reset to defaults.", w)
+		dialog.ShowInformation(T("settings.settings_reset"), T("settings.settings_reset_msg"), w)
 	})
 
 	// Style the reset button
@@ -178,7 +213,7 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	)
 
 	// Create info label with custom color styling
-	themeInfoLabel := widget.NewRichTextWithText("Select a theme and click Apply to change the application appearance.")
+	themeInfoLabel := widget.NewRichTextWithText(T("settings.theme_info"))
 	themeInfoLabel.Segments[0].(*widget.TextSegment).Style = widget.RichTextStyle{
 		TextStyle: fyne.TextStyle{Italic: true},
 		ColorName: theme.ColorNameForeground,
@@ -211,6 +246,7 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	// Create cards for each section
 	dependencyCard := widget.NewCard("", "", dependencySection)
 	themeCard := widget.NewCard("", "", themeSection)
+	langCard := widget.NewCard("", "", langSection)
 	helpCard := widget.NewCard("", "", helpSection)
 
 	// Assemble settings tab content
@@ -218,6 +254,7 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 		container.NewPadded(settingsTitle),
 		dependencyCard,
 		themeCard,
+		langCard,
 		helpCard,
 	)
 

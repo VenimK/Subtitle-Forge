@@ -29,10 +29,10 @@ type InsertTabWidgets struct {
 // the container along with widgets needed by the drag-drop handlers.
 func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets) {
 	// Create file selection widgets for subtitle insertion
-	insertMkvFileLabel := widget.NewLabel("No video file selected")
-	insertSubtitleFileLabel := widget.NewLabel("No subtitle file selected")
+	insertMkvFileLabel := widget.NewLabel(T("insert.no_video"))
+	insertSubtitleFileLabel := widget.NewLabel(T("insert.no_subtitle"))
 
-	selectInsertMkvBtn := widget.NewButton("Select Video File", func() {
+	selectInsertMkvBtn := widget.NewButton(T("insert.select_video"), func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, w)
@@ -44,7 +44,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 
 			filePath := reader.URI().Path()
 			if !IsVideoFile(filePath) {
-				dialog.ShowInformation("Invalid File", "Please select an MKV or MP4 file", w)
+				dialog.ShowInformation(T("common.error"), T("insert.invalid_video"), w)
 				return
 			}
 
@@ -54,7 +54,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 		fd.Show()
 	})
 
-	selectInsertSubtitleBtn := widget.NewButton("Select Subtitle File", func() {
+	selectInsertSubtitleBtn := widget.NewButton(T("insert.select_subtitle"), func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, w)
@@ -67,7 +67,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 			filePath := reader.URI().Path()
 			// Check if it's a supported subtitle format
 			if !IsSubtitleFile(filePath) {
-				dialog.ShowInformation("Invalid File", "Please select a subtitle file (.srt, .ass, .ssa, .vtt, .sub, .sup, .txt)", w)
+				dialog.ShowInformation(T("common.error"), T("insert.invalid_subtitle"), w)
 				return
 			}
 
@@ -178,19 +178,25 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 	insertResultScroll := container.NewScroll(insertResultLabel)
 	insertResultScroll.SetMinSize(fyne.NewSize(800, 150))
 
+	// Progress bar for insertion operations (infinite/indeterminate)
+	insertProgress := widget.NewProgressBarInfinite()
+	insertProgress.Hide()
+	insertProgressLabel := widget.NewLabel("")
+	insertProgressLabel.Hide()
+
 	// Create default track options
-	defaultTrack := widget.NewCheck("Set as default subtitle track", nil)
+	defaultTrack := widget.NewCheck(T("insert.default_track"), nil)
 	defaultTrack.SetChecked(true)
 
 	// Create forced track option
-	forcedTrack := widget.NewCheck("Mark as forced subtitle track", nil)
+	forcedTrack := widget.NewCheck(T("insert.forced_track"), nil)
 
 	// Create option to remove other subtitle tracks
-	removeOtherTracks := widget.NewCheck("Remove all other subtitle tracks", nil)
+	removeOtherTracks := widget.NewCheck(T("insert.remove_others"), nil)
 
 	// Create output file name options
 	outputNameEntry := widget.NewEntry()
-	outputNameEntry.SetPlaceHolder("Leave empty for auto naming")
+	outputNameEntry.SetPlaceHolder(T("insert.auto_naming"))
 
 	// Show language dropdown change handler
 	langDropdown.OnChanged = func(selected string) {
@@ -222,14 +228,15 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 		}
 	}
 
-	// Create insert button
-	insertSubtitleBtn := widget.NewButton("Insert Subtitle", func() {
+	// Create insert button (declared first so closures can reference it for Disable/Enable)
+	insertSubtitleBtn := widget.NewButton(T("insert.insert_btn"), nil)
+	insertSubtitleBtn.OnTapped = func() {
 		// Check if files are selected
 		mkvPath := insertMkvFileLabel.Text
 		subtitlePath := insertSubtitleFileLabel.Text
 
-		if mkvPath == "No video file selected" || subtitlePath == "No subtitle file selected" {
-			dialog.ShowInformation("Missing Files", "Please select both a video file and subtitle file", w)
+		if mkvPath == T("insert.no_video") || subtitlePath == T("insert.no_subtitle") {
+			dialog.ShowInformation(T("insert.missing_files"), T("insert.select_both"), w)
 			return
 		}
 
@@ -263,26 +270,34 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 
 		outputPath := filepath.Join(dir, outputName)
 
-		insertResultLabel.SetText("Adding subtitle to video file...\n")
+		insertResultLabel.SetText(T("insert.adding"))
+		insertProgress.Show()
+		insertProgressLabel.SetText(T("insert.inserting"))
+		insertProgressLabel.Show()
+		insertSubtitleBtn.Disable()
 
 		if IsMP4File(mkvPath) {
 			// Use ffmpeg for MP4/M4V files
 			if removeOtherTracks.Checked {
-				insertResultLabel.SetText(insertResultLabel.Text + "\nRemoving all existing subtitle tracks...")
+				insertResultLabel.SetText(insertResultLabel.Text + "\n" + T("insert.removing_tracks"))
 			}
 
 			go func() {
 				output, err := InsertMP4Subtitle(mkvPath, subtitlePath, outputPath, lang, trackName, removeOtherTracks.Checked)
 
 				fyne.Do(func() {
+					insertProgress.Hide()
+					insertProgressLabel.Hide()
+					insertSubtitleBtn.Enable()
+
 					if err != nil {
 						AppLog("ERROR", "Insert subtitle into MP4 failed: %v", err)
-						insertResultLabel.SetText(insertResultLabel.Text + "\nError: " + err.Error() + "\n" + string(output))
+						insertResultLabel.SetText(insertResultLabel.Text + "\n" + T("common.error") + ": " + err.Error() + "\n" + string(output))
 						return
 					}
 
 					AppLog("SUCCESS", "Subtitle inserted into MP4 successfully: %s", filepath.Base(outputPath))
-					insertResultLabel.SetText(insertResultLabel.Text + "\nSubtitle added successfully!\nOutput file: " + outputPath)
+					insertResultLabel.SetText(insertResultLabel.Text + "\n✅ " + T("insert.success") + "\n" + T("insert.output_file") + outputPath)
 				})
 			}()
 		} else {
@@ -293,7 +308,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 
 			if removeOtherTracks.Checked {
 				mkvmergeArgs = append(mkvmergeArgs, "--no-subtitles", mkvPath)
-				insertResultLabel.SetText(insertResultLabel.Text + "\nRemoving all existing subtitle tracks...")
+				insertResultLabel.SetText(insertResultLabel.Text + "\n" + T("insert.removing_tracks"))
 			} else {
 				mkvmergeArgs = append(mkvmergeArgs, mkvPath)
 			}
@@ -322,25 +337,29 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 				AppLogCmd(cmd, output, err)
 
 				fyne.Do(func() {
+					insertProgress.Hide()
+					insertProgressLabel.Hide()
+					insertSubtitleBtn.Enable()
+
 					if err != nil {
 						AppLog("ERROR", "Insert subtitle failed: %v", err)
-						insertResultLabel.SetText(insertResultLabel.Text + "\nError: " + err.Error() + "\n" + string(output))
+						insertResultLabel.SetText(insertResultLabel.Text + "\n" + T("common.error") + ": " + err.Error() + "\n" + string(output))
 						return
 					}
 
 					AppLog("SUCCESS", "Subtitle inserted successfully: %s", filepath.Base(outputPath))
-					insertResultLabel.SetText(insertResultLabel.Text + "\nSubtitle added successfully!\nOutput file: " + outputPath + "\n" + string(output))
+					insertResultLabel.SetText(insertResultLabel.Text + "\n✅ " + T("insert.success") + "\n" + T("insert.output_file") + outputPath + "\n" + string(output))
 				})
 			}()
 		}
-	})
+	}
 
 	// Create layout for subtitle insertion tab
-	insertTitleLabel := widget.NewLabelWithStyle("Insert Subtitles into Video", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	insertTitleLabel := widget.NewLabelWithStyle(T("insert.title"), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 
 	// Create visual drop areas (these are just for visual indication, actual drop handling is at window level)
 	mkvDropArea := canvas.NewRectangle(color.NRGBA{R: 200, G: 200, B: 200, A: 100})
-	mkvDropLabel := widget.NewLabelWithStyle("Drop Video File Here", fyne.TextAlignCenter, fyne.TextStyle{})
+	mkvDropLabel := widget.NewLabelWithStyle(T("insert.drop_video"), fyne.TextAlignCenter, fyne.TextStyle{})
 	mkvDropContainer := container.NewStack(
 		mkvDropArea,
 		mkvDropLabel,
@@ -348,7 +367,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 	mkvDropContainer.Resize(fyne.NewSize(300, 60))
 
 	subtitleDropArea := canvas.NewRectangle(color.NRGBA{R: 200, G: 200, B: 200, A: 100})
-	subtitleDropLabel := widget.NewLabelWithStyle("Drop Subtitle File Here", fyne.TextAlignCenter, fyne.TextStyle{})
+	subtitleDropLabel := widget.NewLabelWithStyle(T("insert.drop_subtitle"), fyne.TextAlignCenter, fyne.TextStyle{})
 	subtitleDropContainer := container.NewStack(
 		subtitleDropArea,
 		subtitleDropLabel,
@@ -356,7 +375,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 	subtitleDropContainer.Resize(fyne.NewSize(300, 60))
 
 	// Group file selection
-	fileSelectionGroup := widget.NewCard("File Selection", "", container.NewVBox(
+	fileSelectionGroup := widget.NewCard(T("insert.file_selection"), "", container.NewVBox(
 		container.NewHBox(selectInsertMkvBtn, insertMkvFileLabel),
 		mkvDropContainer,
 		container.NewHBox(selectInsertSubtitleBtn, insertSubtitleFileLabel),
@@ -372,7 +391,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 		// Light background for contrast
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
 		// Bold text with dark color for maximum readability
-		canvas.NewText("Language Settings", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+		canvas.NewText(T("insert.language_settings"), color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	languageTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
 	languageTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
@@ -381,7 +400,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 		// Light background for contrast
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
 		// Bold text with dark color for maximum readability
-		canvas.NewText("Track Options", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+		canvas.NewText(T("insert.track_options"), color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	trackOptionsTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
 	trackOptionsTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
@@ -396,19 +415,19 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 		// Light background for contrast
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
 		// Bold text with dark color for maximum readability
-		canvas.NewText("Language:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+		canvas.NewText(T("insert.language"), color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	languageLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
 
 	langCodeLabelContainer := container.NewMax(
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
-		canvas.NewText("Language Code:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+		canvas.NewText(T("insert.language_code"), color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	langCodeLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
 
 	trackNameLabelContainer := container.NewMax(
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
-		canvas.NewText("Track Name:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+		canvas.NewText(T("insert.track_name"), color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	trackNameLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
 
@@ -451,7 +470,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 	)
 
 	// Group subtitle options with improved organization and readability
-	subtitleOptionsGroup := widget.NewCard("Subtitle Options", "", container.NewVBox(
+	subtitleOptionsGroup := widget.NewCard(T("insert.subtitle_options"), "", container.NewVBox(
 		container.NewPadded(languageSection),       // Using our new language section with title and separator
 		container.NewPadded(trackOptionsContainer), // Track options already include title and separator
 	))
@@ -465,7 +484,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 		// Light background for contrast
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
 		// Bold text with dark color for maximum readability
-		canvas.NewText("Output Configuration", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+		canvas.NewText(T("insert.output_config"), color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	outputTitleContainer.Objects[1].(*canvas.Text).TextSize = 16
 	outputTitleContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
@@ -478,7 +497,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 		// Light background for contrast
 		canvas.NewRectangle(color.NRGBA{R: 240, G: 240, B: 240, A: 255}),
 		// Bold text with dark color for maximum readability
-		canvas.NewText("Output Filename:", color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
+		canvas.NewText(T("insert.output_filename"), color.NRGBA{R: 0, G: 0, B: 0, A: 255}),
 	)
 	outputFilenameLabelContainer.Objects[1].(*canvas.Text).TextStyle.Bold = true
 
@@ -509,8 +528,8 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 
 	// Add helpful text
 	helpText := widget.NewRichText(
-		&widget.TextSegment{Text: "Note: ", Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
-		&widget.TextSegment{Text: "Leave filename empty to use the original filename with \"-subtitled\" suffix."},
+		&widget.TextSegment{Text: T("insert.output_note"), Style: widget.RichTextStyle{TextStyle: fyne.TextStyle{Bold: true}}},
+		&widget.TextSegment{Text: T("insert.output_note_text")},
 	)
 	helpText.Wrapping = fyne.TextWrapWord
 
@@ -518,14 +537,18 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 	insertSubtitleBtn.Importance = widget.HighImportance
 
 	// Group output options with improved organization and readability
-	outputOptionsGroup := widget.NewCard("Output Options", "", container.NewVBox(
+	outputOptionsGroup := widget.NewCard(T("insert.output_options"), "", container.NewVBox(
 		container.NewPadded(outputSection), // Using our new output section with title and separator
 		container.NewPadded(helpText),
 		container.NewHBox(layout.NewSpacer(), insertSubtitleBtn, layout.NewSpacer()),
 	))
 
-	// Results group
-	resultsGroup := widget.NewCard("Results", "", insertResultScroll)
+	// Results group with progress bar
+	resultsGroup := widget.NewCard(T("common.results"), "", container.NewVBox(
+		insertProgressLabel,
+		insertProgress,
+		insertResultScroll,
+	))
 
 	// Create layout for subtitle insertion tab
 	insertTabContent := container.NewVBox(
