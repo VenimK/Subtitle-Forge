@@ -5,7 +5,7 @@
 > [![GitHub All Releases](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/total.svg)](https://github.com/VenimK/Subtitle-Forge/releases)
 > [![GitHub Downloads Latest](https://img.shields.io/github/downloads/VenimK/Subtitle-Forge/latest/total?style=flat&label=downloads%40latest&color=orange)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/VenimK)
-> [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/Sm3KEmUk)
+> [![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/qpdZc7GcJP)
 
 A comprehensive tool for extracting, converting, and translating subtitles from MKV files, available in both command-line (CLI) and graphical user interface (GUI) versions.
 
