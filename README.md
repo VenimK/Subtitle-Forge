@@ -1,4 +1,4 @@
-# Subtitle Forge V2.4
+# Subtitle Forge V2.4.1
 > Powerful subtitle extraction, conversion, **AI translation**, **Whisper transcription**, and **LibreTranslate** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, transcribe, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -143,11 +143,11 @@ This script (safe by default):
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
 
-## What's New in V2.4 ✨
+## What's New in V2.4.1 ✨
 
 ### 🌍 Full UI Localization (i18n)
 
-**V2.4** introduces complete multi-language support across the entire application:
+**V2.4.1** introduces complete multi-language support across the entire application:
 
 - **🇬🇧 English**, **🇳🇱 Dutch**, **🇫🇷 French**, **🇩🇪 German**, **🇪🇸 Spanish** — all UI strings localized
 - **🔤 Translation System**: New `i18n.go` engine with `T()` lookup, per-language translation files, and automatic system locale detection

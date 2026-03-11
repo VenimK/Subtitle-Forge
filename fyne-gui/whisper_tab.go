@@ -258,8 +258,13 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	defaultWhisperBin := a.Preferences().StringWithFallback("whisper_cli_path", "")
 	if defaultWhisperBin == "" {
-		homeDir, _ := os.UserHomeDir()
-		defaultWhisperBin = filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "build", "bin", "whisper-cli")
+		detectedWhisperBin := whisperDefaultCLIPath()
+		if isExecutableFile(detectedWhisperBin) {
+			defaultWhisperBin = detectedWhisperBin
+			a.Preferences().SetString("whisper_cli_path", detectedWhisperBin)
+		} else {
+			defaultWhisperBin = detectedWhisperBin
+		}
 	}
 
 	whisperBinEntry := widget.NewEntry()
@@ -271,8 +276,13 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	defaultModel := a.Preferences().StringWithFallback("whisper_model_path", "")
 	if defaultModel == "" {
-		homeDir, _ := os.UserHomeDir()
-		defaultModel = filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "models", "ggml-base.en.bin")
+		detectedModel := whisperDefaultModelPath()
+		if isReadableFile(detectedModel) {
+			defaultModel = detectedModel
+			a.Preferences().SetString("whisper_model_path", detectedModel)
+		} else {
+			defaultModel = detectedModel
+		}
 	}
 
 	modelEntry := widget.NewEntry()

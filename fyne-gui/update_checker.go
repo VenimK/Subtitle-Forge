@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 )
 
 // Current application version - injected at build time
-var AppVersion = "V2.4" // Default value for development
+var AppVersion = "V2.4.1" // Default value for development
 
 // ReleaseInfo stores information about a GitHub release
 type ReleaseInfo struct {
@@ -32,6 +33,82 @@ type ReleaseInfo struct {
 		Name               string `json:"name"`
 		BrowserDownloadURL string `json:"browser_download_url"`
 	} `json:"assets"`
+}
+
+func normalizeVersionString(version string) string {
+	version = strings.TrimSpace(version)
+	version = strings.TrimLeft(version, "vV")
+	return version
+}
+
+func parseVersionParts(version string) []int {
+	normalized := normalizeVersionString(version)
+	if normalized == "" {
+		return []int{0}
+	}
+
+	rawParts := strings.Split(normalized, ".")
+	parts := make([]int, 0, len(rawParts))
+	for _, part := range rawParts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			parts = append(parts, 0)
+			continue
+		}
+
+		digits := strings.Builder{}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				break
+			}
+			digits.WriteRune(r)
+		}
+
+		if digits.Len() == 0 {
+			parts = append(parts, 0)
+			continue
+		}
+
+		value, err := strconv.Atoi(digits.String())
+		if err != nil {
+			parts = append(parts, 0)
+			continue
+		}
+		parts = append(parts, value)
+	}
+
+	return parts
+}
+
+func isNewerVersion(latestVersion, currentVersion string) bool {
+	latestParts := parseVersionParts(latestVersion)
+	currentParts := parseVersionParts(currentVersion)
+
+	maxLen := len(latestParts)
+	if len(currentParts) > maxLen {
+		maxLen = len(currentParts)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		latestPart := 0
+		if i < len(latestParts) {
+			latestPart = latestParts[i]
+		}
+
+		currentPart := 0
+		if i < len(currentParts) {
+			currentPart = currentParts[i]
+		}
+
+		if latestPart > currentPart {
+			return true
+		}
+		if latestPart < currentPart {
+			return false
+		}
+	}
+
+	return false
 }
 
 // openURL opens a URL in the default browser
@@ -85,9 +162,9 @@ func CheckForUpdates(w fyne.Window) {
 			return
 		}
 
-		// Compare versions (simple string comparison works for vX.Y.Z format)
+		// Compare normalized semantic-ish version parts instead of raw strings
 		latestVersion := releaseInfo.TagName
-		if latestVersion > AppVersion {
+		if isNewerVersion(latestVersion, AppVersion) {
 			// Show notification on the main UI thread
 			fyne.Do(func() {
 				dialog.ShowConfirm(

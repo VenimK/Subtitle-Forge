@@ -148,9 +148,6 @@ jobs:
           cp install_vobsub2srt.sh build/linux/ 2>/dev/null || echo "install_vobsub2srt.sh not found"
           cp install_pgsrip.sh build/linux/ 2>/dev/null || echo "install_pgsrip.sh not found"
           cp install_tessdata.sh build/linux/ 2>/dev/null || echo "install_tessdata.sh not found"
-          # Copy new Whisper and LibreTranslate scripts from root directory
-          cp ../Whisper-mac-coreml.sh build/linux/ 2>/dev/null || echo "Whisper-mac-coreml.sh not found"
-          cp ../Libre-mac.sh build/linux/ 2>/dev/null || echo "Libre-mac.sh not found"
           cp ../batch_translate.sh build/linux/ 2>/dev/null || echo "batch_translate.sh not found"
           
           # Copy documentation

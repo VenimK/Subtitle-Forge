@@ -269,6 +269,74 @@ func installScriptAvailable(scriptName string) bool {
 	return findHelperScript([]string{scriptName, "../" + scriptName}) != ""
 }
 
+func whisperDefaultCLIPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "build", "bin", "whisper-cli")
+}
+
+func whisperDefaultModelPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "models", "ggml-base.en.bin")
+}
+
+func whisperEffectivePaths() (string, string, bool, bool) {
+	whisperCLIPath := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_cli_path", ""))
+	modelPath := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_model_path", ""))
+	cliFromPreference := whisperCLIPath != ""
+	modelFromPreference := modelPath != ""
+
+	if whisperCLIPath == "" {
+		whisperCLIPath = whisperDefaultCLIPath()
+	}
+	if modelPath == "" {
+		modelPath = whisperDefaultModelPath()
+	}
+
+	return whisperCLIPath, modelPath, cliFromPreference, modelFromPreference
+}
+
+func librePrefixDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".libretranslate")
+}
+
+func libreDefaultBinaryPath() string {
+	prefix := librePrefixDir()
+	if prefix == "" {
+		return ""
+	}
+	return filepath.Join(prefix, "venv", "bin", "libretranslate")
+}
+
+func libreDefaultAPIKeyPath() string {
+	prefix := librePrefixDir()
+	if prefix == "" {
+		return ""
+	}
+	return filepath.Join(prefix, "api_key.txt")
+}
+
+func libreDefaultAPIKeysDBPath() string {
+	prefix := librePrefixDir()
+	if prefix == "" {
+		return ""
+	}
+	return filepath.Join(prefix, "db", "api_keys.db")
+}
+
+func isLibreLocalInstallPresent() bool {
+	return isExecutableFile(libreDefaultBinaryPath())
+}
+
 func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 	homebrewReady := false
 	if _, err := findHomebrewPath(); err == nil {
@@ -284,7 +352,17 @@ func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 	whisperRemoteConfigured := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_remote_url", "http://127.0.0.1:8000")) != ""
 	libreReady, libreOptional := isLibreTranslateConfigured()
 	libreHelper := libreHelperScriptPath() != ""
+	libreLocalInstall := isLibreLocalInstallPresent()
 	tessdataReady := isTessdataConfigured()
+	whisperCLIPath, whisperModelPath, whisperCLIFromPreference, whisperModelFromPreference := whisperEffectivePaths()
+	whisperCLIDetailLabel := "detected installer path"
+	if whisperCLIFromPreference {
+		whisperCLIDetailLabel = "saved preference path"
+	}
+	whisperModelDetailLabel := "detected installer path"
+	if whisperModelFromPreference {
+		whisperModelDetailLabel = "saved preference path"
+	}
 
 	whisperStatus := T("settings.status_needs_setup")
 	if whisperReady {
@@ -305,9 +383,9 @@ func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 		whisperModeDetail = fmt.Sprintf("Remote API URL configured: %s", statusLabelFor(whisperRemoteConfigured))
 	}
 
-	libreEndpointDetail := fmt.Sprintf("Configured server or helper: %s", libreStatus)
+	libreEndpointDetail := fmt.Sprintf("Configured server URL: %s", libreStatus)
 	if libreOptional && !libreReady {
-		libreEndpointDetail = fmt.Sprintf("Configured server or helper: %s", T("settings.status_needs_setup"))
+		libreEndpointDetail = fmt.Sprintf("Configured server URL: %s", T("settings.status_needs_setup"))
 	}
 
 	return []featureCheck{
@@ -349,6 +427,8 @@ func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 			Description: T("settings.summary_whisper_desc"),
 			Details: []string{
 				whisperModeDetail,
+				fmt.Sprintf("whisper-cli (%s): %s", whisperCLIDetailLabel, statusLabelFor(isExecutableFile(whisperCLIPath))),
+				fmt.Sprintf("GGML model (%s): %s", whisperModelDetailLabel, statusLabelFor(isReadableFile(whisperModelPath))),
 				fmt.Sprintf("macOS install helper: %s", statusLabelFor(whisperHelper)),
 			},
 		},
@@ -358,6 +438,9 @@ func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 			Description: T("settings.summary_libre_desc"),
 			Details: []string{
 				libreEndpointDetail,
+				fmt.Sprintf("Local LibreTranslate install: %s", statusLabelFor(libreLocalInstall)),
+				fmt.Sprintf("Local API key file: %s", statusLabelFor(isReadableFile(libreDefaultAPIKeyPath()))),
+				fmt.Sprintf("Local API key database: %s", statusLabelFor(isReadableFile(libreDefaultAPIKeysDBPath()))),
 				fmt.Sprintf("macOS local-server helper: %s", statusLabelFor(libreHelper)),
 			},
 		},
@@ -440,17 +523,7 @@ func isWhisperConfigured() bool {
 		return remoteURL != ""
 	}
 
-	whisperCLIPath := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_cli_path", ""))
-	modelPath := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_model_path", ""))
-
-	if whisperCLIPath == "" {
-		homeDir, _ := os.UserHomeDir()
-		whisperCLIPath = filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "build", "bin", "whisper-cli")
-	}
-	if modelPath == "" {
-		homeDir, _ := os.UserHomeDir()
-		modelPath = filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "models", "ggml-base.en.bin")
-	}
+	whisperCLIPath, modelPath, _, _ := whisperEffectivePaths()
 
 	return isExecutableFile(whisperCLIPath) && isReadableFile(modelPath)
 }
@@ -461,7 +534,7 @@ func isLibreTranslateConfigured() (bool, bool) {
 		return true, false
 	}
 
-	if runtime.GOOS == "darwin" && libreHelperScriptPath() != "" {
+	if runtime.GOOS == "darwin" && isLibreLocalInstallPresent() {
 		return true, true
 	}
 
