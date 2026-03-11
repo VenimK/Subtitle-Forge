@@ -301,6 +301,58 @@ func setLogMessage(logType, title, message string) string {
 	return fmt.Sprintf("%s %s\n%s", icon, title, message)
 }
 
+func openFolderPath(w fyne.Window, folderPath string) {
+	if strings.TrimSpace(folderPath) == "" {
+		dialog.ShowInformation(T("common.not_available"), T("logs.not_available"), w)
+		return
+	}
+	cmd := exec.Command("open", folderPath)
+	if err := cmd.Run(); err != nil {
+		dialog.ShowError(fmt.Errorf(T("logs.open_error"), err), w)
+	}
+}
+
+func copyTextToClipboard(w fyne.Window, text string) {
+	if strings.TrimSpace(text) == "" {
+		dialog.ShowInformation(T("common.not_available"), T("logs.not_available"), w)
+		return
+	}
+	w.Clipboard().SetContent(text)
+	dialog.ShowInformation(T("common.copied"), T("logs.path_copied"), w)
+}
+
+func showFirstRunOnboarding(a fyne.App, w fyne.Window, tabs *container.AppTabs) {
+	if a.Preferences().BoolWithFallback("onboarding_complete", false) {
+		return
+	}
+
+	intro := widget.NewLabel(T("settings.first_run_intro"))
+	intro.Wrapping = fyne.TextWrapWord
+
+	steps := widget.NewLabel(T("settings.first_run_steps"))
+	steps.Wrapping = fyne.TextWrapWord
+
+	content := container.NewVBox(
+		intro,
+		widget.NewSeparator(),
+		steps,
+	)
+
+	dialog.NewCustomConfirm(
+		T("settings.first_run_title"),
+		T("settings.open_settings"),
+		T("settings.get_started"),
+		content,
+		func(openSettings bool) {
+			a.Preferences().SetBool("onboarding_complete", true)
+			if openSettings && tabs != nil && len(tabs.Items) > 0 {
+				tabs.Select(tabs.Items[len(tabs.Items)-1])
+			}
+		},
+		w,
+	).Show()
+}
+
 func main() {
 	// Initialize logging system
 	initAppLogger()
@@ -702,6 +754,13 @@ func main() {
 
 	// Trigger the OnChanged handler for the initial tab
 	tabs.OnChanged(tabs.Selected())
+
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		fyne.Do(func() {
+			showFirstRunOnboarding(a, w, tabs)
+		})
+	}()
 
 	w.ShowAndRun()
 }

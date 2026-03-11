@@ -27,6 +27,36 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	// Create a placeholder for the dynamic dependency status updates
 	settingsLabel := widget.NewLabel(T("settings.checking"))
 	settingsLabel.Wrapping = fyne.TextWrapWord
+	settingsDependencyStatusLabel = settingsLabel
+	settingsDependencyButtonsContainer = dependencyButtons
+
+	setupSummaryTitle := widget.NewLabelWithStyle(T("settings.setup_summary"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	setupSummaryIntro := widget.NewLabel(T("settings.setup_summary_intro"))
+	setupSummaryIntro.Wrapping = fyne.TextWrapWord
+	setupSummaryLabel := widget.NewLabel(T("settings.setup_summary_loading"))
+	setupSummaryLabel.Wrapping = fyne.TextWrapWord
+	settingsSetupSummaryLabel = setupSummaryLabel
+
+	recheckSetupBtn := widget.NewButton(T("settings.recheck_setup"), func() {
+		updateDependencyStatus(w)
+	})
+	recheckSetupBtn.Importance = widget.MediumImportance
+
+	openSetupGuideBtn := widget.NewButton(T("settings.open_setup_guide"), func() {
+		openURL("https://github.com/VenimK/Subtitle-Forge#quick-start")
+	})
+	openSetupGuideBtn.Importance = widget.MediumImportance
+
+	quickActionsTitle := widget.NewLabelWithStyle(T("settings.setup_quick_actions"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+
+	setupSummarySection := container.NewVBox(
+		setupSummaryTitle,
+		container.NewPadded(setupSummaryIntro),
+		container.NewPadded(setupSummaryLabel),
+		widget.NewSeparator(),
+		quickActionsTitle,
+		container.NewHBox(recheckSetupBtn, openSetupGuideBtn),
+	)
 
 	// Create a card for theme settings
 	themeTitle := canvas.NewText(T("settings.theme_settings"), color.NRGBA{R: 0, G: 0, B: 180, A: 255})
@@ -146,7 +176,7 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	pgsToSrtPathLabel.Wrapping = fyne.TextWrapWord
 
 	// Create a button to browse for the script file
-	pgsToSrtBrowseBtn := widget.NewButtonWithIcon("Browse", theme.FolderOpenIcon(), func() {
+	pgsToSrtBrowseBtn := widget.NewButtonWithIcon(T("common.browse"), theme.FolderOpenIcon(), func() {
 		// Create a file open dialog
 		dlg := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil || reader == nil {
@@ -245,6 +275,7 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	)
 
 	// Create cards for each section
+	setupSummaryCard := widget.NewCard("", "", setupSummarySection)
 	dependencyCard := widget.NewCard("", "", dependencySection)
 	themeCard := widget.NewCard("", "", themeSection)
 	langCard := widget.NewCard("", "", langSection)
@@ -253,6 +284,7 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	// Assemble settings tab content
 	settingsTabContent := container.NewVBox(
 		container.NewPadded(settingsTitle),
+		setupSummaryCard,
 		dependencyCard,
 		themeCard,
 		langCard,

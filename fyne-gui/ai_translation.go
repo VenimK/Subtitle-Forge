@@ -420,6 +420,30 @@ var cancelTranslation bool            // Flag to cancel ongoing translation
 var resultsWindow fyne.Window         // Separate results window
 var resultsArea *widget.Entry         // Results text area
 var resultsScroll *container.Scroll   // Scroll container for results
+var aiResultsActions *fyne.Container  // Output actions for results window
+
+func updateAIResultsActions(w fyne.Window, outputDir string) {
+	if aiResultsActions == nil {
+		return
+	}
+	if strings.TrimSpace(outputDir) == "" {
+		aiResultsActions.Hide()
+		aiResultsActions.Objects = nil
+		aiResultsActions.Refresh()
+		return
+	}
+
+	aiResultsActions.Objects = []fyne.CanvasObject{
+		widget.NewButton(T("common.open_output_folder"), func() {
+			openFolderPath(w, outputDir)
+		}),
+		widget.NewButton(T("common.copy_output_path"), func() {
+			copyTextToClipboard(w, outputDir)
+		}),
+	}
+	aiResultsActions.Show()
+	aiResultsActions.Refresh()
+}
 
 // createResultsWindow creates a separate window for translation results
 func createResultsWindow(a fyne.App) {
@@ -447,10 +471,16 @@ func createResultsWindow(a fyne.App) {
 		dialog.ShowInformation(T("common.copied"), T("ai.results_copied"), resultsWindow)
 	})
 
+	aiResultsActions = container.NewHBox()
+	aiResultsActions.Hide()
+
 	// Layout
 	content := container.NewBorder(
 		nil,
-		container.NewHBox(clearResultsBtn, copyBtn),
+		container.NewVBox(
+			container.NewHBox(clearResultsBtn, copyBtn),
+			aiResultsActions,
+		),
 		nil,
 		nil,
 		resultsScroll,
@@ -1046,6 +1076,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 	translateBtn, stopBtn *widget.Button, w fyne.Window) {
 
 	progressLabel.SetText("Starting AI translation...")
+	updateAIResultsActions(w, "")
 	if resultsArea != nil {
 		resultsArea.SetText("🤖 Initializing AI translation...\n")
 		// Always scroll to bottom at start
@@ -1167,9 +1198,14 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 		// Final update
 		fyne.Do(func() {
 			progressBar.SetValue(1.0)
-			progressLabel.SetText(fmt.Sprintf("Translation completed: %d/%d files successful", successCount, totalFiles))
+			progressLabel.SetText(fmt.Sprintf(T("ai.translation_completed_status"), successCount, totalFiles))
 			if resultsArea != nil {
-				resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n\n🎉 Batch translation completed!\n✅ Success: %d files\n❌ Failed: %d files", successCount, totalFiles-successCount))
+				finalOutputDir := outputDir
+				if strings.TrimSpace(finalOutputDir) == "" && len(inputFiles) > 0 {
+					finalOutputDir = filepath.Dir(inputFiles[0])
+				}
+				resultsArea.SetText(resultsArea.Text + fmt.Sprintf(T("ai.batch_complete_summary"), successCount, totalFiles-successCount, finalOutputDir))
+				updateAIResultsActions(w, finalOutputDir)
 				// Only auto-scroll if user is near bottom
 				if resultsScroll != nil && isNearBottom() {
 					resultsScroll.ScrollToBottom()

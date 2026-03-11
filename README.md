@@ -1,4 +1,4 @@
-# Subtitle Forge v2.3
+# Subtitle Forge V2.4
 > Powerful subtitle extraction, conversion, **AI translation**, **Whisper transcription**, and **LibreTranslate** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, transcribe, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -21,6 +21,44 @@ This project provides two applications:
    - **Whisper Transcription** - 🆕 Transcribe audio/video to subtitles using whisper.cpp with CoreML acceleration (macOS)
    - **LibreTranslate** - 🆕 Translate subtitles using local or remote LibreTranslate servers
    - **Settings** - Dependency management and seasonal dark themes
+
+## Quick Start
+
+If you just want to get productive quickly, start here:
+
+- **Basic subtitle extraction**
+  - Install and launch the app for your platform.
+  - Open the **Extract Subtitles** tab, choose a video file, then load tracks.
+  - For the most common workflows, make sure `ffmpeg`, `mkvmerge`, and `mkvextract` are available.
+
+- **OCR-based subtitle workflows**
+  - For image-based subtitles such as PGS/VobSub, install the OCR-related tools shown in **Settings**.
+  - This usually includes `tesseract`, `deno`, the PGS-to-SRT script, and bitmap subtitle helpers.
+
+- **AI translation**
+  - Run the dependency installer for your platform if you want the easiest setup.
+  - Make sure the Gemini SRT Translator (`gst`) tool is installed and available before using the **AI Translation** tab.
+
+- **Whisper transcription**
+  - Use the included Whisper setup script before using the **Whisper Transcription** tab on macOS.
+
+### Common setup vs optional setup
+
+- **Required for common extraction and conversion**
+  - `ffmpeg`
+  - `mkvmerge`
+  - `mkvextract`
+
+- **Optional / advanced setup**
+  - `tesseract`
+  - `deno`
+  - PGS-to-SRT script
+  - `pgsrip`
+  - `vobsub2srt`
+  - `gst`
+  - Whisper / LibreTranslate helper setup
+
+If you are unsure what is missing, open the app and go to **Settings** to see a setup summary and dependency status.
 
 ## Installation
 
@@ -105,11 +143,11 @@ This script (safe by default):
 - Installation scripts for missing dependencies: `install_vobsub2srt.sh`, `install_pgsrip.sh`, `install_tessdata.sh`
 - Comprehensive installation guide (`INSTALL.md`)
 
-## What's New in v2.3 ✨
+## What's New in V2.4 ✨
 
 ### 🌍 Full UI Localization (i18n)
 
-**v2.3** introduces complete multi-language support across the entire application:
+**V2.4** introduces complete multi-language support across the entire application:
 
 - **🇬🇧 English**, **🇳🇱 Dutch**, **🇫🇷 French**, **🇩🇪 German**, **🇪🇸 Spanish** — all UI strings localized
 - **🔤 Translation System**: New `i18n.go` engine with `T()` lookup, per-language translation files, and automatic system locale detection

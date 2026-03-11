@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -32,8 +31,6 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 	trackListScroll := container.NewScroll(trackList)
 	trackListScroll.SetMinSize(fyne.NewSize(850, 250))
 
-	dependencyResults := checkDependencies()
-
 	var mkvPath string
 	var outDir string
 	var trackItems []*TrackItem
@@ -47,119 +44,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 	resultScroll := container.NewScroll(result)
 	resultScroll.SetMinSize(fyne.NewSize(780, 200))
 
-	dependencyStatus := "System Dependency Check:\n"
-	allDependenciesInstalled := true
-	for tool, installed := range dependencyResults {
-		status := "✅ Installed"
-		if !installed {
-			status = "❌ Not found"
-			allDependenciesInstalled = false
-		}
-		dependencyStatus += fmt.Sprintf("- %s: %s\n", tool, status)
-	}
-	if !allDependenciesInstalled {
-		dependencyStatus += "\n⚠️ Some required tools are missing. Please install them before using all features.\n"
-	} else {
-		dependencyStatus += "\n✅ All required tools are installed.\n"
-	}
-	result.SetText(dependencyStatus)
-
 	dependencyButtons := container.NewVBox()
-	installAllContainer := container.NewHBox()
-	missingDependencies := []string{}
-	for tool, installed := range dependencyResults {
-		if !installed {
-			missingDependencies = append(missingDependencies, tool)
-		}
-	}
-
-	if len(missingDependencies) > 0 {
-		dependencyButtons.Add(widget.NewLabel("Install Missing Dependencies:"))
-		for _, tool := range missingDependencies {
-			toolName := tool
-			buttonLabel := fmt.Sprintf("Install %s", toolName)
-			installButton := widget.NewButton(buttonLabel, func() {
-				installDependency(w, toolName)
-			})
-			dependencyButtons.Add(installButton)
-		}
-
-		if len(missingDependencies) > 1 {
-			installAllButton := widget.NewButton("Install All Missing Dependencies", func() {
-				dialog.ShowConfirm("Install All Dependencies",
-					"This will attempt to install all missing dependencies.\n\nSome installations may require sudo privileges.\n\nDo you want to continue?",
-					func(confirmed bool) {
-						if confirmed {
-							progress := dialog.NewProgress("Installing Dependencies", "Installing missing dependencies...", w)
-							progress.Show()
-							go func() {
-								totalTools := len(missingDependencies)
-								successCount := 0
-								failureCount := 0
-								for i, tool := range missingDependencies {
-									progressValue := float64(i) / float64(totalTools)
-									progress.SetValue(progressValue)
-									var cmd *exec.Cmd
-									switch tool {
-									case "mkvmerge", "mkvextract":
-										cmd = exec.Command("brew", "install", "mkvtoolnix")
-									case "deno":
-										cmd = exec.Command("brew", "install", "deno")
-									case "tesseract":
-										cmd = exec.Command("brew", "install", "tesseract")
-									case "ffmpeg":
-										cmd = exec.Command("brew", "install", "ffmpeg")
-									case "vobsub2srt":
-										execPath, err := os.Executable()
-										if err != nil {
-											fmt.Println("[ERROR] Failed to get executable path:", err)
-											execPath = "."
-										}
-										execDir := filepath.Dir(execPath)
-										scriptPath := filepath.Join(execDir, "install_vobsub2srt.sh")
-										cmd = exec.Command("bash", scriptPath)
-									case "pgsrip":
-										execPath, err := os.Executable()
-										if err != nil {
-											fmt.Println("[ERROR] Failed to get executable path:", err)
-											execPath = "."
-										}
-										execDir := filepath.Dir(execPath)
-										scriptPath := filepath.Join(execDir, "install_pgsrip.sh")
-										cmd = exec.Command("bash", scriptPath)
-									default:
-										fmt.Printf("[ERROR] Unknown tool: %s\n", tool)
-										failureCount++
-										continue
-									}
-									_, err := cmd.CombinedOutput()
-									if err != nil {
-										fmt.Printf("[ERROR] Failed to install %s: %v\n", tool, err)
-										failureCount++
-									} else {
-										successCount++
-									}
-								}
-								progress.Hide()
-								if failureCount == 0 {
-									dialog.ShowInformation("Installation Complete",
-										fmt.Sprintf("All %d dependencies have been successfully installed.\n\nPlease restart the application to use all features.", successCount),
-										w)
-								} else {
-									dialog.ShowInformation("Installation Results",
-										fmt.Sprintf("%d dependencies installed successfully.\n%d dependencies failed to install.\n\nPlease check the logs for details and try installing the failed dependencies individually.",
-											successCount, failureCount),
-										w)
-								}
-								updateDependencyStatus(w)
-							}()
-						}
-					}, w)
-			})
-			installAllContainer.Add(installAllButton)
-			dependencyButtons.Add(installAllContainer)
-		}
-	}
 
 	progress := widget.NewProgressBar()
 	progress.Min = 0

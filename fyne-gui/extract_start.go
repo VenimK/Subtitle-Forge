@@ -19,6 +19,20 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+func extractCompletionActions(w fyne.Window, outDir string) *fyne.Container {
+	openFolderBtn := widget.NewButton(T("common.open_output_folder"), func() {
+		openFolderPath(w, outDir)
+	})
+	openFolderBtn.Importance = widget.MediumImportance
+
+	copyPathBtn := widget.NewButton(T("common.copy_output_path"), func() {
+		copyTextToClipboard(w, outDir)
+	})
+	copyPathBtn.Importance = widget.MediumImportance
+
+	return container.NewHBox(openFolderBtn, copyPathBtn)
+}
+
 // extractStartExtraction handles the "Start Extraction" button logic for the extract tab.
 func extractStartExtraction(
 	w fyne.Window,
@@ -153,13 +167,22 @@ func extractStartExtraction(
 			fyne.Do(func() {
 				progress.SetValue(float64(totalFiles))
 				progress.Hide()
-				currentTrackLabel.SetText("Batch processing completed")
-				result.SetText(result.Text + fmt.Sprintf("\n\n🎬 Batch Processing Complete\n✅ Success: %d files\n❌ Failed: %d files\n📁 Output: %s", successCount, failureCount, *outDir))
+				currentTrackLabel.SetText(T("extract.batch_completed"))
+				result.SetText(result.Text + fmt.Sprintf(T("extract.batch_complete_result_actions"), successCount, failureCount, *outDir))
+				dialog.ShowCustom(
+					T("extract.batch_processing_complete_title"),
+					T("common.close"),
+					container.NewVBox(
+						widget.NewLabel(fmt.Sprintf(T("extract.batch_processing_complete_body"), totalFiles, successCount, failureCount, *outDir)),
+						extractCompletionActions(w, *outDir),
+					),
+					w,
+				)
 			})
 
 			// Show completion notification
 			fyne.CurrentApp().SendNotification(&fyne.Notification{
-				Title:   "Batch Processing Complete",
+				Title:   T("extract.batch_processing_complete_title"),
 				Content: fmt.Sprintf("Processed %d files. %d successful, %d failed.", totalFiles, successCount, failureCount),
 			})
 		}()
@@ -316,8 +339,17 @@ func extractStartExtraction(
 			currentTrackLabel.Hide()
 			progress.Hide()
 			if tracksDone == len(selected) {
-				result.SetText(setLogMessage(LogSuccess, "Extraction Complete", "All selected tracks have been processed."))
+				result.SetText(setLogMessage(LogSuccess, T("extract.extraction_complete"), fmt.Sprintf(T("extract.extraction_complete_body"), *outDir)))
 				progress.SetValue(progress.Max)
+				dialog.ShowCustom(
+					T("extract.extraction_complete"),
+					T("common.close"),
+					container.NewVBox(
+						widget.NewLabel(fmt.Sprintf(T("extract.extraction_complete_body"), *outDir)),
+						extractCompletionActions(w, *outDir),
+					),
+					w,
+				)
 			} else {
 				result.SetText(fmt.Sprintf("Extraction stopped after %d of %d tracks", tracksDone, len(selected)))
 			}

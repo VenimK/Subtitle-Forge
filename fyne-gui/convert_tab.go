@@ -1433,6 +1433,28 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	convertResultScroll := container.NewScroll(convertResult)
 	convertResultScroll.SetMinSize(fyne.NewSize(0, 100))
 
+	convertResultActions := container.NewHBox()
+	convertResultActions.Hide()
+
+	showConvertResultActions := func(path string) {
+		convertResultActions.Objects = []fyne.CanvasObject{
+			widget.NewButton(T("common.open_output_folder"), func() {
+				openFolderPath(w, path)
+			}),
+			widget.NewButton(T("common.copy_output_path"), func() {
+				copyTextToClipboard(w, path)
+			}),
+		}
+		convertResultActions.Show()
+		convertResultActions.Refresh()
+	}
+
+	hideConvertResultActions := func() {
+		convertResultActions.Hide()
+		convertResultActions.Objects = nil
+		convertResultActions.Refresh()
+	}
+
 	// Convert button
 	convertBtn := widget.NewButton(T("convert.start"), func() {
 		// Check if we have files to convert
@@ -1459,6 +1481,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 		} else {
 			convertResult.SetText("🔄 Converting subtitle file...")
 		}
+		hideConvertResultActions()
 
 		// Perform conversion in goroutine
 		go func() {
@@ -1506,8 +1529,9 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 				fyne.Do(func() {
 					convertProgress.SetValue(1.0)
 					convertProgress.Hide()
-					convertResult.SetText(fmt.Sprintf("✅ Batch conversion completed: %d/%d files successfully converted to %s format",
-						successCount, totalFiles, strings.ToUpper(outputFormat)))
+					convertResult.SetText(fmt.Sprintf(T("convert.batch_complete_result"),
+						successCount, totalFiles, strings.ToUpper(outputFormat), outputDir))
+					showConvertResultActions(outputDir)
 				})
 			} else {
 				// Single file conversion
@@ -1518,8 +1542,13 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 					convertProgress.Hide()
 					if success {
 						AppLog("SUCCESS", "Single file conversion completed: %s to %s", filepath.Base(inputFile), outputFormat)
-						convertResult.SetText(fmt.Sprintf("✅ Successfully converted %s to %s format",
-							filepath.Base(inputFile), strings.ToUpper(outputFormat)))
+						resultPath := outputDir
+						if strings.TrimSpace(resultPath) == "" {
+							resultPath = filepath.Dir(inputFile)
+						}
+						convertResult.SetText(fmt.Sprintf(T("convert.single_complete_result"),
+							filepath.Base(inputFile), strings.ToUpper(outputFormat), resultPath))
+						showConvertResultActions(resultPath)
 					}
 				})
 			}
@@ -1593,6 +1622,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 	))
 
 	resultsGroup := widget.NewCard("Results", "", convertResultScroll)
+	resultsActionsGroup := widget.NewCard("", "", convertResultActions)
 
 	// Create a function to handle drag & drop file loading
 	loadDroppedFile := func(filePath string) {
@@ -1657,6 +1687,7 @@ func createConvertSubtitlesTab(w fyne.Window) (*fyne.Container, func(string), fu
 		styleOptionsGroup,
 		convertGroup,
 		resultsGroup,
+		resultsActionsGroup,
 	)
 
 	return convertTabContent, loadDroppedFile, loadDroppedFiles

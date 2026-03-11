@@ -1,4 +1,4 @@
-# Subtitle Forge v2.3
+# Subtitle Forge V2.4
 > Powerful subtitle extraction, conversion, **AI translation**, **Whisper transcription**, and **LibreTranslate** tool for **macOS**, **Linux**, and **Windows** 🔹 Extract, convert, translate, transcribe, and manage subtitles with ease 🔹
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -47,7 +47,7 @@ This project provides two applications:
    ```
 4. Launch the application
 
-## What's New in v2.3 ✨
+## What's New in V2.4 ✨
 
 ### 🌍 Full UI Localization (i18n)
 

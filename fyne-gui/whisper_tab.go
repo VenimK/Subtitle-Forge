@@ -556,6 +556,28 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	resultScroll := container.NewScroll(resultLabel)
 	resultScroll.SetMinSize(fyne.NewSize(0, 200))
 
+	whisperResultActions := container.NewHBox()
+	whisperResultActions.Hide()
+
+	showWhisperResultActions := func(path string) {
+		if strings.TrimSpace(path) == "" {
+			whisperResultActions.Hide()
+			whisperResultActions.Objects = nil
+			whisperResultActions.Refresh()
+			return
+		}
+		whisperResultActions.Objects = []fyne.CanvasObject{
+			widget.NewButton(T("common.open_output_folder"), func() {
+				openFolderPath(w, path)
+			}),
+			widget.NewButton(T("common.copy_output_path"), func() {
+				copyTextToClipboard(w, path)
+			}),
+		}
+		whisperResultActions.Show()
+		whisperResultActions.Refresh()
+	}
+
 	logEntry := widget.NewMultiLineEntry()
 	logEntry.Wrapping = fyne.TextWrapWord
 	logScroll := container.NewScroll(logEntry)
@@ -639,8 +661,16 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 				dialog.ShowError(fmt.Errorf("please set whisper-cli path"), w)
 				return
 			}
+			if !isExecutableFile(strings.TrimSpace(whisperBinEntry.Text)) {
+				dialog.ShowError(fmt.Errorf(T("whisper.err_whisper_cli_missing"), strings.TrimSpace(whisperBinEntry.Text)), w)
+				return
+			}
 			if strings.TrimSpace(modelEntry.Text) == "" {
 				dialog.ShowError(fmt.Errorf("please set a GGML model path"), w)
+				return
+			}
+			if !isReadableFile(strings.TrimSpace(modelEntry.Text)) {
+				dialog.ShowError(fmt.Errorf(T("whisper.err_model_missing"), strings.TrimSpace(modelEntry.Text)), w)
 				return
 			}
 		}
@@ -658,6 +688,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		fyne.Do(func() {
 			statusLabel.SetText("Starting…")
 			busyBar.Show()
+			showWhisperResultActions("")
 		})
 		runBtn.Disable()
 
@@ -1037,7 +1068,8 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 						return
 					}
 					statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(startTime).Round(time.Second)))
-					resultLabel.SetText("✅ Outputs:\n\n" + strings.Join(done, "\n"))
+					resultLabel.SetText(fmt.Sprintf("%s\n\n%s\n\n📁 %s:\n%s", T("whisper.outputs_title"), strings.Join(done, "\n"), T("common.output_folder"), outDir))
+					showWhisperResultActions(outDir)
 					busyBar.Hide()
 					runBtn.Enable()
 				})
@@ -1072,7 +1104,8 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 				busyBar.Hide()
 				runBtn.Enable()
 				statusLabel.SetText("Running in Terminal…")
-				resultLabel.SetText("Terminal started. Outputs will be written to:\n\n" + strings.Join(outputs, "\n"))
+				resultLabel.SetText(fmt.Sprintf("%s\n\n%s\n\n📁 %s:\n%s", T("whisper.terminal_started_outputs"), strings.Join(outputs, "\n"), T("common.output_folder"), outDir))
+				showWhisperResultActions(outDir)
 			})
 
 			// Best-effort completion detection: watch for output file(s) appearing.
@@ -1123,7 +1156,8 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 						}
 						fyne.Do(func() {
 							statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(started).Round(time.Second)))
-							resultLabel.SetText("✅ Outputs:\n\n" + strings.Join(expected, "\n"))
+							resultLabel.SetText(fmt.Sprintf("%s\n\n%s\n\n📁 %s:\n%s", T("whisper.outputs_title"), strings.Join(expected, "\n"), T("common.output_folder"), outDir))
+							showWhisperResultActions(outDir)
 						})
 						return
 					}
@@ -1237,11 +1271,13 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 					if err := writeTimestampsOnlySRT(srtOut, timestampsOut); err != nil {
 						resultLabel.SetText("⚠️ Transcription finished, but timestamps-only SRT generation failed:\n\n" + err.Error() + "\n\nOutputs:\n\n" + strings.Join(outputs, "\n"))
 						statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(startTime).Round(time.Second)))
+						showWhisperResultActions(outDir)
 						return
 					}
 				}
 				statusLabel.SetText(fmt.Sprintf("✅ Completed in %s", time.Since(startTime).Round(time.Second)))
-				resultLabel.SetText("✅ Outputs:\n\n" + strings.Join(outputs, "\n"))
+				resultLabel.SetText(fmt.Sprintf("%s\n\n%s\n\n📁 %s:\n%s", T("whisper.outputs_title"), strings.Join(outputs, "\n"), T("common.output_folder"), outDir))
+				showWhisperResultActions(outDir)
 			})
 		}()
 	})
@@ -1308,6 +1344,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		runBtn,
 		widget.NewLabel("Result"),
 		resultScroll,
+		whisperResultActions,
 		widget.NewLabel("Log"),
 		logScroll,
 	)

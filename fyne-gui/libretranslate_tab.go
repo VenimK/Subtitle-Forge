@@ -230,6 +230,28 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	resultScroll := container.NewScroll(resultLabel)
 	resultScroll.SetMinSize(fyne.NewSize(0, 200))
 
+	libreResultActions := container.NewHBox()
+	libreResultActions.Hide()
+
+	showLibreResultActions := func(path string) {
+		if strings.TrimSpace(path) == "" {
+			libreResultActions.Hide()
+			libreResultActions.Objects = nil
+			libreResultActions.Refresh()
+			return
+		}
+		libreResultActions.Objects = []fyne.CanvasObject{
+			widget.NewButton(T("common.open_output_folder"), func() {
+				openFolderPath(w, path)
+			}),
+			widget.NewButton(T("common.copy_output_path"), func() {
+				copyTextToClipboard(w, path)
+			}),
+		}
+		libreResultActions.Show()
+		libreResultActions.Refresh()
+	}
+
 	statusLabel := widget.NewLabel("")
 	statusLabel.Wrapping = fyne.TextWrapWord
 	progressBar := widget.NewProgressBar()
@@ -334,6 +356,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 			statusLabel.SetText("Starting…")
 			progressBar.SetValue(0)
 			progressBar.Show()
+			showLibreResultActions("")
 		})
 
 		go func() {
@@ -359,6 +382,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 			var okCount int
 			var failCount int
 			var lastOutFile string
+			var lastOutDir string
 			for i, inFile := range inputFiles {
 				fyne.Do(func() {
 					statusLabel.SetText(fmt.Sprintf("Translating %d/%d: %s", i+1, len(inputFiles), filepath.Base(inFile)))
@@ -371,6 +395,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 				if outDir == "" {
 					outDir = filepath.Dir(inFile)
 				}
+				lastOutDir = outDir
 				baseName := strings.TrimSuffix(filepath.Base(inFile), filepath.Ext(inFile))
 				outFile := filepath.Join(outDir, fmt.Sprintf("%s.%s.srt", baseName, tgt))
 				err := libreTranslateTranslateFile(baseURL, apiKey, inFile, src, tgt, outFile)
@@ -399,17 +424,19 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 				statusLabel.SetText("")
 				if okCount > 0 && failCount == 0 {
 					if okCount == 1 {
-						resultLabel.SetText("✅ Translation completed\n\n" + lastOutFile)
+						resultLabel.SetText(fmt.Sprintf("%s\n\n%s\n\n📁 %s:\n%s", T("libre.translation_completed"), lastOutFile, T("common.output_folder"), lastOutDir))
 					} else {
-						resultLabel.SetText(fmt.Sprintf("✅ Translation completed: %d file(s)", okCount))
+						resultLabel.SetText(fmt.Sprintf(T("libre.translation_completed_count"), okCount, T("common.output_folder"), lastOutDir))
 					}
+					showLibreResultActions(lastOutDir)
 					return
 				}
 				if okCount == 0 {
-					resultLabel.SetText(fmt.Sprintf("❌ Translation failed: %d file(s)", failCount))
+					resultLabel.SetText(fmt.Sprintf(T("libre.translation_failed_count"), failCount))
 					return
 				}
-				resultLabel.SetText(fmt.Sprintf("⚠️ Translation completed with errors: %d ok, %d failed", okCount, failCount))
+				resultLabel.SetText(fmt.Sprintf(T("libre.translation_completed_with_errors"), okCount, failCount, T("common.output_folder"), lastOutDir))
+				showLibreResultActions(lastOutDir)
 			})
 			appendLog(fmt.Sprintf("Finished: %d ok, %d failed", okCount, failCount))
 		}()
@@ -472,6 +499,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewLabel("Log"),
 		logScroll,
 		resultScroll,
+		libreResultActions,
 	)
 
 	return content

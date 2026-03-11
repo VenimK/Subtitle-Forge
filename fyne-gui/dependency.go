@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 )
@@ -27,6 +27,17 @@ var denoBinaryPath string
 
 // PGS to SRT script path - configurable via UI
 var pgsToSrtScriptPath = filepath.Join(os.Getenv("HOME"), "pgs-to-srt", "pgs-to-srt.js")
+
+var settingsDependencyStatusLabel *widget.Label
+var settingsSetupSummaryLabel *widget.Label
+var settingsDependencyButtonsContainer *fyne.Container
+
+type featureCheck struct {
+	Name        string
+	Status      string
+	Description string
+	Details     []string
+}
 
 // findHomebrewPath checks for Homebrew installation in common locations
 func findHomebrewPath() (string, error) {
@@ -145,6 +156,316 @@ func checkDependencies() map[string]bool {
 	dependencyResults["pgsrip"] = checkPgsrip()
 
 	return dependencyResults
+}
+
+func normalizeDependencyToolName(tool string) string {
+	normalized := strings.ToLower(strings.TrimSpace(tool))
+	switch normalized {
+	case "ffmpeg":
+		return "ffmpeg"
+	case "vobsub2srt":
+		return "vobsub2srt"
+	case "mkvmerge":
+		return "mkvmerge"
+	case "mkvextract":
+		return "mkvextract"
+	case "deno":
+		return "deno"
+	case "tesseract":
+		return "tesseract"
+	case "go":
+		return "go"
+	case "pgstosrt", "pgs-to-srt", "pgstosrt.js", "pgsto srt", "pgstoSRT":
+		return "pgstosrt"
+	case "pgsrip":
+		return "pgsrip"
+	default:
+		return normalized
+	}
+}
+
+func dependencyDisplayName(tool string) string {
+	switch normalizeDependencyToolName(tool) {
+	case "ffmpeg":
+		return "FFmpeg"
+	case "vobsub2srt":
+		return "vobsub2srt"
+	case "mkvmerge":
+		return "MKVMerge"
+	case "mkvextract":
+		return "MKVExtract"
+	case "deno":
+		return "Deno"
+	case "tesseract":
+		return "Tesseract"
+	case "go":
+		return "Go"
+	case "pgstosrt":
+		return "PGStoSRT"
+	case "pgsrip":
+		return "pgsrip"
+	default:
+		return tool
+	}
+}
+
+func displayDependencyResultsOrder() []string {
+	return []string{"FFmpeg", "MKVMerge", "MKVExtract", "Deno", "Tesseract", "PGStoSRT", "pgsrip", "vobsub2srt", "Go"}
+}
+
+func statusLabelFor(ready bool) string {
+	if ready {
+		return T("settings.status_ready")
+	}
+	return T("settings.status_needs_setup")
+}
+
+func findHelperScript(candidates []string) string {
+	for _, candidate := range candidates {
+		if isReadableFile(candidate) {
+			return candidate
+		}
+	}
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		for _, candidate := range candidates {
+			base := filepath.Base(candidate)
+			full := filepath.Join(execDir, base)
+			if isReadableFile(full) {
+				return full
+			}
+		}
+	}
+	return ""
+}
+
+func isTessdataConfigured() bool {
+	candidates := []string{}
+	if env := strings.TrimSpace(os.Getenv("TESSDATA_PREFIX")); env != "" {
+		candidates = append(candidates, env)
+	}
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		candidates = append(candidates, filepath.Join(homeDir, "tessdata_best"))
+	}
+	for _, dir := range candidates {
+		if isReadableFile(filepath.Join(dir, "eng.traineddata")) {
+			return true
+		}
+	}
+	return false
+}
+
+func whisperHelperScriptPath() string {
+	return findHelperScript([]string{"../Whisper-mac-coreml.sh", "Whisper-mac-coreml.sh"})
+}
+
+func libreHelperScriptPath() string {
+	return findHelperScript([]string{"../Libre-mac.sh", "Libre-mac.sh"})
+}
+
+func installScriptAvailable(scriptName string) bool {
+	return findHelperScript([]string{scriptName, "../" + scriptName}) != ""
+}
+
+func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
+	homebrewReady := false
+	if _, err := findHomebrewPath(); err == nil {
+		homebrewReady = true
+	}
+
+	coreReady := dependencyResults["FFmpeg"] && dependencyResults["MKVMerge"] && dependencyResults["MKVExtract"]
+	ocrReady := dependencyResults["Tesseract"] && dependencyResults["Deno"] && dependencyResults["PGStoSRT"] && dependencyResults["pgsrip"] && dependencyResults["vobsub2srt"]
+	aiReady := isGSTAvailable()
+	whisperReady := isWhisperConfigured()
+	whisperHelper := whisperHelperScriptPath() != ""
+	whisperMode := fyne.CurrentApp().Preferences().StringWithFallback("whisper_transcribe_mode", "Local (whisper-cli)")
+	whisperRemoteConfigured := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_remote_url", "http://127.0.0.1:8000")) != ""
+	libreReady, libreOptional := isLibreTranslateConfigured()
+	libreHelper := libreHelperScriptPath() != ""
+	tessdataReady := isTessdataConfigured()
+
+	whisperStatus := T("settings.status_needs_setup")
+	if whisperReady {
+		whisperStatus = T("settings.status_ready")
+	} else if whisperHelper {
+		whisperStatus = T("settings.status_needs_config")
+	}
+
+	libreStatus := T("settings.status_needs_setup")
+	if libreReady {
+		libreStatus = T("settings.status_ready")
+	} else if libreOptional {
+		libreStatus = T("settings.status_optional")
+	}
+
+	whisperModeDetail := fmt.Sprintf("Local whisper-cli + model: %s", statusLabelFor(whisperReady))
+	if strings.Contains(strings.ToLower(whisperMode), "remote") {
+		whisperModeDetail = fmt.Sprintf("Remote API URL configured: %s", statusLabelFor(whisperRemoteConfigured))
+	}
+
+	libreEndpointDetail := fmt.Sprintf("Configured server or helper: %s", libreStatus)
+	if libreOptional && !libreReady {
+		libreEndpointDetail = fmt.Sprintf("Configured server or helper: %s", T("settings.status_needs_setup"))
+	}
+
+	return []featureCheck{
+		{
+			Name:        T("settings.summary_core"),
+			Status:      statusLabelFor(coreReady),
+			Description: T("settings.summary_core_desc"),
+			Details: []string{
+				fmt.Sprintf("FFmpeg: %s", statusLabelFor(dependencyResults["FFmpeg"])),
+				fmt.Sprintf("MKVMerge: %s", statusLabelFor(dependencyResults["MKVMerge"])),
+				fmt.Sprintf("MKVExtract: %s", statusLabelFor(dependencyResults["MKVExtract"])),
+			},
+		},
+		{
+			Name:        T("settings.summary_ocr"),
+			Status:      statusLabelFor(ocrReady),
+			Description: T("settings.summary_ocr_desc"),
+			Details: []string{
+				fmt.Sprintf("Tesseract: %s", statusLabelFor(dependencyResults["Tesseract"])),
+				fmt.Sprintf("Tessdata: %s", statusLabelFor(tessdataReady)),
+				fmt.Sprintf("Deno: %s", statusLabelFor(dependencyResults["Deno"])),
+				fmt.Sprintf("PGS-to-SRT: %s", statusLabelFor(dependencyResults["PGStoSRT"])),
+				fmt.Sprintf("pgsrip: %s", statusLabelFor(dependencyResults["pgsrip"])),
+				fmt.Sprintf("vobsub2srt: %s", statusLabelFor(dependencyResults["vobsub2srt"])),
+			},
+		},
+		{
+			Name:        T("settings.summary_ai"),
+			Status:      statusLabelFor(aiReady),
+			Description: T("settings.summary_ai_desc"),
+			Details: []string{
+				fmt.Sprintf("GST CLI: %s", statusLabelFor(aiReady)),
+				fmt.Sprintf("Install actions available: %s", statusLabelFor(homebrewReady)),
+			},
+		},
+		{
+			Name:        T("settings.summary_whisper"),
+			Status:      whisperStatus,
+			Description: T("settings.summary_whisper_desc"),
+			Details: []string{
+				whisperModeDetail,
+				fmt.Sprintf("macOS install helper: %s", statusLabelFor(whisperHelper)),
+			},
+		},
+		{
+			Name:        T("settings.summary_libre"),
+			Status:      libreStatus,
+			Description: T("settings.summary_libre_desc"),
+			Details: []string{
+				libreEndpointDetail,
+				fmt.Sprintf("macOS local-server helper: %s", statusLabelFor(libreHelper)),
+			},
+		},
+	}
+}
+
+func featureReadinessSummary(dependencyResults map[string]bool) string {
+	var lines []string
+	for _, feature := range featureReadinessChecks(dependencyResults) {
+		lines = append(lines, fmt.Sprintf("• %s: %s — %s", feature.Name, feature.Status, feature.Description))
+		for _, detail := range feature.Details {
+			lines = append(lines, fmt.Sprintf("  - %s", detail))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func isGSTAvailable() bool {
+	if gstPath, err := exec.LookPath("gst"); err == nil && strings.TrimSpace(gstPath) != "" {
+		return true
+	}
+
+	candidates := []string{
+		"/opt/homebrew/bin/gst",
+		"/usr/local/bin/gst",
+		"/usr/bin/gst",
+		"/bin/gst",
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		candidates = append(candidates,
+			filepath.Join(homeDir, "bin", "gst"),
+			filepath.Join(homeDir, ".local", "bin", "gst"),
+			filepath.Join(homeDir, ".subtitle-forge", "gst-venv", "bin", "gst"),
+			filepath.Join(homeDir, "subsvenv", "bin", "gst"),
+			filepath.Join(homeDir, "venv", "bin", "gst"),
+			filepath.Join(homeDir, ".venv", "bin", "gst"),
+		)
+
+		pythonLibPath := filepath.Join(homeDir, "Library", "Python")
+		if pythonDirs, err := os.ReadDir(pythonLibPath); err == nil {
+			for _, pythonDir := range pythonDirs {
+				if pythonDir.IsDir() {
+					candidates = append(candidates, filepath.Join(pythonLibPath, pythonDir.Name(), "bin", "gst"))
+				}
+			}
+		}
+	}
+
+	for _, candidate := range candidates {
+		if fileInfo, err := os.Stat(candidate); err == nil && fileInfo.Mode().Perm()&0111 != 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isExecutableFile(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	fileInfo, err := os.Stat(path)
+	return err == nil && !fileInfo.IsDir() && fileInfo.Mode().Perm()&0111 != 0
+}
+
+func isReadableFile(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	fileInfo, err := os.Stat(path)
+	return err == nil && !fileInfo.IsDir()
+}
+
+func isWhisperConfigured() bool {
+	mode := fyne.CurrentApp().Preferences().StringWithFallback("whisper_transcribe_mode", "Local (whisper-cli)")
+	if strings.Contains(strings.ToLower(mode), "remote") {
+		remoteURL := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_remote_url", "http://127.0.0.1:8000"))
+		return remoteURL != ""
+	}
+
+	whisperCLIPath := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_cli_path", ""))
+	modelPath := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("whisper_model_path", ""))
+
+	if whisperCLIPath == "" {
+		homeDir, _ := os.UserHomeDir()
+		whisperCLIPath = filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "build", "bin", "whisper-cli")
+	}
+	if modelPath == "" {
+		homeDir, _ := os.UserHomeDir()
+		modelPath = filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "models", "ggml-base.en.bin")
+	}
+
+	return isExecutableFile(whisperCLIPath) && isReadableFile(modelPath)
+}
+
+func isLibreTranslateConfigured() (bool, bool) {
+	url := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("libretranslate_url", "http://127.0.0.1:5000"))
+	if url != "" && url != "http://127.0.0.1:5000" {
+		return true, false
+	}
+
+	if runtime.GOOS == "darwin" && libreHelperScriptPath() != "" {
+		return true, true
+	}
+
+	return false, true
 }
 
 // Check for ffmpeg installation
@@ -842,6 +1163,7 @@ func checkPgsToSrt() bool {
 
 // installDependency handles the installation of a specific dependency
 func installDependency(w fyne.Window, tool string) {
+	tool = dependencyDisplayName(tool)
 	// Show a confirmation dialog before proceeding
 	confirmMessage := fmt.Sprintf("This will install %s using Homebrew.\n\nDo you want to continue?", tool)
 	dialog.ShowConfirm(fmt.Sprintf("Install %s", tool), confirmMessage, func(confirmed bool) {
@@ -944,7 +1266,7 @@ func installDependency(w fyne.Window, tool string) {
 
 				// Set up command and description based on tool
 				// Using a case-insensitive approach to handle various tool name formats
-				toolLower := strings.ToLower(tool)
+				toolLower := normalizeDependencyToolName(tool)
 
 				// Store the Homebrew path for use in commands
 				var brewCommand string
@@ -1015,7 +1337,7 @@ func installDependency(w fyne.Window, tool string) {
 
 					cmd = exec.Command("bash", scriptPath)
 					installDesc = "Installing pgsrip Python package for PGS OCR"
-				case "pgstoSRT", "pgs-to-srt", "pgstoSrt", "pgstosrt":
+				case "pgstosrt":
 					// Create a temp directory for creating the installation script
 					tempDir, err := os.MkdirTemp("", "pgs-to-srt-install")
 					if err != nil {
@@ -1200,7 +1522,7 @@ func installDependency(w fyne.Window, tool string) {
 
 					// Check if tool is now installed
 					dependencyResults := checkDependencies()
-					if installed, ok := dependencyResults[tool]; ok && installed {
+					if installed, ok := dependencyResults[dependencyDisplayName(tool)]; ok && installed {
 						successful = true
 					}
 
@@ -1233,108 +1555,59 @@ func updateDependencyStatus(w fyne.Window) {
 	// Check dependencies
 	dependencyResults := checkDependencies()
 
-	// Update the status text with improved formatting
-	dependencyStatus := "Current Status:\n"
-	allDependenciesInstalled := true
-
 	// Track missing tools
 	missingTools := []string{}
-
-	// We'll use a simpler approach with plain text for now since color styling is causing issues
-
-	// Process each dependency
-	for tool, installed := range dependencyResults {
-		var status string
-
+	installedTools := []string{}
+	for _, tool := range displayDependencyResultsOrder() {
+		installed := dependencyResults[tool]
 		if installed {
-			status = "✅ Installed"
+			installedTools = append(installedTools, tool)
 		} else {
-			status = "❌ Not found"
-			allDependenciesInstalled = false
 			missingTools = append(missingTools, tool)
 		}
-
-		dependencyStatus += fmt.Sprintf("- %s: %s\n", tool, status)
 	}
 
-	// Add summary message
-	if !allDependenciesInstalled {
-		dependencyStatus += "\n⚠️ Some required tools are missing. Please install them before using all features.\n"
-	} else {
-		dependencyStatus += "\n✅ All required tools are installed.\n"
-	}
-
-	// Find and update the dependency result label in the Settings tab
-	if tabs, ok := w.Content().(*container.AppTabs); ok {
-		for _, tab := range tabs.Items {
-			if tab.Text == "Settings" {
-				if settingsContainer, ok := tab.Content.(*fyne.Container); ok {
-					for _, child := range settingsContainer.Objects {
-						if label, ok := child.(*widget.Label); ok && strings.Contains(label.Text, "System Dependency Check") {
-							label.SetText(dependencyStatus)
-							break
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Update dependency buttons
-	// Clear existing buttons
-	if tabs, ok := w.Content().(*container.AppTabs); ok {
-		for _, tab := range tabs.Items {
-			if tab.Text == "Settings" {
-				if settingsContainer, ok := tab.Content.(*fyne.Container); ok {
-					for _, child := range settingsContainer.Objects {
-						if buttonContainer, ok := child.(*fyne.Container); ok && len(buttonContainer.Objects) > 0 {
-							if _, ok := buttonContainer.Objects[0].(*widget.Button); ok {
-								// Found the button container, clear it
-								buttonContainer.Objects = []fyne.CanvasObject{}
-								break
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Add buttons for missing tools
+	dependencyStatus := T("settings.dependencies_current_status") + "\n"
 	if len(missingTools) > 0 {
-		// Create install all button
-		installAllBtn := widget.NewButton("Install All Missing Dependencies", func() {
-			installDependencies(missingTools, w)
-		})
-		installAllBtn.Importance = widget.HighImportance
+		dependencyStatus += T("settings.dependencies_missing_summary") + "\n\n"
+		for _, tool := range missingTools {
+			dependencyStatus += fmt.Sprintf("- %s: %s\n", tool, T("settings.dependency_not_found"))
+		}
+		if len(installedTools) > 0 {
+			dependencyStatus += fmt.Sprintf("\nInstalled tools: %s\n", strings.Join(installedTools, ", "))
+		}
+	} else {
+		dependencyStatus += T("settings.dependencies_all_installed") + "\n\n"
+		dependencyStatus += fmt.Sprintf("Installed tools: %s\n", strings.Join(installedTools, ", "))
+	}
 
-		// Add to dependency buttons container
-		if tabs, ok := w.Content().(*container.AppTabs); ok {
-			for _, tab := range tabs.Items {
-				if tab.Text == "Settings" {
-					if settingsContainer, ok := tab.Content.(*fyne.Container); ok {
-						for _, child := range settingsContainer.Objects {
-							if buttonContainer, ok := child.(*fyne.Container); ok && len(buttonContainer.Objects) == 0 {
-								// Found the empty button container
-								buttonContainer.Add(installAllBtn)
+	fyne.Do(func() {
+		if settingsDependencyStatusLabel != nil {
+			settingsDependencyStatusLabel.SetText(dependencyStatus)
+		}
+		if settingsSetupSummaryLabel != nil {
+			settingsSetupSummaryLabel.SetText(featureReadinessSummary(dependencyResults))
+		}
 
-								// Add individual install buttons
-								for _, tool := range missingTools {
-									installBtn := widget.NewButton(fmt.Sprintf("Install %s", tool), func(t string) func() {
-										return func() {
-											installDependencies([]string{t}, w)
-										}
-									}(tool))
-									buttonContainer.Add(installBtn)
-								}
-								break
-							}
-						}
-					}
+		if settingsDependencyButtonsContainer != nil {
+			settingsDependencyButtonsContainer.Objects = nil
+			if len(missingTools) > 0 {
+				installAllBtn := widget.NewButton(T("dep.install_all"), func() {
+					installDependencies(missingTools, w)
+				})
+				installAllBtn.Importance = widget.HighImportance
+				settingsDependencyButtonsContainer.Add(installAllBtn)
+
+				for _, tool := range missingTools {
+					toolName := tool
+					settingsDependencyButtonsContainer.Add(widget.NewButton(fmt.Sprintf(T("settings.install_tool"), toolName), func() {
+						installDependency(w, toolName)
+					}))
 				}
 			}
+			settingsDependencyButtonsContainer.Refresh()
 		}
-	}
+	})
 }
 
 // installDependencies installs the specified missing tools
@@ -1352,10 +1625,11 @@ func installDependencies(tools []string, w fyne.Window) {
 			fmt.Printf("[INFO] Installing %s...\n", tool)
 
 			var cmd *exec.Cmd
+			normalizedTool := normalizeDependencyToolName(tool)
 
 			// Determine installation command based on tool
-			switch tool {
-			case "mkvmerge":
+			switch normalizedTool {
+			case "mkvmerge", "mkvextract":
 				cmd = exec.Command("brew", "install", "mkvtoolnix")
 			case "deno":
 				cmd = exec.Command("brew", "install", "deno")
@@ -1404,12 +1678,12 @@ func installDependencies(tools []string, w fyne.Window) {
 
 		// Show results
 		if failureCount == 0 {
-			dialog.ShowInformation("Installation Complete",
-				fmt.Sprintf("All %d dependencies have been successfully installed.\n\nPlease restart the application to use all features.", successCount),
+			dialog.ShowInformation(T("dep.install_success_title"),
+				fmt.Sprintf(T("dep.install_success_msg"), successCount),
 				w)
 		} else {
-			dialog.ShowInformation("Installation Results",
-				fmt.Sprintf("%d dependencies installed successfully.\n%d dependencies failed to install.\n\nPlease check the logs for details and try installing the failed dependencies individually.",
+			dialog.ShowInformation(T("dep.install_results"),
+				fmt.Sprintf(T("dep.install_results_msg"),
 					successCount, failureCount),
 				w)
 		}
