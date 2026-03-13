@@ -1,4 +1,4 @@
-# Subtitle Forge V2.4.1
+# Subtitle Forge V2.4.2
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -328,7 +328,7 @@ Typical outputs:
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
 
-## What’s new in V2.4.1
+## What’s new in V2.4.2
 
 - Improved update detection for version comparisons
 - Better installer/app path synchronization

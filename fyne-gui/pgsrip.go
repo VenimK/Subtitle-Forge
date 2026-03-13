@@ -18,6 +18,21 @@ import (
 // Global variable to store the path to the pgsrip binary
 var pgsripBinaryPath = ""
 
+func pgsripManagedBinaryPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".subtitle-forge", "pgsrip-venv", "bin", "pgsrip")
+}
+
+func newPgsripCommand(args ...string) *exec.Cmd {
+	if pgsripBinaryPath == "python3 -m pgsrip" {
+		return exec.Command("python3", append([]string{"-m", "pgsrip"}, args...)...)
+	}
+	return exec.Command(pgsripBinaryPath, args...)
+}
+
 // PgsConversionSettings stores configuration for PGS to SRT conversion
 type PgsConversionSettings struct {
 	Verbose bool // Display verbose debug messages - only option we're using
@@ -40,16 +55,19 @@ func checkPgsrip() bool {
 	homebrewBin := "/opt/homebrew/bin"
 	userLocalBin := "/usr/local/bin"
 
+	managedPgsripDir := filepath.Dir(pgsripManagedBinaryPath())
+
 	// Add these directories to PATH if they're not already there
 	newPath := currentPath
-	if !strings.Contains(newPath, gopathBin) {
-		newPath += ":" + gopathBin
-	}
-	if !strings.Contains(newPath, homebrewBin) {
-		newPath += ":" + homebrewBin
-	}
-	if !strings.Contains(newPath, userLocalBin) {
-		newPath += ":" + userLocalBin
+	for _, extraPath := range []string{managedPgsripDir, gopathBin, homebrewBin, userLocalBin} {
+		if extraPath == "" || strings.Contains(newPath, extraPath) {
+			continue
+		}
+		if newPath == "" {
+			newPath = extraPath
+		} else {
+			newPath += ":" + extraPath
+		}
 	}
 
 	// Set the updated PATH
@@ -100,6 +118,7 @@ func checkPgsrip() bool {
 
 		// Check common installation paths
 		commonPaths := []string{
+			pgsripManagedBinaryPath(),
 			"/usr/local/bin/pgsrip",
 			"/opt/homebrew/bin/pgsrip",
 			"/usr/bin/pgsrip",
@@ -230,16 +249,8 @@ func convertPgsWithPgsrip(pgsFilePath, outFilePath, langCode string, result *wid
 		result.SetText(result.Text + "\nCommand: " + commandStr)
 	})
 
-	// Run the command - handle both direct executable and "python3 -m pgsrip" format
-	var cmd *exec.Cmd
-	if pgsripBinaryPath == "python3 -m pgsrip" {
-		// Use python3 -m pgsrip format
-		args := append([]string{"-m", "pgsrip"}, cmdArgs...)
-		cmd = exec.Command("python3", args...)
-	} else {
-		// Use direct executable path
-		cmd = exec.Command(pgsripBinaryPath, cmdArgs...)
-	}
+	// Run the command using the resolved pgsrip invocation
+	cmd := newPgsripCommand(cmdArgs...)
 	cmd.Dir = filepath.Dir(pgsFilePath) // Set working directory to where the PGS file is
 
 	// Set up a pipe to capture output

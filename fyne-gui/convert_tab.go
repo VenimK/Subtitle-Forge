@@ -967,7 +967,7 @@ func convertSubtitleFileAdvanced(inputPath, inputFormat, outputFormat, outputDir
 
 		if pgsripBinaryPath != "" {
 			// Use pgsrip if available (same format as Extract Subtitles tab)
-			cmd = exec.Command(pgsripBinaryPath, inputPath, tempSrtPath, "--verbose")
+			cmd = newPgsripCommand(inputPath, tempSrtPath, "--verbose")
 			conversionMethod = "pgsrip"
 		} else if pgsToSrtScriptPath != "" && checkDeno() {
 			// Fall back to Deno-based PGS to SRT script
