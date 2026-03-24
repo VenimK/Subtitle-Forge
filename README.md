@@ -1,4 +1,4 @@
-# Subtitle Forge V2.4.2
+# Subtitle Forge V2.4.3
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -328,7 +328,19 @@ Typical outputs:
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
 
-## What’s new in V2.4.2
+## What’s new in V2.4.3
+
+- **Performance:** Fixed O(n²) log rendering — all log areas (LibreTranslate, Whisper, AI Translation, Logs tab) now use capped line buffers instead of unbounded string concatenation
+- **Performance:** Eliminated goroutine-per-log-entry leak in the application logger
+- **Performance:** Removed duplicate `filterTracks` dead code in the Extract tab
+- **Performance:** Reduced window position polling from every 1 second to every 5 seconds
+- **UX:** Tab icons added to all tabs for visual consistency (📂 Extract, ➕ Insert, 🔄 Convert, ⚙️ Settings)
+- **UX:** LibreTranslate server log panel now has a Clear button
+- **UX:** LibreTranslate API key is auto-filled from `~/.libretranslate/api_key.txt` when the server is running and the field is empty
+- **UX:** Theme selector no longer applies the theme on every scroll through options — theme is applied only when the Apply button is clicked, eliminating UI flicker
+- **LibreTranslate:** Default port changed from 5000 to 5100 to avoid conflict with macOS ControlCenter; existing saved preferences are automatically migrated
+
+## What's new in V2.4.2
 
 - Improved update detection for version comparisons
 - Better installer/app path synchronization

@@ -30,7 +30,7 @@ type AITranslationConfig struct {
 	ResumeMode      bool
 	ProgressLog     bool
 	ThoughtsLog     bool
-	ThinkingBudget  int    // For Gemini 2.5 models (0-24576 for Flash, 128-32768 for Pro)
+	ThinkingBudget  int    // For Gemini 2.5 models (0-24576 for Flash, 128-32768 for Pro). 0 means unset.
 	ThinkingLevel   string // For Gemini 3.0 models (minimal, low, medium, high)
 }
 
@@ -261,22 +261,37 @@ end tell`, tmpScriptPath)
 	return nil
 }
 
-// postProcessSRT fixes common spacing and line break issues in translated SRT files
+// postProcessSRT fixes common spacing and line break issues in translated SRT files.
+// It only applies punctuation fixes to subtitle text lines, leaving index and timestamp lines untouched.
 func postProcessSRT(filePath string) error {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
 
-	// Fix spacing after commas and punctuation
-	text := string(content)
-	text = regexp.MustCompile(`,(\S)`).ReplaceAllString(text, ", $1")
-	text = regexp.MustCompile(`\.(\S)`).ReplaceAllString(text, ". $1")
-	text = regexp.MustCompile(`\?(\S)`).ReplaceAllString(text, "? $1")
-	text = regexp.MustCompile(`!(\S)`).ReplaceAllString(text, "! $1")
+	timestampRe := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->`)
+	indexRe := regexp.MustCompile(`^\d+\s*$`)
 
-	// Write the fixed content back
-	return os.WriteFile(filePath, []byte(text), 0644)
+	commaRe := regexp.MustCompile(`,(\S)`)
+	dotRe := regexp.MustCompile(`\.(\S)`)
+	questionRe := regexp.MustCompile(`\?(\S)`)
+	exclamationRe := regexp.MustCompile(`!(\S)`)
+
+	lines := strings.Split(string(content), "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || timestampRe.MatchString(trimmed) || indexRe.MatchString(trimmed) {
+			continue
+		}
+		// Fix spacing after punctuation only in subtitle text lines
+		line = commaRe.ReplaceAllString(line, ", $1")
+		line = dotRe.ReplaceAllString(line, ". $1")
+		line = questionRe.ReplaceAllString(line, "? $1")
+		line = exclamationRe.ReplaceAllString(line, "! $1")
+		lines[i] = line
+	}
+
+	return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0644)
 }
 
 // translateWithGST shells out to gst translate and streams output
@@ -421,6 +436,20 @@ var resultsWindow fyne.Window         // Separate results window
 var resultsArea *widget.Entry         // Results text area
 var resultsScroll *container.Scroll   // Scroll container for results
 var aiResultsActions *fyne.Container  // Output actions for results window
+var aiResultsLines []string           // Capped line buffer for results area
+
+const maxAIResultLines = 500
+
+// appendToResults appends a line to the results area using a capped slice (avoids O(n²) string growth).
+func appendToResults(line string) {
+	aiResultsLines = append(aiResultsLines, line)
+	if len(aiResultsLines) > maxAIResultLines {
+		aiResultsLines = aiResultsLines[len(aiResultsLines)-maxAIResultLines:]
+	}
+	if resultsArea != nil {
+		resultsArea.SetText(strings.Join(aiResultsLines, "\n"))
+	}
+}
 
 func updateAIResultsActions(w fyne.Window, outputDir string) {
 	if aiResultsActions == nil {
@@ -455,6 +484,7 @@ func createResultsWindow(a fyne.App) {
 	resultsWindow.Resize(fyne.NewSize(800, 600))
 
 	// Results area with scrolling
+	aiResultsLines = nil
 	resultsArea = widget.NewMultiLineEntry()
 	resultsArea.SetText(T("ai.results_placeholder"))
 	resultsArea.Wrapping = fyne.TextWrapWord
@@ -830,7 +860,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	}
 
 	batchSizeEntry := widget.NewEntry()
-	batchSizeEntry.SetText("100")
+	batchSizeEntry.SetText("500")
 	batchSizeEntry.SetPlaceHolder(T("ai.batch_size_hint"))
 
 	descriptionEntry := widget.NewMultiLineEntry()
@@ -839,7 +869,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	// Thinking controls
 	thinkingBudgetEntry := widget.NewEntry()
-	thinkingBudgetEntry.SetText("2048")
+	thinkingBudgetEntry.SetText("")
 	thinkingBudgetEntry.SetPlaceHolder(T("ai.thinking_budget_hint"))
 
 	thinkingLevelSelect := widget.NewSelect([]string{
@@ -939,7 +969,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 		// Get model name and apply smart thinking defaults
 		modelName := strings.Split(modelSelect.Selected, " ")[0]
-		thinkingBudget := parseInt(thinkingBudgetEntry.Text, 2048)
+		thinkingBudget := parseInt(thinkingBudgetEntry.Text, 0)
 		thinkingLevel := thinkingLevelSelect.Selected
 
 		// Apply smart defaults based on model
@@ -950,10 +980,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 			}
 			thinkingBudget = 0 // Don't send thinking_budget for 3.0 models
 		} else if strings.Contains(modelName, "2.5-") {
-			// Gemini 2.5 models: use thinking_budget, ignore thinking_level
-			if thinkingBudget == 0 {
-				thinkingBudget = 2048 // Default for Gemini 2.5
-			}
+			// Gemini 2.5 models: use thinking_budget (if set), ignore thinking_level
 			thinkingLevel = "" // Don't send thinking_level for 2.5 models
 		}
 
@@ -963,8 +990,8 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 			APIKey:          apiKeyEntry.Text,
 			SecondaryAPIKey: secondaryKeyEntry.Text,
 			Model:           modelName,
-			Temperature:     parseFloat(temperatureEntry.Text, 0.3),
-			BatchSize:       parseInt(batchSizeEntry.Text, 100),
+			Temperature:     parseFloat(temperatureEntry.Text, -1),
+			BatchSize:       parseInt(batchSizeEntry.Text, 500),
 			Description:     descriptionEntry.Text,
 			ResumeMode:      resumeModeCheck.Checked,
 			ProgressLog:     progressLogCheck.Checked,
@@ -1004,6 +1031,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 		progressBar.SetValue(0)
 		progressLabel.SetText("Ready to translate")
 		if resultsArea != nil {
+			aiResultsLines = nil
 			resultsArea.SetText("Translation results will appear here...")
 		}
 	})
@@ -1078,7 +1106,8 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 	progressLabel.SetText("Starting AI translation...")
 	updateAIResultsActions(w, "")
 	if resultsArea != nil {
-		resultsArea.SetText("🤖 Initializing AI translation...\n")
+		aiResultsLines = []string{"🤖 Initializing AI translation..."}
+		resultsArea.SetText(strings.Join(aiResultsLines, "\n"))
 		// Always scroll to bottom at start
 		if resultsScroll != nil {
 			resultsScroll.ScrollToBottom()
@@ -1108,7 +1137,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				fyne.Do(func() {
 					progressLabel.SetText(fmt.Sprintf("⛔ Translation cancelled by user (%d/%d files completed)", successCount, totalFiles))
 					if resultsArea != nil {
-						resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n\n⛔ Translation cancelled by user\n✅ Completed: %d files\n⏭️ Skipped: %d files", successCount, totalFiles-i))
+						appendToResults(fmt.Sprintf("\n⛔ Translation cancelled by user\n✅ Completed: %d files\n⏭️ Skipped: %d files", successCount, totalFiles-i))
 						// Only auto-scroll if user is near bottom
 						if resultsScroll != nil && isNearBottom() {
 							resultsScroll.ScrollToBottom()
@@ -1128,7 +1157,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				progressBar.SetValue(fileProgress)
 				progressLabel.SetText(fmt.Sprintf("Translating %s (%d/%d)", fileName, i+1, totalFiles))
 				if resultsArea != nil {
-					resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n🔄 Processing: %s", fileName))
+					appendToResults(fmt.Sprintf("🔄 Processing: %s", fileName))
 					// Only auto-scroll if user is near bottom
 					if resultsScroll != nil && isNearBottom() {
 						resultsScroll.ScrollToBottom()
@@ -1149,8 +1178,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 			// Show file processing start
 			if resultsArea != nil {
 				fyne.Do(func() {
-					resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n🔄 Processing: %s", fileName))
-					resultsArea.SetText(resultsArea.Text + "\n   📖 Reading subtitle file...")
+					appendToResults("   📖 Reading subtitle file...")
 					// Only auto-scroll if user is near bottom
 					if resultsScroll != nil && isNearBottom() {
 						resultsScroll.ScrollToBottom()
@@ -1162,7 +1190,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 			success, errorMsg := translateSubtitleFileWithProgress(inputFile, outputFile, sourceLang, targetLang, config, func(status string) {
 				if resultsArea != nil {
 					fyne.Do(func() {
-						resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n   %s", status))
+						appendToResults(fmt.Sprintf("   %s", status))
 						// Only auto-scroll if user is near bottom
 						if resultsScroll != nil && isNearBottom() {
 							resultsScroll.ScrollToBottom()
@@ -1175,7 +1203,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				successCount++
 				if resultsArea != nil {
 					fyne.Do(func() {
-						resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n✅ Completed: %s → %s", fileName, filepath.Base(outputFile)))
+						appendToResults(fmt.Sprintf("✅ Completed: %s → %s", fileName, filepath.Base(outputFile)))
 						// Only auto-scroll if user is near bottom
 						if resultsScroll != nil && isNearBottom() {
 							resultsScroll.ScrollToBottom()
@@ -1185,7 +1213,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 			} else {
 				if resultsArea != nil {
 					fyne.Do(func() {
-						resultsArea.SetText(resultsArea.Text + fmt.Sprintf("\n❌ Failed: %s\n   Error: %s", fileName, errorMsg))
+						appendToResults(fmt.Sprintf("❌ Failed: %s\n   Error: %s", fileName, errorMsg))
 						// Only auto-scroll if user is near bottom
 						if resultsScroll != nil && isNearBottom() {
 							resultsScroll.ScrollToBottom()
@@ -1204,7 +1232,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				if strings.TrimSpace(finalOutputDir) == "" && len(inputFiles) > 0 {
 					finalOutputDir = filepath.Dir(inputFiles[0])
 				}
-				resultsArea.SetText(resultsArea.Text + fmt.Sprintf(T("ai.batch_complete_summary"), successCount, totalFiles-successCount, finalOutputDir))
+				appendToResults(fmt.Sprintf(T("ai.batch_complete_summary"), successCount, totalFiles-successCount, finalOutputDir))
 				updateAIResultsActions(w, finalOutputDir)
 				// Only auto-scroll if user is near bottom
 				if resultsScroll != nil && isNearBottom() {

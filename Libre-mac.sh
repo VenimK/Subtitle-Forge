@@ -9,7 +9,7 @@ PID_FILE="${PID_FILE:-$PREFIX_DIR/libretranslate.pid}"
 API_KEY_FILE="${API_KEY_FILE:-$PREFIX_DIR/api_key.txt}"
 
 HOST="${HOST:-127.0.0.1}"
-PORT="${PORT:-5000}"
+PORT="${PORT:-5100}"
 THREADS="${THREADS:-8}"
 
 API_KEYS="${API_KEYS:-true}"

@@ -529,8 +529,8 @@ func isWhisperConfigured() bool {
 }
 
 func isLibreTranslateConfigured() (bool, bool) {
-	url := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("libretranslate_url", "http://127.0.0.1:5000"))
-	if url != "" && url != "http://127.0.0.1:5000" {
+	url := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("libretranslate_url", "http://127.0.0.1:5100"))
+	if url != "" && url != "http://127.0.0.1:5100" {
 		return true, false
 	}
 

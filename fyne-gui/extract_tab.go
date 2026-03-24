@@ -250,86 +250,15 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 	filterEntry := widget.NewEntry()
 	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, or filename...")
 
-	filterTracks := func(filterText string) {
-		trackList.Objects = nil
-		tracksToShow := make([]*TrackItem, len(trackItems))
-		copy(tracksToShow, trackItems)
-		if filterText == "" {
-			for _, t := range tracksToShow {
-				var trackInfoText string
-				if t.FilePath != "" {
-					filename := filepath.Base(t.FilePath)
-					trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, t.Lang, t.Codec, t.Name, filename)
-				} else {
-					trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name)
-				}
-				trackInfo := widget.NewLabel(trackInfoText)
-				var row *fyne.Container
-				if t.ConvertOCR != nil {
-					ocrLabel := widget.NewLabel("Convert to SRT")
-					if t.LangSelect != nil {
-						langLabel := widget.NewLabel("OCR Language:")
-						row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel, langLabel, t.LangSelect)
-					} else {
-						row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel)
-					}
-				} else {
-					row = container.NewHBox(t.Check, t.Status, trackInfo)
-				}
-				trackList.Add(row)
-			}
-		} else {
-			lowerFilter := strings.ToLower(filterText)
-			for _, t := range trackItems {
-				matchesFilter := strings.Contains(strings.ToLower(t.Lang), lowerFilter) ||
-					strings.Contains(strings.ToLower(t.Codec), lowerFilter) ||
-					strings.Contains(strings.ToLower(t.Name), lowerFilter) ||
-					strings.Contains(strings.ToLower(fmt.Sprintf("Track %d", t.Num)), lowerFilter) ||
-					strings.Contains(strings.ToLower(filepath.Base(t.FilePath)), lowerFilter)
-				if matchesFilter {
-					var trackInfoText string
-					if t.FilePath != "" {
-						filename := filepath.Base(t.FilePath)
-						trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, t.Lang, t.Codec, t.Name, filename)
-					} else {
-						trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name)
-					}
-					trackInfo := widget.NewLabel(trackInfoText)
-					var row *fyne.Container
-					if t.ConvertOCR != nil {
-						ocrLabel := widget.NewLabel("Convert to SRT")
-						if t.LangSelect != nil {
-							langLabel := widget.NewLabel("OCR Language:")
-							row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel, langLabel, t.LangSelect)
-						} else {
-							row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, ocrLabel)
-						}
-					} else {
-						row = container.NewHBox(t.Check, t.Status, trackInfo)
-					}
-					trackList.Add(row)
-				}
-			}
-		}
-		trackList.Refresh()
-	}
-
-	filterEntry.OnChanged = func(text string) {
-		filterTracks(text)
-	}
-
 	sortSelect := widget.NewSelect([]string{
 		"Default Order",
 		"By Filename",
 		"By Language",
 		"By Codec",
 		"By Track Number",
-	}, func(value string) {
-		filterTracks(filterEntry.Text)
-	})
-	sortSelect.SetSelected("Default Order")
+	}, nil)
 
-	// Now update filterTracks to include sorting
+	var filterTracks func(string)
 	filterTracks = func(filterText string) {
 		trackList.Objects = nil
 		var tracksToShow []*TrackItem
@@ -420,6 +349,10 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 		}
 		trackList.Refresh()
 	}
+
+	filterEntry.OnChanged = func(text string) { filterTracks(text) }
+	sortSelect.OnChanged = func(_ string) { filterTracks(filterEntry.Text) }
+	sortSelect.SetSelected("Default Order")
 
 	filterEntry.SetPlaceHolder("Filter tracks by language, codec, name, filename, or track number...                                                 ")
 	filterBox := container.New(

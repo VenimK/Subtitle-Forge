@@ -592,14 +592,18 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	logEntry.Wrapping = fyne.TextWrapWord
 	logScroll := container.NewScroll(logEntry)
 	logScroll.SetMinSize(fyne.NewSize(0, 520))
-	var logText string
+	const maxWhisperLogLines = 500
+	var logLines []string
 	var logFile *os.File
 	var logMu sync.Mutex
 	appendLog = func(msg string) {
 		ts := time.Now().Format("15:04:05")
 		fyne.Do(func() {
-			logText += fmt.Sprintf("[%s] %s\n", ts, msg)
-			logEntry.SetText(logText)
+			logLines = append(logLines, fmt.Sprintf("[%s] %s", ts, msg))
+			if len(logLines) > maxWhisperLogLines {
+				logLines = logLines[len(logLines)-maxWhisperLogLines:]
+			}
+			logEntry.SetText(strings.Join(logLines, "\n"))
 			logScroll.ScrollToBottom()
 		})
 		logMu.Lock()

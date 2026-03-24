@@ -42,11 +42,13 @@ var debugLogger *os.File
 // Application Logging System
 // ============================================================================
 
+const maxAppLogLines = 2000
+
 var (
 	appLogFile        *os.File
 	appLogger         *log.Logger
 	appLogPath        string
-	appLogBuffer      strings.Builder
+	appLogLines       []string
 	appLogMutex       sync.Mutex
 	logUpdateCallback func() // Callback to update UI when new log entry is added
 )
@@ -96,28 +98,25 @@ func closeAppLogger() {
 
 // AppLog logs a message to both file and in-memory buffer for UI display
 func AppLog(level string, format string, args ...any) {
-	appLogMutex.Lock()
-	defer appLogMutex.Unlock()
-
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	message := fmt.Sprintf(format, args...)
 	logLine := fmt.Sprintf("[%s] [%s] %s\n", timestamp, level, message)
 
-	// Write to file if available
+	appLogMutex.Lock()
 	if appLogger != nil {
 		appLogger.Printf("[%s] %s", level, message)
 	}
+	appLogLines = append(appLogLines, logLine)
+	if len(appLogLines) > maxAppLogLines {
+		appLogLines = appLogLines[len(appLogLines)-maxAppLogLines:]
+	}
+	cb := logUpdateCallback
+	appLogMutex.Unlock()
 
-	// Write to in-memory buffer for UI
-	appLogBuffer.WriteString(logLine)
-
-	// Trigger UI update callback if set
-	if logUpdateCallback != nil {
-		go func() {
-			fyne.Do(func() {
-				logUpdateCallback()
-			})
-		}()
+	// Trigger UI update callback after releasing mutex to avoid deadlock
+	// (callback calls GetLogBuffer which also locks appLogMutex)
+	if cb != nil {
+		fyne.Do(cb)
 	}
 }
 
@@ -152,14 +151,14 @@ func AppLogCmd(cmd *exec.Cmd, output []byte, err error) {
 func GetLogBuffer() string {
 	appLogMutex.Lock()
 	defer appLogMutex.Unlock()
-	return appLogBuffer.String()
+	return strings.Join(appLogLines, "")
 }
 
 // ClearLogBuffer clears the in-memory log buffer (not the file)
 func ClearLogBuffer() {
 	appLogMutex.Lock()
-	defer appLogMutex.Unlock()
-	appLogBuffer.Reset()
+	appLogLines = appLogLines[:0]
+	appLogMutex.Unlock()
 	AppLog("INFO", "Log buffer cleared")
 }
 
@@ -442,7 +441,7 @@ func main() {
 	var lastSize fyne.Size
 	var lastX, lastY float64
 	go func() {
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
@@ -530,14 +529,14 @@ func main() {
 
 	// Create tabs with scrollable content
 	tabs := container.NewAppTabs(
-		container.NewTabItem(T("tab.extract"), extractScroll),
-		container.NewTabItem(T("tab.insert"), insertScroll),
-		container.NewTabItem(T("tab.convert"), convertScroll),
+		container.NewTabItem("📂 "+T("tab.extract"), extractScroll),
+		container.NewTabItem("➕ "+T("tab.insert"), insertScroll),
+		container.NewTabItem("🔄 "+T("tab.convert"), convertScroll),
 		container.NewTabItem("🎙️ "+T("tab.whisper"), whisperScroll),
 		container.NewTabItem("🌍 "+T("tab.libre"), libreTranslateScroll),
 		container.NewTabItem("🤖 "+T("tab.ai_translate"), aiTranslationScroll),
 		container.NewTabItem("📋 "+T("tab.logs"), logsScroll),
-		container.NewTabItem(T("tab.settings"), settingsScroll),
+		container.NewTabItem("⚙️ "+T("tab.settings"), settingsScroll),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 
@@ -545,7 +544,7 @@ func main() {
 	tabs.OnChanged = func(tab *container.TabItem) {
 		// Default: clear any previous tab's drop handler
 		w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {})
-		if tab.Text == T("tab.insert") {
+		if tab.Text == "➕ "+T("tab.insert") {
 			// Set up drag and drop for Insert Subtitles tab
 			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
 				if len(uris) > 0 {
@@ -692,7 +691,7 @@ func main() {
 					})
 				}
 			})
-		} else if tab.Text == T("tab.convert") {
+		} else if tab.Text == "🔄 "+T("tab.convert") {
 			// Enhanced drag and drop for Convert Subtitles tab (supports batch processing)
 			w.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
 				if len(uris) == 0 {
@@ -745,7 +744,7 @@ func main() {
 					}
 				}
 			})
-		} else if tab.Text == T("tab.extract") {
+		} else if tab.Text == "📂 "+T("tab.extract") {
 			// Delegate to extract tab's drag-and-drop handler
 			w.SetOnDropped(extractWidgets.OnDropped)
 		}

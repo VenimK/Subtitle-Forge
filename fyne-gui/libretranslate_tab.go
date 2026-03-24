@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -37,9 +38,13 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	title.TextStyle = fyne.TextStyle{Bold: true}
 	title.Alignment = fyne.TextAlignCenter
 
-	defaultURL := a.Preferences().StringWithFallback("libretranslate_url", "http://127.0.0.1:5000")
+	defaultURL := a.Preferences().StringWithFallback("libretranslate_url", "http://127.0.0.1:5100")
+	if defaultURL == "http://127.0.0.1:5000" {
+		defaultURL = "http://127.0.0.1:5100"
+		a.Preferences().SetString("libretranslate_url", defaultURL)
+	}
 	urlEntry := widget.NewEntry()
-	urlEntry.SetPlaceHolder("http://127.0.0.1:5000")
+	urlEntry.SetPlaceHolder("http://127.0.0.1:5100")
 	urlEntry.SetText(defaultURL)
 	urlEntry.OnChanged = func(s string) { a.Preferences().SetString("libretranslate_url", s) }
 
@@ -199,7 +204,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		refreshLanguagesBtn.Disable()
 
 		go func() {
-			langs, err := fetchLibreTranslateLanguages(base)
+			langs, err := fetchLibreTranslateLanguages(base, apiKeyEntry.Text)
 			fyne.Do(func() {
 				progress.Hide()
 				refreshLanguagesBtn.Enable()
@@ -260,25 +265,92 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	logGrid := widget.NewTextGrid()
 	logScroll := container.NewScroll(logGrid)
 	logScroll.SetMinSize(fyne.NewSize(0, 140))
-	var logText string
+	const maxLibreLogLines = 500
+	var logLines []string
 
 	appendLog := func(msg string) {
 		ts := time.Now().Format("15:04:05")
 		fyne.Do(func() {
-			logText += fmt.Sprintf("[%s] %s\n", ts, msg)
-			logGrid.SetText(logText)
+			logLines = append(logLines, fmt.Sprintf("[%s] %s", ts, msg))
+			if len(logLines) > maxLibreLogLines {
+				logLines = logLines[len(logLines)-maxLibreLogLines:]
+			}
+			logGrid.SetText(strings.Join(logLines, "\n"))
 			logScroll.ScrollToBottom()
 		})
 	}
 
-	findLibreMacScript := func() string {
-		candidates := []string{"../Libre-mac.sh", "Libre-mac.sh"}
-		for _, p := range candidates {
-			if st, err := os.Stat(p); err == nil && !st.IsDir() {
-				return p
+	// Server management: status indicator and smart buttons
+	serverStatusLabel := widget.NewLabel("🔴 Stopped")
+	serverStatusLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+	scriptAvailable := runtime.GOOS == "darwin" && libreHelperScriptPath() != ""
+
+	startBtn := widget.NewButton("Start Server", nil)
+	stopBtn := widget.NewButton("Stop Server", nil)
+	installBtn := widget.NewButton("Install LibreTranslate", nil)
+
+	autoFillAPIKey := func() {
+		if strings.TrimSpace(apiKeyEntry.Text) != "" {
+			return
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		keyFile := filepath.Join(home, ".libretranslate", "api_key.txt")
+		data, err := os.ReadFile(keyFile)
+		if err != nil {
+			return
+		}
+		key := strings.TrimSpace(string(data))
+		if key != "" {
+			fyne.Do(func() {
+				apiKeyEntry.SetText(key)
+				a.Preferences().SetString("libretranslate_api_key", key)
+			})
+		}
+	}
+
+	updateButtonStates := func(running bool) {
+		if running {
+			serverStatusLabel.SetText("🟢 Running")
+			startBtn.Disable()
+			if scriptAvailable {
+				stopBtn.Enable()
+			}
+			installBtn.Disable()
+		} else {
+			serverStatusLabel.SetText("🔴 Stopped")
+			if scriptAvailable {
+				startBtn.Enable()
+			}
+			stopBtn.Disable()
+			if scriptAvailable && !isLibreLocalInstallPresent() {
+				installBtn.Enable()
+			} else {
+				installBtn.Disable()
 			}
 		}
-		return ""
+		if !scriptAvailable {
+			startBtn.Disable()
+			stopBtn.Disable()
+			installBtn.Disable()
+		}
+	}
+
+	checkServerStatus := func() {
+		baseURL := strings.TrimSpace(urlEntry.Text)
+		if baseURL == "" {
+			baseURL = "http://127.0.0.1:5100"
+		}
+		running := isLibreTranslateServerUp(baseURL)
+		if running {
+			autoFillAPIKey()
+		}
+		fyne.Do(func() {
+			updateButtonStates(running)
+		})
 	}
 
 	parsePositiveInt := func(label, raw string) (int, error) {
@@ -291,42 +363,174 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	runLibreMac := func(subcmd string) {
 		if runtime.GOOS != "darwin" {
-			dialog.ShowError(fmt.Errorf("local server helper is only available on macOS"), w)
+			appendLog("❌ Local server helper is only available on macOS")
 			return
 		}
-		script := findLibreMacScript()
+		script := libreHelperScriptPath()
 		if script == "" {
-			dialog.ShowError(fmt.Errorf("Libre-mac.sh not found. Make sure it exists next to the app or in the repo root."), w)
+			appendLog("❌ Libre-mac.sh not found. Make sure it exists next to the app or in the repo root.")
 			return
 		}
 
 		threads, err := parsePositiveInt("THREADS", threadsEntry.Text)
 		if err != nil {
-			dialog.ShowError(err, w)
+			fyne.Do(func() { dialog.ShowError(err, w) })
 			return
 		}
 		reqLimit, err := parsePositiveInt("REQ_LIMIT", reqLimitEntry.Text)
 		if err != nil {
-			dialog.ShowError(err, w)
+			fyne.Do(func() { dialog.ShowError(err, w) })
 			return
 		}
 
-		appendLog(fmt.Sprintf("Running local server: %s (THREADS=%d, REQ_LIMIT=%d)", subcmd, threads, reqLimit))
+		appendLog(fmt.Sprintf("Running: %s (THREADS=%d, REQ_LIMIT=%d)", subcmd, threads, reqLimit))
+
 		cmd := exec.Command("bash", script, subcmd)
 		cmd.Env = append(os.Environ(),
 			fmt.Sprintf("THREADS=%d", threads),
 			fmt.Sprintf("REQ_LIMIT=%d", reqLimit),
 		)
-		out, err := cmd.CombinedOutput()
-		if len(out) > 0 {
-			appendLog(strings.TrimSpace(string(out)))
-		}
+
+		stdout, err := cmd.StdoutPipe()
 		if err != nil {
-			appendLog(fmt.Sprintf("❌ Command failed: %v", err))
+			appendLog(fmt.Sprintf("❌ Failed to create pipe: %v", err))
 			return
 		}
-		appendLog("✅ Done")
+		cmd.Stderr = cmd.Stdout // merge stderr into stdout pipe
+
+		if err := cmd.Start(); err != nil {
+			appendLog(fmt.Sprintf("❌ Failed to start: %v", err))
+			return
+		}
+
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.TrimSpace(line) != "" {
+				appendLog(line)
+			}
+		}
+
+		if err := cmd.Wait(); err != nil {
+			appendLog(fmt.Sprintf("❌ Command failed: %v", err))
+		} else {
+			appendLog("✅ Done")
+		}
+
+		// Re-check server status after command completes
+		if subcmd == "start-bg" {
+			// Server needs time to initialize; poll until it responds or timeout
+			appendLog("Waiting for server to become ready...")
+			for i := 0; i < 15; i++ {
+				time.Sleep(2 * time.Second)
+				baseURL := strings.TrimSpace(urlEntry.Text)
+				if baseURL == "" {
+					baseURL = "http://127.0.0.1:5100"
+				}
+				if isLibreTranslateServerUp(baseURL) {
+					appendLog("✅ Server is ready")
+					checkServerStatus()
+					return
+				}
+			}
+			appendLog("⚠️ Server did not respond within 30s — it may still be loading")
+		} else {
+			time.Sleep(1 * time.Second)
+		}
+		checkServerStatus()
 	}
+
+	runLibreInstall := func() {
+		if runtime.GOOS != "darwin" {
+			appendLog("❌ Install helper is only available on macOS")
+			return
+		}
+		script := libreHelperScriptPath()
+		if script == "" {
+			appendLog("❌ Libre-mac.sh not found")
+			return
+		}
+
+		absScript, err := filepath.Abs(script)
+		if err != nil {
+			absScript = script
+		}
+
+		appendLog("Opening terminal for LibreTranslate installation...")
+		osascript := fmt.Sprintf(`tell application "Terminal"
+	activate
+	do script "bash %s install"
+end tell`, absScript)
+		cmd := exec.Command("osascript", "-e", osascript)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			appendLog(fmt.Sprintf("❌ Failed to open terminal: %v (%s)", err, strings.TrimSpace(string(out))))
+		} else {
+			appendLog("✅ Install started in Terminal. Close terminal when done.")
+		}
+	}
+
+	startBtn.OnTapped = func() {
+		startBtn.Disable()
+		serverStatusLabel.SetText("🟡 Starting...")
+		go runLibreMac("start-bg")
+	}
+	stopBtn.OnTapped = func() {
+		stopBtn.Disable()
+		serverStatusLabel.SetText("🟡 Stopping...")
+		go func() {
+			runLibreMac("stop")
+
+			// If server is still responding after script stop, kill the orphan process by port
+			baseURL := strings.TrimSpace(urlEntry.Text)
+			if baseURL == "" {
+				baseURL = "http://127.0.0.1:5100"
+			}
+			if isLibreTranslateServerUp(baseURL) {
+				appendLog("Server still responding — finding orphan process...")
+				// Extract port from URL
+				port := "5000"
+				if u, err := url.Parse(baseURL); err == nil && u.Port() != "" {
+					port = u.Port()
+				}
+				// Find PID of the process listening on the port
+				pidOut, err := exec.Command("bash", "-c",
+					fmt.Sprintf("lsof -nP -i TCP:%s -sTCP:LISTEN -t 2>/dev/null | head -1", port),
+				).Output()
+				pid := strings.TrimSpace(string(pidOut))
+				if err != nil || pid == "" {
+					appendLog(fmt.Sprintf("⚠️ No process found listening on port %s", port))
+				} else {
+					appendLog(fmt.Sprintf("Killing PID %s on port %s...", pid, port))
+					if out, err := exec.Command("kill", pid).CombinedOutput(); err != nil {
+						appendLog(fmt.Sprintf("⚠️ kill failed: %v %s", err, strings.TrimSpace(string(out))))
+					} else {
+						appendLog("✅ Orphan process killed")
+					}
+				}
+				time.Sleep(1 * time.Second)
+				checkServerStatus()
+			}
+		}()
+	}
+	installBtn.OnTapped = func() {
+		go runLibreInstall()
+	}
+
+	// Initial button state
+	updateButtonStates(false)
+
+	// Auto-check server status on tab creation
+	go checkServerStatus()
+
+	// Periodic status polling (every 10 seconds)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			<-ticker.C
+			checkServerStatus()
+		}
+	}()
 
 	var translateBtn *widget.Button
 	translateBtn = widget.NewButton("Translate SRT", func() {
@@ -481,28 +685,42 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		func() *fyne.Container {
 			hint := widget.NewLabel("THREADS/REQ_LIMIT apply only to a local LibreTranslate server started via Libre-mac.sh (macOS). For remote servers, change these on the server.")
 			hint.Wrapping = fyne.TextWrapWord
-			startBtn := widget.NewButton("Start Local Server (bg)", func() { go runLibreMac("start-bg") })
-			statusBtn := widget.NewButton("Status", func() { go runLibreMac("status") })
-			stopBtn := widget.NewButton("Stop", func() { go runLibreMac("stop") })
 
-			if runtime.GOOS != "darwin" || findLibreMacScript() == "" {
-				startBtn.Disable()
-				statusBtn.Disable()
-				stopBtn.Disable()
-			}
+			serverLabel := widget.NewLabel("Local Server")
+			serverLabel.TextStyle = fyne.TextStyle{Bold: true}
 
 			return container.NewVBox(
+				serverLabel,
+				container.NewHBox(widget.NewLabel("Status:"), serverStatusLabel, layout.NewSpacer()),
+				container.NewHBox(startBtn, stopBtn, installBtn),
 				hint,
-				container.NewHBox(startBtn, statusBtn, stopBtn),
 			)
 		}(),
-		widget.NewLabel("Log"),
+		container.NewHBox(widget.NewLabel("Log"), layout.NewSpacer(), widget.NewButton("Clear", func() {
+			logLines = nil
+			logGrid.SetText("")
+		})),
 		logScroll,
 		resultScroll,
 		libreResultActions,
 	)
 
 	return content
+}
+
+// isLibreTranslateServerUp checks if a LibreTranslate server is running on the given URL.
+// It hits /languages which is specific to LibreTranslate:
+//   - 200 → running, no auth required
+//   - 403 → running, API key required
+//   - anything else (or connection error) → not LibreTranslate
+func isLibreTranslateServerUp(baseURL string) bool {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(strings.TrimRight(baseURL, "/") + "/languages")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusForbidden
 }
 
 func checkLibreTranslateReachable(baseURL string) error {
@@ -523,10 +741,15 @@ func checkLibreTranslateReachable(baseURL string) error {
 	return nil
 }
 
-func fetchLibreTranslateLanguages(baseURL string) ([]struct{ Code, Name string }, error) {
+func fetchLibreTranslateLanguages(baseURL, apiKey string) ([]struct{ Code, Name string }, error) {
 	u, err := url.Parse(strings.TrimRight(baseURL, "/") + "/languages")
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(apiKey) != "" {
+		q := u.Query()
+		q.Set("api_key", apiKey)
+		u.RawQuery = q.Encode()
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}

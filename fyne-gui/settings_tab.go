@@ -65,11 +65,7 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 
 	// Theme selector with styled label
 	themeOptions := []string{"System Default", "Light Theme", "Dark Theme", "Blue Theme", "Warm Theme", "Green Theme", "Spring Theme", "Summer Theme", "Autumn Theme", "Winter Theme"}
-	themeSelector := widget.NewSelect(themeOptions, func(selected string) {
-		// Save the theme preference
-		a.Preferences().SetString("theme", selected)
-		ApplyThemeByName(a, selected)
-	})
+	themeSelector := widget.NewSelect(themeOptions, nil)
 
 	// Load saved theme preference or default to Dark Theme
 	selectedTheme := a.Preferences().StringWithFallback("theme", "Dark Theme")

@@ -11,7 +11,7 @@ func TestTranslation() {
 	fmt.Println("🧪 AI Translation Test Helper")
 	fmt.Println("================================")
 	fmt.Println()
-	
+
 	// Example: Test with a simple SRT file
 	testSRT := `1
 00:00:01,000 --> 00:00:03,000
@@ -29,17 +29,17 @@ Would you like to grab coffee?`
 	tempDir := os.TempDir()
 	inputFile := filepath.Join(tempDir, "test_input.srt")
 	outputFile := filepath.Join(tempDir, "test_output_portuguese.srt")
-	
+
 	err := os.WriteFile(inputFile, []byte(testSRT), 0644)
 	if err != nil {
 		fmt.Printf("❌ Error creating test file: %v\n", err)
 		return
 	}
-	
+
 	fmt.Printf("📁 Test input file: %s\n", inputFile)
 	fmt.Printf("📁 Test output file: %s\n", outputFile)
 	fmt.Println()
-	
+
 	// Get API key from environment or prompt user
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
@@ -48,29 +48,29 @@ Would you like to grab coffee?`
 		fmt.Println("🔗 Get your API key at: https://aistudio.google.com/app/apikey")
 		return
 	}
-	
+
 	// Test with GST
 	fmt.Println("🚀 Testing with GST...")
 	fmt.Println()
-	
+
 	config := AITranslationConfig{
-		GSTPath:         findGSTPath(),
-		APIKey:          apiKey,
-		Model:           "gemini-2.0-flash-exp",
-		Temperature:     0.3, // Lower for more consistent translations
-		BatchSize:       100,
-		Description:     "Casual conversation between friends. Use natural, conversational Portuguese.",
-		ResumeMode:      false,
-		ProgressLog:     false,
-		ThoughtsLog:     false,
+		GSTPath:     findGSTPath(),
+		APIKey:      apiKey,
+		Model:       "gemini-2.5-flash",
+		Temperature: 0.3, // Lower for more consistent translations
+		BatchSize:   100,
+		Description: "Casual conversation between friends. Use natural, conversational Portuguese.",
+		ResumeMode:  false,
+		ProgressLog: false,
+		ThoughtsLog: false,
 	}
-	
+
 	success, errMsg := translateSubtitleFileWithError(inputFile, outputFile, "English", "Portuguese", config)
-	
+
 	if success {
 		fmt.Println("✅ Translation completed successfully!")
 		fmt.Println()
-		
+
 		// Read and display the output
 		outputContent, err := os.ReadFile(outputFile)
 		if err == nil {
@@ -79,7 +79,7 @@ Would you like to grab coffee?`
 			fmt.Println(string(outputContent))
 			fmt.Println("─────────────────────")
 		}
-		
+
 		fmt.Println()
 		fmt.Println("💡 Try different settings:")
 		fmt.Println("   • Lower temperature (0.1-0.3) for more consistent translations")
@@ -90,7 +90,7 @@ Would you like to grab coffee?`
 	} else {
 		fmt.Printf("❌ Translation failed: %s\n", errMsg)
 	}
-	
+
 	fmt.Println()
 	fmt.Println("🔍 What's different in the improved version:")
 	fmt.Println("   ✓ Structured JSON request/response with schema")
