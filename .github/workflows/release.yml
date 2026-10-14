@@ -11,6 +11,7 @@ jobs:
     name: Build and Release
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -48,6 +49,7 @@ jobs:
 
       # Install Fyne CLI (works on all platforms)
       - name: Install Fyne CLI
+        shell: bash
         run: |
           # Install both versions to ensure compatibility.
           # Use the external linker on macOS so the resulting binary has an
