@@ -49,17 +49,18 @@ jobs:
       # Install Fyne CLI (works on all platforms)
       - name: Install Fyne CLI
         run: |
-          # Install both versions to ensure compatibility
-          go install fyne.io/fyne/v2/cmd/fyne@latest
-          go install fyne.io/tools/cmd/fyne@latest
+          # Install both versions to ensure compatibility.
+          # Use the external linker on macOS so the resulting binary has an
+          # LC_UUID, which macOS Sequoia requires to run Go-built tools.
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            CGO_ENABLED=1 go install -ldflags="-linkmode=external" fyne.io/fyne/v2/cmd/fyne@latest
+            CGO_ENABLED=1 go install -ldflags="-linkmode=external" fyne.io/tools/cmd/fyne@latest
+          else
+            go install fyne.io/fyne/v2/cmd/fyne@latest
+            go install fyne.io/tools/cmd/fyne@latest
+          fi
           # Add Go bin to PATH
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-
-      # macOS Sequoia requires Go-built CLI tools to have an LC_UUID;
-      # ad-hoc codesign adds one so fyne package does not abort.
-      - name: Codesign Fyne CLI (macOS)
-        if: startsWith(matrix.os, 'macos')
-        run: codesign -s - -f "$(go env GOPATH)/bin/fyne"
 
       # Create build directory (platform-specific commands)
       - name: Create build directory (Unix)
