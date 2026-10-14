@@ -15,15 +15,15 @@ type ThemeType string
 
 // Predefined theme types
 const (
-	ThemeTypeLight   ThemeType = "light"
-	ThemeTypeDark    ThemeType = "dark"
-	ThemeTypeBlue    ThemeType = "blue"
-	ThemeTypeWarm    ThemeType = "warm"
-	ThemeTypeGreen   ThemeType = "green"
-	ThemeTypeSpring  ThemeType = "spring"
-	ThemeTypeSummer  ThemeType = "summer"
-	ThemeTypeAutumn  ThemeType = "autumn"
-	ThemeTypeWinter  ThemeType = "winter"
+	ThemeTypeLight  ThemeType = "light"
+	ThemeTypeDark   ThemeType = "dark"
+	ThemeTypeBlue   ThemeType = "blue"
+	ThemeTypeWarm   ThemeType = "warm"
+	ThemeTypeGreen  ThemeType = "green"
+	ThemeTypeSpring ThemeType = "spring"
+	ThemeTypeSummer ThemeType = "summer"
+	ThemeTypeAutumn ThemeType = "autumn"
+	ThemeTypeWinter ThemeType = "winter"
 )
 
 // UserThemePreferences stores the user's theme color preferences
@@ -154,8 +154,8 @@ func SpringTheme() UserThemePreferences {
 	return UserThemePreferences{
 		ThemeType:        ThemeTypeSpring,
 		PrimaryColor:     color.NRGBA{R: 120, G: 190, B: 33, A: 255},  // Fresh green
-		ButtonColor:      color.NRGBA{R: 50, G: 120, B: 50, A: 255},  // Dark green button
-		BackgroundColor:  color.NRGBA{R: 15, G: 30, B: 15, A: 255},   // Very dark green background
+		ButtonColor:      color.NRGBA{R: 50, G: 120, B: 50, A: 255},   // Dark green button
+		BackgroundColor:  color.NRGBA{R: 15, G: 30, B: 15, A: 255},    // Very dark green background
 		ForegroundColor:  color.NRGBA{R: 180, G: 230, B: 180, A: 255}, // Light green text
 		HoverColor:       color.NRGBA{R: 100, G: 160, B: 100, A: 30},  // Medium green hover
 		InputBgColor:     color.NRGBA{R: 25, G: 40, B: 25, A: 255},    // Dark green input bg
@@ -193,9 +193,9 @@ func SummerTheme() UserThemePreferences {
 func AutumnTheme() UserThemePreferences {
 	return UserThemePreferences{
 		ThemeType:        ThemeTypeAutumn,
-		PrimaryColor:     color.NRGBA{R: 204, G: 85, B: 0, A: 255},   // Burnt orange
-		ButtonColor:      color.NRGBA{R: 140, G: 70, B: 20, A: 255},  // Dark sienna
-		BackgroundColor:  color.NRGBA{R: 30, G: 20, B: 10, A: 255},   // Very dark brown background
+		PrimaryColor:     color.NRGBA{R: 204, G: 85, B: 0, A: 255},    // Burnt orange
+		ButtonColor:      color.NRGBA{R: 140, G: 70, B: 20, A: 255},   // Dark sienna
+		BackgroundColor:  color.NRGBA{R: 30, G: 20, B: 10, A: 255},    // Very dark brown background
 		ForegroundColor:  color.NRGBA{R: 220, G: 180, B: 130, A: 255}, // Light tan text
 		HoverColor:       color.NRGBA{R: 180, G: 100, B: 50, A: 30},   // Copper hover
 		InputBgColor:     color.NRGBA{R: 50, G: 30, B: 15, A: 255},    // Dark brown input bg

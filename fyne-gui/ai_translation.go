@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -77,189 +79,8 @@ func findGSTPath() string {
 	return "gst"
 }
 
-// translateWithGSTInTerminal opens a terminal window and runs gst translate there
-func translateWithGSTInTerminal(inputFile, outputFile, targetLang string, config AITranslationConfig) error {
-	gstPath := config.GSTPath
-	if strings.TrimSpace(gstPath) == "" {
-		gstPath = findGSTPath()
-	}
-
-	// Build gst command arguments
-	args := []string{"translate"}
-	if inputFile != "" {
-		args = append(args, "-i", inputFile)
-	}
-	if targetLang != "" {
-		args = append(args, "-l", targetLang)
-	}
-	if config.APIKey != "" {
-		args = append(args, "-k", config.APIKey)
-	}
-	if config.SecondaryAPIKey != "" {
-		args = append(args, "-k2", config.SecondaryAPIKey)
-	}
-	if outputFile != "" {
-		args = append(args, "-o", outputFile)
-	}
-	if config.Model != "" {
-		args = append(args, "-m", config.Model)
-	}
-	if config.BatchSize > 0 {
-		args = append(args, "-b", fmt.Sprintf("%d", config.BatchSize))
-	}
-	if config.Temperature >= 0 {
-		args = append(args, "--temperature", fmt.Sprintf("%.2f", config.Temperature))
-	}
-	if config.ProgressLog {
-		args = append(args, "--progress-log")
-	}
-	if config.ThoughtsLog {
-		args = append(args, "--thoughts-log")
-	}
-	if config.ThinkingBudget > 0 {
-		args = append(args, "--thinking-budget", fmt.Sprintf("%d", config.ThinkingBudget))
-	}
-	if config.ThinkingLevel != "" {
-		args = append(args, "--thinking-level", config.ThinkingLevel)
-	}
-	if config.ResumeMode {
-		args = append(args, "--resume")
-	} else {
-		args = append(args, "--no-resume")
-	}
-	if desc := strings.TrimSpace(config.Description); desc != "" {
-		args = append(args, "-d", desc)
-	}
-
-	// Build full command string with proper escaping
-	cmdStr := gstPath
-	for _, arg := range args {
-		// Escape single quotes and wrap args with spaces in quotes
-		if strings.Contains(arg, " ") || strings.Contains(arg, "'") {
-			cmdStr += " '" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
-		} else {
-			cmdStr += " " + arg
-		}
-	}
-
-	// Build enhanced terminal script with info display and error handling
-	fileName := filepath.Base(inputFile)
-	outputFileName := filepath.Base(outputFile)
-
-	terminalScript := fmt.Sprintf(`
-echo -ne "\\033]0;GST Translation: %s\\007"
-clear
-echo "╔════════════════════════════════════════════════════════════════════╗"
-echo "║                    🌐 GST Subtitle Translation                     ║"
-echo "╚════════════════════════════════════════════════════════════════════╝"
-echo ""
-echo "📁 Input:  %s"
-echo "📝 Output: %s"
-echo "🌍 Target: %s"
-echo ""
-if [ -f '%s' ]; then
-    line_count=$(grep -c "^[0-9]\\+$" '%s' 2>/dev/null || echo "?")
-    echo "📊 Subtitle entries: $line_count"
-fi
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "⏳ Starting translation..."
-echo ""
-START_TIME=$(date +%%s)
-%s
-EXIT_CODE=$?
-END_TIME=$(date +%%s)
-DURATION=$((END_TIME - START_TIME))
-MINUTES=$((DURATION / 60))
-SECONDS=$((DURATION %% 60))
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-if [ $EXIT_CODE -eq 0 ]; then
-    echo "✅ Translation completed successfully!"
-    echo "⏱️  Duration: ${MINUTES}m ${SECONDS}s"
-    if [ -f '%s' ]; then
-        SIZE=$(ls -lh '%s' | awk '{print $5}')
-        echo "📦 Output size: $SIZE"
-    fi
-else
-    echo "❌ Translation failed with exit code: $EXIT_CODE"
-fi
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "Options:"
-echo "  [Enter]  Close this window"
-echo "  [o]      Open output file location"
-echo "  [l]      View log file (if created)"
-echo ""
-read -n 1 -p "Your choice: " choice
-echo ""
-case "$choice" in
-    o|O)
-        open -R '%s'
-        ;;
-    l|L)
-        LOG_FILE='%s'
-        if [ -f "$LOG_FILE" ]; then
-            less "$LOG_FILE"
-        else
-            echo "No log file found at: $LOG_FILE"
-            sleep 2
-        fi
-        ;;
-esac
-`,
-		fileName,
-		fileName,
-		outputFileName,
-		targetLang,
-		inputFile,
-		inputFile,
-		cmdStr,
-		outputFile,
-		outputFile,
-		outputFile,
-		strings.TrimSuffix(inputFile, filepath.Ext(inputFile))+"_progress.log",
-	)
-
-	// Use osascript to open Terminal.app with the enhanced script
-	// Write script to temp file to avoid escaping issues
-	tmpScript, err := os.CreateTemp("", "gst-translate-*.sh")
-	if err != nil {
-		return fmt.Errorf("failed to create temp script: %v", err)
-	}
-	tmpScriptPath := tmpScript.Name()
-
-	// Add self-deletion at the end of the script
-	terminalScriptWithCleanup := terminalScript + fmt.Sprintf("\nrm -f '%s'", tmpScriptPath)
-
-	if _, err := tmpScript.WriteString(terminalScriptWithCleanup); err != nil {
-		return fmt.Errorf("failed to write temp script: %v", err)
-	}
-	if err := tmpScript.Close(); err != nil {
-		return fmt.Errorf("failed to close temp script: %v", err)
-	}
-
-	// Make script executable
-	if err := os.Chmod(tmpScriptPath, 0755); err != nil {
-		return fmt.Errorf("failed to make script executable: %v", err)
-	}
-
-	// Open Terminal.app and execute the script
-	// Note: Script will delete itself when done
-	script := fmt.Sprintf(`tell application "Terminal"
-	activate
-	do script "bash %s"
-end tell`, tmpScriptPath)
-
-	cmd := exec.Command("osascript", "-e", script)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("osascript failed: %v (output: %s)", err, string(output))
-	}
-	return nil
-}
+// translateWithGSTInTerminal opens a terminal window and runs gst translate there.
+// It is kept for reference but the in-process path (translateWithGST) is used by default.
 
 // postProcessSRT fixes common spacing and line break issues in translated SRT files.
 // It only applies punctuation fixes to subtitle text lines, leaving index and timestamp lines untouched.
@@ -295,7 +116,7 @@ func postProcessSRT(filePath string) error {
 }
 
 // translateWithGST shells out to gst translate and streams output
-func translateWithGST(inputFile, outputFile, targetLang string, config AITranslationConfig, progressCallback func(string)) (bool, error) {
+func translateWithGST(ctx context.Context, inputFile, outputFile, targetLang string, config AITranslationConfig, progressCallback func(string)) (bool, error) {
 	gstPath := config.GSTPath
 	if strings.TrimSpace(gstPath) == "" {
 		gstPath = findGSTPath()
@@ -348,7 +169,7 @@ func translateWithGST(inputFile, outputFile, targetLang string, config AITransla
 	}
 
 	AppLog("TRANSLATE", "Starting GST translation: %s -> %s (lang: %s, model: %s)", filepath.Base(inputFile), filepath.Base(outputFile), targetLang, config.Model)
-	cmd := exec.Command(gstPath, args...)
+	cmd := exec.CommandContext(ctx, gstPath, args...)
 	AppLog("CMD", "Execute: %s %s", gstPath, strings.Join(args, " "))
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
@@ -431,12 +252,35 @@ type TranslationJob struct {
 // Global variables for AI translation
 var activeTranslationJobs = make(map[string]*TranslationJob)
 var aiTranslationAddFile func(string) // Function to add files from drag & drop
-var cancelTranslation bool            // Flag to cancel ongoing translation
+var cancelTranslation bool            // Flag to cancel ongoing translation (deprecated; use context)
 var resultsWindow fyne.Window         // Separate results window
 var resultsArea *widget.Entry         // Results text area
 var resultsScroll *container.Scroll   // Scroll container for results
 var aiResultsActions *fyne.Container  // Output actions for results window
 var aiResultsLines []string           // Capped line buffer for results area
+
+var (
+	aiRunMutex sync.Mutex
+	aiCancel   context.CancelFunc
+	aiRunning  bool
+)
+
+func setAIRunning(running bool, cancel context.CancelFunc) {
+	aiRunMutex.Lock()
+	defer aiRunMutex.Unlock()
+	aiRunning = running
+	aiCancel = cancel
+}
+
+func cancelAITranslation() {
+	aiRunMutex.Lock()
+	cancel := aiCancel
+	aiRunMutex.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	cancelTranslation = true
+}
 
 const maxAIResultLines = 500
 
@@ -1014,8 +858,9 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 	translateBtn.Importance = widget.HighImportance
 
 	stopBtn.OnTapped = func() {
-		// Set cancellation flag
+		// Set cancellation flag and cancel the running gst process
 		cancelTranslation = true
+		cancelAITranslation()
 		progressLabel.SetText("⛔ Stopping translation...")
 		stopBtn.Disable()
 	}
@@ -1126,14 +971,18 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 		return (contentSize.Height - offset.Y - visibleSize.Height) < 50
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	setAIRunning(true, cancel)
+
 	// Process files in a goroutine
 	go func() {
+		defer setAIRunning(false, nil)
 		totalFiles := len(inputFiles)
 		successCount := 0
 
 		for i, inputFile := range inputFiles {
 			// Check for cancellation
-			if cancelTranslation {
+			if cancelTranslation || ctx.Err() != nil {
 				fyne.Do(func() {
 					progressLabel.SetText(fmt.Sprintf("⛔ Translation cancelled by user (%d/%d files completed)", successCount, totalFiles))
 					if resultsArea != nil {
@@ -1187,7 +1036,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 			}
 
 			// Perform translation with progress updates
-			success, errorMsg := translateSubtitleFileWithProgress(inputFile, outputFile, sourceLang, targetLang, config, func(status string) {
+			success, errorMsg := translateSubtitleFileWithProgress(ctx, inputFile, outputFile, sourceLang, targetLang, config, func(status string) {
 				if resultsArea != nil {
 					fyne.Do(func() {
 						appendToResults(fmt.Sprintf("   %s", status))
@@ -1247,7 +1096,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 
 // translateSubtitleFileWithError translates a single subtitle file using AI and returns error details
 func translateSubtitleFileWithError(inputFile, outputFile, sourceLang, targetLang string, config AITranslationConfig) (bool, string) {
-	success, err := translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang, config, nil)
+	success, err := translateSubtitleFileInternal(context.Background(), inputFile, outputFile, sourceLang, targetLang, config, nil)
 	if err != nil {
 		return false, err.Error()
 	}
@@ -1255,8 +1104,8 @@ func translateSubtitleFileWithError(inputFile, outputFile, sourceLang, targetLan
 }
 
 // translateSubtitleFileWithProgress translates a single subtitle file with progress updates
-func translateSubtitleFileWithProgress(inputFile, outputFile, sourceLang, targetLang string, config AITranslationConfig, progressCallback func(string)) (bool, string) {
-	success, err := translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang, config, progressCallback)
+func translateSubtitleFileWithProgress(ctx context.Context, inputFile, outputFile, sourceLang, targetLang string, config AITranslationConfig, progressCallback func(string)) (bool, string) {
+	success, err := translateSubtitleFileInternal(ctx, inputFile, outputFile, sourceLang, targetLang, config, progressCallback)
 	if err != nil {
 		return false, err.Error()
 	}
@@ -1265,12 +1114,12 @@ func translateSubtitleFileWithProgress(inputFile, outputFile, sourceLang, target
 
 // translateSubtitleFile translates a single subtitle file using AI
 func translateSubtitleFile(inputFile, outputFile, sourceLang, targetLang string, config AITranslationConfig) bool {
-	success, _ := translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang, config, nil)
+	success, _ := translateSubtitleFileInternal(context.Background(), inputFile, outputFile, sourceLang, targetLang, config, nil)
 	return success
 }
 
 // translateSubtitleFileInternal is the internal implementation
-func translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang string, config AITranslationConfig, progressCallback func(string)) (bool, error) {
+func translateSubtitleFileInternal(ctx context.Context, inputFile, outputFile, sourceLang, targetLang string, config AITranslationConfig, progressCallback func(string)) (bool, error) {
 	// Read input file
 	content, err := os.ReadFile(inputFile)
 	if err != nil {
@@ -1284,19 +1133,17 @@ func translateSubtitleFileInternal(inputFile, outputFile, sourceLang, targetLang
 		contentStr = contentStr[3:]
 	}
 
-	// Using GST (Python) for translation - open terminal window
+	// Using GST (Python) for translation - run in-process with live progress streaming
 	if progressCallback != nil {
-		progressCallback("🐍 Opening terminal window for GST translation...")
+		progressCallback("🐍 Running GST translation in-process...")
 		progressCallback(fmt.Sprintf("📝 Input: %s", filepath.Base(inputFile)))
 		progressCallback(fmt.Sprintf("📝 Output: %s", filepath.Base(outputFile)))
-		progressCallback("💡 Watch the terminal window for live progress!")
 	}
-	err = translateWithGSTInTerminal(inputFile, outputFile, targetLang, config)
+	success, err := translateWithGST(ctx, inputFile, outputFile, targetLang, config, progressCallback)
 	if err != nil {
-		return false, fmt.Errorf("failed to open terminal: %v", err)
+		return false, err
 	}
-	// Return success - actual translation happens in terminal
-	return true, nil
+	return success, nil
 }
 
 // Removed getSafetySettings - using GST only

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -16,6 +18,31 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// Extract run state guards the cancellation function and running flag.
+var (
+	extractRunMutex sync.Mutex
+	extractCancel   context.CancelFunc
+	extractRunning  bool
+)
+
+// setExtractRunning marks the extraction worker state and updates the cancel function.
+func setExtractRunning(running bool, cancel context.CancelFunc) {
+	extractRunMutex.Lock()
+	defer extractRunMutex.Unlock()
+	extractRunning = running
+	extractCancel = cancel
+}
+
+// cancelExtraction cancels the currently running extraction, if any.
+func cancelExtraction() {
+	extractRunMutex.Lock()
+	cancel := extractCancel
+	extractRunMutex.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
 // ExtractTabWidgets holds references to widgets and callbacks needed by main()
 type ExtractTabWidgets struct {
 	DependencyButtons *fyne.Container
@@ -24,6 +51,7 @@ type ExtractTabWidgets struct {
 	DirChangeFunc     func()
 	LoadTracksFunc    func()
 	StartExtractFunc  func()
+	CancelExtractFunc func()
 }
 
 func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *ExtractTabWidgets) {
@@ -186,6 +214,12 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 	loadTracksBtn := widget.NewButton(T("extract.load_tracks"), nil)
 	startExtractBtn := widget.NewButton(T("extract.start_extraction"), nil)
 
+	cancelBtn := widget.NewButton(T("common.cancel"), func() {
+		cancelExtraction()
+	})
+	cancelBtn.Importance = widget.WarningImportance
+	cancelBtn.Hide()
+
 	// Load tracks handler
 	loadTracksBtn.OnTapped = func() {
 		extractLoadTracks(w, &mkvPath, &outDir, &trackItems, &mkvFiles, &batchMode,
@@ -194,8 +228,28 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 
 	// Start extraction handler
 	startExtractBtn.OnTapped = func() {
+		startExtractBtn.Disable()
+		loadTracksBtn.Disable()
+		fileBtn.Disable()
+		batchBtn.Disable()
+		clearBtn.Disable()
+		dirBtn.Disable()
+		cancelBtn.Show()
 		extractStartExtraction(w, &mkvPath, &outDir, &trackItems, &mkvFiles, &batchMode,
-			result, progress, currentTrackLabel, trackList)
+			result, progress, currentTrackLabel, trackList, func() {
+				startExtractBtn.Enable()
+				loadTracksBtn.Enable()
+				fileBtn.Enable()
+				batchBtn.Enable()
+				clearBtn.Enable()
+				dirBtn.Enable()
+				cancelBtn.Hide()
+			})
+	}
+
+	// Cancel extraction handler
+	cancelBtn.OnTapped = func() {
+		cancelExtraction()
 	}
 
 	// Create Support button with improved UX
@@ -217,7 +271,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 	})
 	supportBtn.Importance = widget.HighImportance
 
-	buttonRow := container.NewHBox(loadTracksBtn, startExtractBtn, layout.NewSpacer(), supportBtn)
+	buttonRow := container.NewHBox(loadTracksBtn, startExtractBtn, cancelBtn, layout.NewSpacer(), supportBtn)
 
 	titleLabel := widget.NewLabel(fmt.Sprintf("Subtitle Forge %s", AppVersion))
 	titleLabel.TextStyle = fyne.TextStyle{Bold: true}
@@ -459,6 +513,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 		DirChangeFunc:     dirBtn.OnTapped,
 		LoadTracksFunc:    loadTracksBtn.OnTapped,
 		StartExtractFunc:  startExtractBtn.OnTapped,
+		CancelExtractFunc: cancelBtn.OnTapped,
 	}
 
 	return extractTabContent, widgets

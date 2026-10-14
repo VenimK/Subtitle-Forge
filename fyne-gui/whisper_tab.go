@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,28 @@ import (
 )
 
 var whisperTranscribeSetInputFile func(string)
+
+var (
+	whisperRunMutex sync.Mutex
+	whisperCancel   context.CancelFunc
+	whisperRunning  bool
+)
+
+func setWhisperRunning(running bool, cancel context.CancelFunc) {
+	whisperRunMutex.Lock()
+	defer whisperRunMutex.Unlock()
+	whisperRunning = running
+	whisperCancel = cancel
+}
+
+func cancelWhisper() {
+	whisperRunMutex.Lock()
+	cancel := whisperCancel
+	whisperRunMutex.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
 
 type progressReader struct {
 	r        io.Reader
@@ -663,7 +686,13 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		applyModeUI()
 	}
 
-	var runBtn *widget.Button
+	var runBtn, cancelBtn *widget.Button
+	cancelBtn = widget.NewButton("Cancel", func() {
+		cancelWhisper()
+	})
+	cancelBtn.Importance = widget.WarningImportance
+	cancelBtn.Hide()
+
 	runBtn = widget.NewButton("Start Transcription", func() {
 		if inputFile == "" {
 			dialog.ShowError(fmt.Errorf("please select an input file"), w)
@@ -698,10 +727,13 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			outDir = filepath.Dir(inputFile)
 		}
 
+		ctx, cancel := context.WithCancel(context.Background())
+		setWhisperRunning(true, cancel)
 		startTime := time.Now()
 		fyne.Do(func() {
 			statusLabel.SetText("Starting…")
 			busyBar.Show()
+			cancelBtn.Show()
 			showWhisperResultActions("")
 		})
 		runBtn.Disable()
@@ -772,10 +804,14 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			}
 
 			go func() {
-				defer fyne.Do(func() {
-					busyBar.Hide()
-					runBtn.Enable()
-				})
+				defer func() {
+					setWhisperRunning(false, nil)
+					fyne.Do(func() {
+						busyBar.Hide()
+						runBtn.Enable()
+						cancelBtn.Hide()
+					})
+				}()
 				defer func() {
 					logMu.Lock()
 					if logFile != nil {
@@ -887,7 +923,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 						_ = writer.Close()
 					}()
 
-					req, err := http.NewRequest("POST", endpoint, pr)
+					req, err := http.NewRequestWithContext(ctx, "POST", endpoint, pr)
 					if err != nil {
 						return err
 					}
@@ -1117,6 +1153,8 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			fyne.Do(func() {
 				busyBar.Hide()
 				runBtn.Enable()
+				cancelBtn.Hide()
+				setWhisperRunning(false, nil)
 				statusLabel.SetText("Running in Terminal…")
 				resultLabel.SetText(fmt.Sprintf("%s\n\n%s\n\n📁 %s:\n%s", T("whisper.terminal_started_outputs"), strings.Join(outputs, "\n"), T("common.output_folder"), outDir))
 				showWhisperResultActions(outDir)
@@ -1182,10 +1220,14 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 		// Non-macOS fallback: run in-process with live log streaming
 		go func() {
-			defer fyne.Do(func() {
-				busyBar.Hide()
-				runBtn.Enable()
-			})
+			defer func() {
+				setWhisperRunning(false, nil)
+				fyne.Do(func() {
+					busyBar.Hide()
+					runBtn.Enable()
+					cancelBtn.Hide()
+				})
+			}()
 
 			// Step 1: Convert to WAV if input is not already WAV
 			audioFile := inputFile
@@ -1198,7 +1240,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 				appendLog("Converting to WAV (16kHz mono)…")
 
 				tmpWav = filepath.Join(os.TempDir(), fmt.Sprintf("subtitle-forge-whisper-%d.wav", time.Now().UnixNano()))
-				ffmpegCmd := exec.Command("ffmpeg", "-y", "-i", inputFile, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", tmpWav)
+				ffmpegCmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-i", inputFile, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", tmpWav)
 				ffmpegOut, ffmpegErr := ffmpegCmd.CombinedOutput()
 				if ffmpegErr != nil {
 					appendLog("❌ FFmpeg conversion failed: " + ffmpegErr.Error())
@@ -1244,7 +1286,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			})
 			appendLog("Running: " + whisperBinEntry.Text + " " + strings.Join(args, " "))
 
-			cmd := exec.Command(whisperBinEntry.Text, args...)
+			cmd := exec.CommandContext(ctx, whisperBinEntry.Text, args...)
 			cmd.Dir = outDir
 
 			stdout, err := cmd.StdoutPipe()
@@ -1355,7 +1397,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			wantSRTTimestampsOnly,
 		),
 		widget.NewSeparator(),
-		runBtn,
+		container.NewHBox(runBtn, cancelBtn),
 		widget.NewLabel("Result"),
 		resultScroll,
 		whisperResultActions,

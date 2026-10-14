@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -121,12 +122,28 @@ func NewMkvextractCmd(args ...string) *exec.Cmd {
 	return exec.Command("mkvextract", args...)
 }
 
+// NewMkvextractCmdContext creates a context-aware exec.Cmd for mkvextract.
+func NewMkvextractCmdContext(ctx context.Context, args ...string) *exec.Cmd {
+	if mkvextractBinaryPath != "" {
+		return exec.CommandContext(ctx, mkvextractBinaryPath, args...)
+	}
+	return exec.CommandContext(ctx, "mkvextract", args...)
+}
+
 // NewMkvmergeCmd creates an exec.Cmd for mkvmerge, using the stored binary path if available
 func NewMkvmergeCmd(args ...string) *exec.Cmd {
 	if mkvmergeBinaryPath != "" {
 		return exec.Command(mkvmergeBinaryPath, args...)
 	}
 	return exec.Command("mkvmerge", args...)
+}
+
+// NewMkvmergeCmdContext creates a context-aware exec.Cmd for mkvmerge.
+func NewMkvmergeCmdContext(ctx context.Context, args ...string) *exec.Cmd {
+	if mkvmergeBinaryPath != "" {
+		return exec.CommandContext(ctx, mkvmergeBinaryPath, args...)
+	}
+	return exec.CommandContext(ctx, "mkvmerge", args...)
 }
 
 // CreateTrackRow creates a UI row for a TrackItem in the track list.

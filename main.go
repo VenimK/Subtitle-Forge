@@ -58,7 +58,7 @@ var subtitleExtensionByCodec = map[string]string{
 }
 
 func isMKVFile(inputFileName string) bool {
-	return strings.ToLower(inputFileName[len(inputFileName)-4:]) == ".mkv"
+	return strings.HasSuffix(strings.ToLower(inputFileName), ".mkv")
 }
 
 func buildSubtitlesFileName(inputFileName string, track MKVTrack) string {

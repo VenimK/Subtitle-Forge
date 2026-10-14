@@ -19,7 +19,7 @@ func installPgsripCli() bool {
 		execPath := getExecutablePath()
 		execDir := filepath.Dir(execPath)
 		scriptPath = filepath.Join(execDir, "install_pgsrip.sh")
-		
+
 		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 			fmt.Println("[ERROR] Could not find pgsrip installation script")
 			return false
@@ -34,7 +34,7 @@ func installPgsripCli() bool {
 	cmd := exec.Command("bash", scriptPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "Installing pgsrip with script: %s\n", scriptPath)
@@ -42,7 +42,7 @@ func installPgsripCli() bool {
 
 	err := cmd.Run()
 	success := err == nil
-	
+
 	if success {
 		fmt.Println("[DEBUG] pgsrip installation script completed successfully")
 		if debugLogger != nil {

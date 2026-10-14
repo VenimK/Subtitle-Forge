@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -45,17 +46,46 @@ func extractStartExtraction(
 	progress *widget.ProgressBar,
 	currentTrackLabel *widget.Label,
 	trackList *fyne.Container,
+	onComplete func(),
 ) {
+	ctx, cancel := context.WithCancel(context.Background())
+	setExtractRunning(true, cancel)
+	finish := func() {
+		setExtractRunning(false, nil)
+		if onComplete != nil {
+			fyne.Do(onComplete)
+		}
+	}
 	if *batchMode {
 		// Batch processing mode
 		if len(*mkvFiles) == 0 || *outDir == "" {
 			dialog.ShowError(fmt.Errorf("Please select video files and output directory for batch processing."), w)
+			finish()
 			return
+		}
+
+		// Snapshot all mutable state on the main thread so the worker cannot race
+		// with the user changing selections while extraction runs.
+		batchFiles := append([]string{}, *mkvFiles...)
+		batchOutDir := *outDir
+		type trackSelection struct {
+			track      *TrackItem
+			convertOCR bool
+		}
+		tracksByFile := make(map[string][]trackSelection)
+		for _, t := range *trackItems {
+			if t.Check.Checked {
+				tracksByFile[t.FilePath] = append(tracksByFile[t.FilePath], trackSelection{
+					track:      t,
+					convertOCR: t.ConvertOCR != nil && t.ConvertOCR.Checked,
+				})
+			}
 		}
 
 		// Start batch processing
 		go func() {
-			totalFiles := len(*mkvFiles)
+			defer finish()
+			totalFiles := len(batchFiles)
 			successCount := 0
 			failureCount := 0
 
@@ -67,8 +97,13 @@ func extractStartExtraction(
 				currentTrackLabel.Show()
 			})
 
-			for fileIndex, currentMkvPath := range *mkvFiles {
-				*mkvPath = currentMkvPath // Set current file for processing
+			for fileIndex, currentMkvPath := range batchFiles {
+				if ctx.Err() != nil {
+					fyne.Do(func() {
+						result.SetText(result.Text + "\n⏹️ Batch extraction cancelled.")
+					})
+					break
+				}
 
 				fyne.Do(func() {
 					currentTrackLabel.SetText(fmt.Sprintf("Processing file %d/%d: %s", fileIndex+1, totalFiles, filepath.Base(currentMkvPath)))
@@ -84,13 +119,8 @@ func extractStartExtraction(
 					continue
 				}
 
-				// Extract selected tracks for this file
-				selectedTracksForFile := []*TrackItem{}
-				for _, t := range *trackItems {
-					if t.Check.Checked && t.FilePath == currentMkvPath {
-						selectedTracksForFile = append(selectedTracksForFile, t)
-					}
-				}
+				// Extract selected tracks for this file from the snapshot
+				selectedTracksForFile := tracksByFile[currentMkvPath]
 
 				if len(selectedTracksForFile) == 0 {
 					fyne.Do(func() {
@@ -101,35 +131,35 @@ func extractStartExtraction(
 
 				// Extract selected tracks
 				fileSuccess := true
-				for _, track := range selectedTracksForFile {
+				for _, sel := range selectedTracksForFile {
+					track := sel.track
 					fyne.Do(func() {
 						track.Status.SetText("Extracting...")
 					})
 
 					// Determine file extension based on codec
-					convertOCR := track.ConvertOCR != nil && track.ConvertOCR.Checked
 					var ext string
 					if IsMP4File(currentMkvPath) {
 						ext = MP4CodecToExtension(track.Codec)
 					} else {
-						ext = CodecToExtension(track.Codec, convertOCR)
+						ext = CodecToExtension(track.Codec, sel.convertOCR)
 					}
 
 					videoBaseName := filepath.Base(currentMkvPath)
 					videoBaseName = strings.TrimSuffix(videoBaseName, filepath.Ext(videoBaseName))
 					outFile := fmt.Sprintf("%s.track%d_%s.%s", videoBaseName, track.Num, track.Lang, ext)
-					outPath := filepath.Join(*outDir, outFile)
+					outPath := filepath.Join(batchOutDir, outFile)
 
 					var output []byte
 					var err error
 
 					if IsMP4File(currentMkvPath) {
 						// Use ffmpeg for MP4/M4V files
-						output, err = ExtractMP4Subtitle(currentMkvPath, track.Num, outPath)
+						output, err = ExtractMP4SubtitleContext(ctx, currentMkvPath, track.Num, outPath)
 					} else {
 						// Use mkvextract for MKV files
-						extractCmd := NewMkvextractCmd("tracks", currentMkvPath, fmt.Sprintf("%d:%s", track.Num, outFile))
-						extractCmd.Dir = *outDir
+						extractCmd := NewMkvextractCmdContext(ctx, "tracks", currentMkvPath, fmt.Sprintf("%d:%s", track.Num, outFile))
+						extractCmd.Dir = batchOutDir
 
 						AppLog("EXTRACT", "Batch extraction: Track %d (%s) from %s", track.Num, track.Lang, filepath.Base(currentMkvPath))
 						output, err = extractCmd.CombinedOutput()
@@ -137,6 +167,13 @@ func extractStartExtraction(
 					}
 
 					if err != nil {
+						if ctx.Err() != nil {
+							fyne.Do(func() {
+								track.Status.SetText("Cancelled")
+							})
+							fileSuccess = false
+							break
+						}
 						fileSuccess = false
 						AppLog("ERROR", "Batch extraction failed for track %d: %v", track.Num, err)
 						fyne.Do(func() {
@@ -168,13 +205,13 @@ func extractStartExtraction(
 				progress.SetValue(float64(totalFiles))
 				progress.Hide()
 				currentTrackLabel.SetText(T("extract.batch_completed"))
-				result.SetText(result.Text + fmt.Sprintf(T("extract.batch_complete_result_actions"), successCount, failureCount, *outDir))
+				result.SetText(result.Text + fmt.Sprintf(T("extract.batch_complete_result_actions"), successCount, failureCount, batchOutDir))
 				dialog.ShowCustom(
 					T("extract.batch_processing_complete_title"),
 					T("common.close"),
 					container.NewVBox(
-						widget.NewLabel(fmt.Sprintf(T("extract.batch_processing_complete_body"), totalFiles, successCount, failureCount, *outDir)),
-						extractCompletionActions(w, *outDir),
+						widget.NewLabel(fmt.Sprintf(T("extract.batch_processing_complete_body"), totalFiles, successCount, failureCount, batchOutDir)),
+						extractCompletionActions(w, batchOutDir),
 					),
 					w,
 				)
@@ -192,16 +229,22 @@ func extractStartExtraction(
 	// Single file processing mode
 	if *mkvPath == "" || *outDir == "" {
 		dialog.ShowError(fmt.Errorf("Please select both a video file and output directory."), w)
+		finish()
 		return
 	}
 
-	go func() {
-		selected := []*TrackItem{}
-		for _, t := range *trackItems {
-			if t.Check.Checked {
-				selected = append(selected, t)
-			}
+	// Snapshot single-file state on the main thread to avoid races with the UI.
+	singlePath := *mkvPath
+	singleOutDir := *outDir
+	selected := []*TrackItem{}
+	for _, t := range *trackItems {
+		if t.Check.Checked {
+			selected = append(selected, t)
 		}
+	}
+
+	go func() {
+		defer finish()
 		if len(selected) == 0 {
 			// Thread-safe UI update
 			fyne.CurrentApp().SendNotification(&fyne.Notification{
@@ -225,6 +268,13 @@ func extractStartExtraction(
 		var err error
 
 		for i, t := range selected {
+			if ctx.Err() != nil {
+				fyne.Do(func() {
+					result.SetText(result.Text + "\n⏹️ Extraction cancelled.")
+				})
+				break
+			}
+
 			// Update UI on main thread
 			fyne.Do(func() {
 				currentTrackLabel.SetText(setLogMessage(LogExtract, fmt.Sprintf("Extracting Track %d/%d", i+1, len(selected)), t.Name))
@@ -234,20 +284,20 @@ func extractStartExtraction(
 			var outFile string
 
 			// Get base filename without extension
-			mkvBaseName := filepath.Base(*mkvPath)
+			mkvBaseName := filepath.Base(singlePath)
 			mkvBaseName = strings.TrimSuffix(mkvBaseName, filepath.Ext(mkvBaseName))
 
 			// Check if this is a PGS track with OCR conversion requested
 			if t.ConvertOCR != nil && t.ConvertOCR.Checked && (t.Codec == "hdmv_pgs_subtitle" || t.Codec == "HDMV PGS") {
-				extractPgsTrack(w, t, mkvPath, outDir, mkvBaseName, result, progress, currentTrackLabel, trackList, &output, &err)
+				extractPgsTrack(ctx, w, t, &singlePath, &singleOutDir, mkvBaseName, result, progress, currentTrackLabel, trackList, &output, &err)
 			} else if t.ConvertOCR != nil && t.ConvertOCR.Checked && (strings.Contains(strings.ToLower(t.Codec), "ass") || strings.Contains(strings.ToLower(t.Codec), "ssa") || strings.Contains(strings.ToLower(t.Codec), "substation") || strings.Contains(strings.ToLower(t.Codec), "sub station")) {
-				extractAssTrack(w, t, mkvPath, outDir, mkvBaseName, result, progress, currentTrackLabel, trackList, &output, &err)
+				extractAssTrack(ctx, w, t, &singlePath, &singleOutDir, mkvBaseName, result, progress, currentTrackLabel, trackList, &output, &err)
 			} else if t.ConvertOCR != nil && t.ConvertOCR.Checked && (t.Codec == "vobsub" || t.Codec == "VobSub") {
-				extractVobsubTrack(w, t, mkvPath, outDir, mkvBaseName, result, progress, currentTrackLabel, trackList, &output, &err)
+				extractVobsubTrack(ctx, w, t, &singlePath, &singleOutDir, mkvBaseName, result, progress, currentTrackLabel, trackList, &output, &err)
 			} else {
 				// Normal extraction without conversion
 				var fileExt string
-				if IsMP4File(*mkvPath) {
+				if IsMP4File(singlePath) {
 					fileExt = MP4CodecToExtension(t.Codec)
 				} else {
 					fileExt = CodecToExtensionForExtract(t.Codec)
@@ -263,32 +313,35 @@ func extractStartExtraction(
 				fyne.Do(func() {
 					result.SetText(result.Text + fmt.Sprintf("Output file: %s\n", outFile))
 				})
-				absOutFile := filepath.Join(*outDir, outFile)
+				absOutFile := filepath.Join(singleOutDir, outFile)
 
 				fyne.Do(func() {
 					result.SetText(result.Text + fmt.Sprintf("\nExtracting to: %s", absOutFile))
 				})
 
-				if IsMP4File(*mkvPath) {
-					AppLog("EXTRACT", "Generic extraction (ffmpeg): Track %d (%s/%s) from %s", t.Num, t.Lang, t.Codec, filepath.Base(*mkvPath))
-					output, err = ExtractMP4Subtitle(*mkvPath, t.Num, absOutFile)
+				if IsMP4File(singlePath) {
+					AppLog("EXTRACT", "Generic extraction (ffmpeg): Track %d (%s/%s) from %s", t.Num, t.Lang, t.Codec, filepath.Base(singlePath))
+					output, err = ExtractMP4SubtitleContext(ctx, singlePath, t.Num, absOutFile)
 				} else {
-					cmd := NewMkvextractCmd("tracks", *mkvPath, fmt.Sprintf("%d:%s", t.Num, absOutFile))
+					cmd := NewMkvextractCmdContext(ctx, "tracks", singlePath, fmt.Sprintf("%d:%s", t.Num, absOutFile))
 					AppLog("DEBUG", "Generic track extraction using mkvextract")
-					AppLog("EXTRACT", "Generic extraction: Track %d (%s/%s) from %s", t.Num, t.Lang, t.Codec, filepath.Base(*mkvPath))
+					AppLog("EXTRACT", "Generic extraction: Track %d (%s/%s) from %s", t.Num, t.Lang, t.Codec, filepath.Base(singlePath))
 					output, err = cmd.CombinedOutput()
 					AppLogCmd(cmd, output, err)
 				}
 
 				if err == nil {
-					outFilePath := filepath.Join(*outDir, outFile)
+					outFilePath := filepath.Join(singleOutDir, outFile)
 					os.Chmod(outFilePath, 0644)
 				}
 			}
 
 			// Update UI on main thread
 			fyne.Do(func() {
-				if err != nil {
+				if ctx.Err() != nil {
+					t.Status.SetText("Cancelled")
+					result.SetText(result.Text + setLogMessage(LogInfo, "Extraction Cancelled", t.Name))
+				} else if err != nil {
 					t.State = "Error"
 					AppLog("ERROR", "Track %d (%s) extraction/conversion failed: %v", t.Num, t.Name, err)
 					t.Status.SetText(setLogMessage(LogError, fmt.Sprintf("Error Extracting Track %s", t.Name), err.Error()))
@@ -338,15 +391,17 @@ func extractStartExtraction(
 			currentTrackLabel.SetText("")
 			currentTrackLabel.Hide()
 			progress.Hide()
-			if tracksDone == len(selected) {
-				result.SetText(setLogMessage(LogSuccess, T("extract.extraction_complete"), fmt.Sprintf(T("extract.extraction_complete_body"), *outDir)))
+			if ctx.Err() != nil {
+				result.SetText(setLogMessage(LogInfo, "Extraction Cancelled", fmt.Sprintf("Stopped after %d of %d tracks.", tracksDone, len(selected))))
+			} else if tracksDone == len(selected) {
+				result.SetText(setLogMessage(LogSuccess, T("extract.extraction_complete"), fmt.Sprintf(T("extract.extraction_complete_body"), singleOutDir)))
 				progress.SetValue(progress.Max)
 				dialog.ShowCustom(
 					T("extract.extraction_complete"),
 					T("common.close"),
 					container.NewVBox(
-						widget.NewLabel(fmt.Sprintf(T("extract.extraction_complete_body"), *outDir)),
-						extractCompletionActions(w, *outDir),
+						widget.NewLabel(fmt.Sprintf(T("extract.extraction_complete_body"), singleOutDir)),
+						extractCompletionActions(w, singleOutDir),
 					),
 					w,
 				)
@@ -359,6 +414,7 @@ func extractStartExtraction(
 
 // extractPgsTrack handles PGS to SRT conversion extraction
 func extractPgsTrack(
+	ctx context.Context,
 	w fyne.Window,
 	t *TrackItem,
 	mkvPath *string,
@@ -394,13 +450,13 @@ func extractPgsTrack(
 		fyne.Do(func() {
 			result.SetText(result.Text + "\nExtracting PGS track using ffmpeg...")
 		})
-		*output, *err = ExtractMP4Subtitle(*mkvPath, t.Num, absPgsPath)
+		*output, *err = ExtractMP4SubtitleContext(ctx, *mkvPath, t.Num, absPgsPath)
 	} else {
 		cmdStr := fmt.Sprintf("mkvextract tracks \"%s\" %d:\"%s\"", *mkvPath, t.Num, tempPgsFile)
 		fyne.Do(func() {
 			result.SetText(result.Text + "\nRunning: " + cmdStr)
 		})
-		cmd = NewMkvextractCmd("tracks", *mkvPath, fmt.Sprintf("%d:%s", t.Num, tempPgsFile))
+		cmd = NewMkvextractCmdContext(ctx, "tracks", *mkvPath, fmt.Sprintf("%d:%s", t.Num, tempPgsFile))
 		AppLog("DEBUG", "PGS track extraction using mkvextract")
 		cmd.Dir = *outDir
 		AppLog("EXTRACT", "PGS extraction: Track %d (%s) from %s", t.Num, t.Lang, filepath.Base(*mkvPath))
@@ -590,7 +646,7 @@ func extractPgsTrack(
 			result.SetText(result.Text + "\n[DEBUG] Script found!")
 			result.SetText(result.Text + "\n[DEBUG] Running Deno version test...")
 		})
-		testCmd := exec.Command("deno", "--version")
+		testCmd := exec.CommandContext(ctx, "deno", "--version")
 		testOutput, testErr := testCmd.CombinedOutput()
 		fyne.Do(func() {
 			result.SetText(result.Text + "\n\n=== Deno Version Test ===\n")
@@ -667,7 +723,7 @@ func extractPgsTrack(
 				pgsToSrtScript, trainedDataPath, absInputPath, tmpOutputPath)
 			logger.Printf("No stored Deno path, using default 'deno' command\n")
 		}
-		cmd = exec.Command("sh", "-c", denoCmd)
+		cmd = exec.CommandContext(ctx, "sh", "-c", denoCmd)
 		cmd.Dir = filepath.Dir(pgsToSrtScript)
 
 		fyne.Do(func() {

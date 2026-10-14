@@ -22,7 +22,7 @@ func installPgsrip(result *widget.Entry, statusLabel *widget.Label) bool {
 		execPath := getExecutablePath()
 		execDir := filepath.Dir(execPath)
 		scriptPath = filepath.Join(execDir, "install_pgsrip.sh")
-		
+
 		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 			fyne.Do(func() {
 				if result != nil {
@@ -41,7 +41,7 @@ func installPgsrip(result *widget.Entry, statusLabel *widget.Label) bool {
 
 	// Run the installation script
 	fmt.Println("[DEBUG] Installing pgsrip with script:", scriptPath)
-	
+
 	fyne.Do(func() {
 		if result != nil {
 			result.SetText(result.Text + "\nInstalling pgsrip...")
@@ -53,7 +53,7 @@ func installPgsrip(result *widget.Entry, statusLabel *widget.Label) bool {
 
 	cmd := exec.Command("bash", scriptPath)
 	output, err := cmd.CombinedOutput()
-	
+
 	// Log to debug file if available
 	if debugLogger != nil {
 		fmt.Fprintf(debugLogger, "Installing pgsrip with script: %s\n", scriptPath)
@@ -65,13 +65,13 @@ func installPgsrip(result *widget.Entry, statusLabel *widget.Label) bool {
 			fmt.Fprintf(debugLogger, "Output: %s\n", string(output))
 		}
 	}
-	
+
 	// Update UI with the result
 	fyne.Do(func() {
 		if result != nil {
 			result.SetText(result.Text + "\n" + string(output))
 		}
-		
+
 		if err != nil {
 			if statusLabel != nil {
 				statusLabel.SetText("pgsrip installation failed")
@@ -81,7 +81,7 @@ func installPgsrip(result *widget.Entry, statusLabel *widget.Label) bool {
 			}
 			return
 		}
-		
+
 		if statusLabel != nil {
 			statusLabel.SetText("pgsrip installation completed")
 		}

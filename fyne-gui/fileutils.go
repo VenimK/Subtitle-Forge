@@ -8,7 +8,7 @@ func fileExistsAndExecutable(path string) bool {
 	if err != nil {
 		return false
 	}
-	
+
 	// Check if file is executable
 	return info.Mode()&0111 != 0
 }

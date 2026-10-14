@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -90,9 +91,19 @@ func NewFFmpegCmd(args ...string) *exec.Cmd {
 	return exec.Command(findFFmpegPath(), args...)
 }
 
+// NewFFmpegCmdContext creates a context-aware exec.Cmd for ffmpeg.
+func NewFFmpegCmdContext(ctx context.Context, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, findFFmpegPath(), args...)
+}
+
 // NewFFprobeCmd creates an exec.Cmd for ffprobe.
 func NewFFprobeCmd(args ...string) *exec.Cmd {
 	return exec.Command(findFFprobePath(), args...)
+}
+
+// NewFFprobeCmdContext creates a context-aware exec.Cmd for ffprobe.
+func NewFFprobeCmdContext(ctx context.Context, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, findFFprobePath(), args...)
 }
 
 // ---------- ffprobe track info ----------
@@ -218,6 +229,12 @@ func MP4CodecToExtension(codec string) string {
 // ExtractMP4Subtitle extracts a single subtitle track from an MP4/M4V file using ffmpeg.
 // streamIndex is the absolute stream index, outPath is the full output file path.
 func ExtractMP4Subtitle(videoPath string, streamIndex int, outPath string) ([]byte, error) {
+	return ExtractMP4SubtitleContext(context.Background(), videoPath, streamIndex, outPath)
+}
+
+// ExtractMP4SubtitleContext extracts a single subtitle track from an MP4/M4V file using ffmpeg,
+// honouring the supplied context for cancellation.
+func ExtractMP4SubtitleContext(ctx context.Context, videoPath string, streamIndex int, outPath string) ([]byte, error) {
 	AppLog("EXTRACT", "ffmpeg extracting stream %d from %s -> %s", streamIndex, filepath.Base(videoPath), filepath.Base(outPath))
 
 	// Determine the best extraction strategy based on output extension.
@@ -229,7 +246,7 @@ func ExtractMP4Subtitle(videoPath string, streamIndex int, outPath string) ([]by
 	switch ext {
 	case ".srt":
 		// Force SRT output format — handles mov_text/tx3g conversion
-		cmd = NewFFmpegCmd(
+		cmd = NewFFmpegCmdContext(ctx,
 			"-y",
 			"-i", videoPath,
 			"-map", fmt.Sprintf("0:%d", streamIndex),
@@ -237,7 +254,7 @@ func ExtractMP4Subtitle(videoPath string, streamIndex int, outPath string) ([]by
 			outPath,
 		)
 	case ".ass", ".ssa":
-		cmd = NewFFmpegCmd(
+		cmd = NewFFmpegCmdContext(ctx,
 			"-y",
 			"-i", videoPath,
 			"-map", fmt.Sprintf("0:%d", streamIndex),
@@ -245,7 +262,7 @@ func ExtractMP4Subtitle(videoPath string, streamIndex int, outPath string) ([]by
 			outPath,
 		)
 	case ".vtt":
-		cmd = NewFFmpegCmd(
+		cmd = NewFFmpegCmdContext(ctx,
 			"-y",
 			"-i", videoPath,
 			"-map", fmt.Sprintf("0:%d", streamIndex),
@@ -254,7 +271,7 @@ func ExtractMP4Subtitle(videoPath string, streamIndex int, outPath string) ([]by
 		)
 	default:
 		// Binary formats (sup, sub) — use codec copy
-		cmd = NewFFmpegCmd(
+		cmd = NewFFmpegCmdContext(ctx,
 			"-y",
 			"-i", videoPath,
 			"-map", fmt.Sprintf("0:%d", streamIndex),
@@ -273,6 +290,12 @@ func ExtractMP4Subtitle(videoPath string, streamIndex int, outPath string) ([]by
 // InsertMP4Subtitle inserts a subtitle file into an MP4 using ffmpeg.
 // lang is the ISO 639 language code, trackName is the track title.
 func InsertMP4Subtitle(videoPath, subtitlePath, outputPath, lang, trackName string, removeExisting bool) ([]byte, error) {
+	return InsertMP4SubtitleContext(context.Background(), videoPath, subtitlePath, outputPath, lang, trackName, removeExisting)
+}
+
+// InsertMP4SubtitleContext inserts a subtitle file into an MP4 using ffmpeg,
+// honouring the supplied context for cancellation.
+func InsertMP4SubtitleContext(ctx context.Context, videoPath, subtitlePath, outputPath, lang, trackName string, removeExisting bool) ([]byte, error) {
 	args := []string{"-y", "-i", videoPath, "-i", subtitlePath}
 
 	if removeExisting {
@@ -296,7 +319,7 @@ func InsertMP4Subtitle(videoPath, subtitlePath, outputPath, lang, trackName stri
 
 	args = append(args, outputPath)
 
-	cmd := NewFFmpegCmd(args...)
+	cmd := NewFFmpegCmdContext(ctx, args...)
 	AppLog("INSERT", "ffmpeg inserting subtitle into MP4: %s + %s -> %s", filepath.Base(videoPath), filepath.Base(subtitlePath), filepath.Base(outputPath))
 
 	output, err := cmd.CombinedOutput()

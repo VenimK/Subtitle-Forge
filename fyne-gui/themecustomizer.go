@@ -31,10 +31,10 @@ func NewThemeCustomizer(app fyne.App, window fyne.Window) *ThemeCustomizer {
 	}
 
 	return &ThemeCustomizer{
-		window:       window,
-		app:          app,
-		currentPrefs: prefs,
-		colorPickers: make(map[string]*ColorPicker),
+		window:         window,
+		app:            app,
+		currentPrefs:   prefs,
+		colorPickers:   make(map[string]*ColorPicker),
 		previewSamples: make(map[string]*canvas.Rectangle),
 	}
 }
@@ -45,7 +45,7 @@ func (tc *ThemeCustomizer) Show() {
 	content := container.NewVBox()
 
 	// Add title
-	title := widget.NewLabelWithStyle("Theme Color Customization", 
+	title := widget.NewLabelWithStyle("Theme Color Customization",
 		fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	content.Add(title)
 
@@ -88,25 +88,25 @@ func (tc *ThemeCustomizer) Show() {
 
 	// Create and show a proper window (not a dialog) to ensure resizability
 	customWindow := fyne.CurrentApp().NewWindow("Theme Customization")
-	
+
 	// Create a scrollable container to ensure content is accessible even when window is small
 	scrollContainer := container.NewScroll(content)
-	
+
 	// Set proper content with padding to ensure all elements are visible
 	customWindow.SetContent(container.NewPadded(scrollContainer))
-	
+
 	// Set a good initial size
 	customWindow.Resize(fyne.NewSize(900, 750))
-	
+
 	// Explicitly ensure the window is resizable (should be default, but let's be explicit)
 	customWindow.SetFixedSize(false)
-	
+
 	// Note: Windows in Fyne don't have a SetMinSize method, but the scrollable container
 	// will ensure content is accessible regardless of window size
-	
+
 	// Center the window on screen for better user experience
 	customWindow.CenterOnScreen()
-	
+
 	// Show the window - this must be the last call
 	customWindow.Show()
 }
@@ -231,7 +231,7 @@ func (tc *ThemeCustomizer) createButtonsContainer() *fyne.Container {
 	resetBtn.Importance = widget.MediumImportance
 	applyBtn.Importance = widget.HighImportance
 	saveBtn.Importance = widget.HighImportance
-	
+
 	// Wrap buttons in fixed size containers to ensure they have adequate size
 	resetBtnContainer := container.NewPadded(resetBtn)
 	applyBtnContainer := container.NewPadded(applyBtn)

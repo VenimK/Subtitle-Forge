@@ -15,12 +15,12 @@ import (
 // FileDropArea is a custom widget that supports drag and drop for files
 type FileDropArea struct {
 	widget.BaseWidget
-	rect        *canvas.Rectangle
-	descLabel   *widget.Label
-	fileLabel   *widget.Label
-	content     *fyne.Container
-	extensions  []string
-	onDropped   func(string)
+	rect       *canvas.Rectangle
+	descLabel  *widget.Label
+	fileLabel  *widget.Label
+	content    *fyne.Container
+	extensions []string
+	onDropped  func(string)
 }
 
 // NewFileDropArea creates a new file drop area widget
@@ -31,14 +31,14 @@ func NewFileDropArea(description string, extensions []string, onDropped func(str
 	}
 
 	dropArea.ExtendBaseWidget(dropArea)
-	
+
 	// Create visual elements
 	dropArea.rect = canvas.NewRectangle(color.NRGBA{R: 200, G: 200, B: 200, A: 100})
 	dropArea.descLabel = widget.NewLabel(description)
 	dropArea.descLabel.Alignment = fyne.TextAlignCenter
 	dropArea.fileLabel = widget.NewLabel("Drop file here")
 	dropArea.fileLabel.Alignment = fyne.TextAlignCenter
-	
+
 	// Create layout
 	dropArea.content = container.NewStack(
 		dropArea.rect,
@@ -47,7 +47,7 @@ func NewFileDropArea(description string, extensions []string, onDropped func(str
 			dropArea.fileLabel,
 		),
 	)
-	
+
 	return dropArea
 }
 
@@ -100,10 +100,10 @@ func (d *FileDropArea) DropFile(file fyne.URIReadCloser) {
 	if file == nil {
 		return
 	}
-	
+
 	path := file.URI().Path()
 	file.Close() // Close the file as we only need the path
-	
+
 	// Check if it has a valid extension
 	ext := strings.ToLower(filepath.Ext(path))
 	valid := false
@@ -113,7 +113,7 @@ func (d *FileDropArea) DropFile(file fyne.URIReadCloser) {
 			break
 		}
 	}
-	
+
 	if valid {
 		d.fileLabel.SetText(filepath.Base(path))
 		if d.onDropped != nil {

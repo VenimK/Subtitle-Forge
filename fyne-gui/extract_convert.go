@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 
 // extractAssTrack handles ASS/SSA to SRT conversion extraction
 func extractAssTrack(
+	ctx context.Context,
 	w fyne.Window,
 	t *TrackItem,
 	mkvPath *string,
@@ -53,14 +55,14 @@ func extractAssTrack(
 		fyne.Do(func() {
 			result.SetText(result.Text + "\nExtracting ASS/SSA track using ffmpeg...")
 		})
-		*output, *err = ExtractMP4Subtitle(*mkvPath, t.Num, absAssPath)
+		*output, *err = ExtractMP4SubtitleContext(ctx, *mkvPath, t.Num, absAssPath)
 	} else {
 		cmdStr := fmt.Sprintf("mkvextract tracks \"%s\" %d:\"%s\"", *mkvPath, t.Num, tempAssFile)
 		fyne.Do(func() {
 			result.SetText(result.Text + "\nRunning: " + cmdStr)
 		})
 
-		cmd = NewMkvextractCmd("tracks", *mkvPath, fmt.Sprintf("%d:%s", t.Num, tempAssFile))
+		cmd = NewMkvextractCmdContext(ctx, "tracks", *mkvPath, fmt.Sprintf("%d:%s", t.Num, tempAssFile))
 		AppLog("DEBUG", "ASS track extraction using mkvextract")
 		cmd.Dir = *outDir
 
@@ -186,7 +188,7 @@ func extractAssTrack(
 		}
 
 		// Create the ffmpeg command with the appropriate path
-		cmd = exec.Command(ffmpegPath, "-i", absInputPath, "-f", "srt", absOutputPath)
+		cmd = exec.CommandContext(ctx, ffmpegPath, "-i", absInputPath, "-f", "srt", absOutputPath)
 		cmd.Dir = *outDir
 
 		AppLog("CONVERT", "ASS/SSA to SRT conversion: %s -> %s", filepath.Base(absInputPath), filepath.Base(absOutputPath))
@@ -229,6 +231,7 @@ func extractAssTrack(
 
 // extractVobsubTrack handles VobSub to SRT conversion extraction
 func extractVobsubTrack(
+	ctx context.Context,
 	w fyne.Window,
 	t *TrackItem,
 	mkvPath *string,
@@ -270,14 +273,14 @@ func extractVobsubTrack(
 		fyne.Do(func() {
 			result.SetText(result.Text + "\nExtracting VobSub track using ffmpeg...")
 		})
-		*output, *err = ExtractMP4Subtitle(*mkvPath, t.Num, absIdxPath)
+		*output, *err = ExtractMP4SubtitleContext(ctx, *mkvPath, t.Num, absIdxPath)
 	} else {
 		cmdStr = fmt.Sprintf("mkvextract tracks \"%s\" %d:\"%s\"", *mkvPath, t.Num, idxFile)
 		fyne.Do(func() {
 			result.SetText(result.Text + "\nRunning: " + cmdStr)
 		})
 
-		cmd = NewMkvextractCmd("tracks", *mkvPath, fmt.Sprintf("%d:%s", t.Num, idxFile))
+		cmd = NewMkvextractCmdContext(ctx, "tracks", *mkvPath, fmt.Sprintf("%d:%s", t.Num, idxFile))
 		AppLog("DEBUG", "VobSub track extraction using mkvextract")
 		cmd.Dir = *outDir
 
@@ -473,7 +476,7 @@ func extractVobsubTrack(
 			})
 
 			// Create the command
-			cmd = exec.Command(conversionScript, "--lang", langCode, basePath)
+			cmd = exec.CommandContext(ctx, conversionScript, "--lang", langCode, basePath)
 			cmd.Dir = *outDir
 
 			// Run the command and capture output
