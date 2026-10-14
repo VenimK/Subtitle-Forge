@@ -55,6 +55,12 @@ jobs:
           # Add Go bin to PATH
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
+      # macOS Sequoia requires Go-built CLI tools to have an LC_UUID;
+      # ad-hoc codesign adds one so fyne package does not abort.
+      - name: Codesign Fyne CLI (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: codesign -s - -f "$(go env GOPATH)/bin/fyne"
+
       # Create build directory (platform-specific commands)
       - name: Create build directory (Unix)
         if: matrix.os != 'windows-latest'
