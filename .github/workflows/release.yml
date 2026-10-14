@@ -208,6 +208,8 @@ jobs:
           go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/${{ matrix.output_name }}
           # Newer fyne tools rename the exe from the working directory, so stage it there
           Copy-Item -Force "build/${{ matrix.output_name }}" "${{ matrix.output_name }}"
+          # fyne package always rebuilds on Windows (to embed the icon) and only forwards ldflags from GOFLAGS
+          $env:GOFLAGS = "-ldflags=-X=main.AppVersion=${{ github.ref_name }}"
           fyne package -os windows -icon assets/icon.png --id com.gmm.subtitleforge -name "Subtitle Forge" -exe ${{ matrix.output_name }}
 
       # Create archive for Linux (use packages from build.sh)
