@@ -1,4 +1,4 @@
-# Subtitle Forge V2.4.4
+# Subtitle Forge V2.4.5
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -327,6 +327,11 @@ Typical outputs:
 
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
+
+## What's new in V2.4.5
+
+- **Whisper:** The model download helper now works on Windows and Linux, not just macOS. On Windows it uses whisper.cpp's `download-ggml-model.cmd`; on Linux/other Unix it uses `download-ggml-model.sh`. Downloads run in-app with live progress in the log pane, and the downloaded model is auto-selected on success
+- **Whisper:** whisper.cpp root detection also recognizes the Windows `download-ggml-model.cmd` script
 
 ## What’s new in V2.4.3
 

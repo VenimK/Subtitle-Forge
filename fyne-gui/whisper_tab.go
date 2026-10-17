@@ -447,11 +447,12 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		a.Preferences().SetString("whisper_coreml_venv_activate", s)
 	}
 
-	installModelBtn := widget.NewButton("Download Model (Terminal)", func() {
-		if runtime.GOOS != "darwin" {
-			dialog.ShowError(fmt.Errorf("model download helper is currently only implemented for macOS"), w)
-			return
-		}
+	installModelLabel := "Download Model"
+	if runtime.GOOS == "darwin" {
+		installModelLabel = "Download Model (Terminal)"
+	}
+	var installModelBtn *widget.Button
+	installModelBtn = widget.NewButton(installModelLabel, func() {
 		root, err := findWhisperCppRoot(whisperBinEntry.Text, modelEntry.Text)
 		if err != nil {
 			dialog.ShowError(err, w)
@@ -462,16 +463,89 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			dialog.ShowError(fmt.Errorf("please select a model name"), w)
 			return
 		}
-		scriptPath := filepath.Join(root, "models", "download-ggml-model.sh")
-		cmdFile, err := createTerminalCommandFile(root, fmt.Sprintf("Download model: %s", modelName), []string{"bash", scriptPath, modelName})
-		if err != nil {
-			dialog.ShowError(err, w)
+
+		if runtime.GOOS == "darwin" {
+			scriptPath := filepath.Join(root, "models", "download-ggml-model.sh")
+			cmdFile, err := createTerminalCommandFile(root, fmt.Sprintf("Download model: %s", modelName), []string{"bash", scriptPath, modelName})
+			if err != nil {
+				dialog.ShowError(err, w)
+				return
+			}
+			if err := exec.Command("open", cmdFile).Start(); err != nil {
+				dialog.ShowError(fmt.Errorf("failed to open Terminal: %v", err), w)
+				return
+			}
 			return
 		}
-		if err := exec.Command("open", cmdFile).Start(); err != nil {
-			dialog.ShowError(fmt.Errorf("failed to open Terminal: %v", err), w)
-			return
+
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			scriptPath := filepath.Join(root, "models", "download-ggml-model.cmd")
+			if !isReadableFile(scriptPath) {
+				dialog.ShowError(fmt.Errorf("download script not found: %s", scriptPath), w)
+				return
+			}
+			cmd = exec.Command("cmd", "/c", scriptPath, modelName)
+		} else {
+			scriptPath := filepath.Join(root, "models", "download-ggml-model.sh")
+			if !isReadableFile(scriptPath) {
+				dialog.ShowError(fmt.Errorf("download script not found: %s", scriptPath), w)
+				return
+			}
+			shell := "bash"
+			if _, err := exec.LookPath(shell); err != nil {
+				shell = "sh"
+			}
+			cmd = exec.Command(shell, scriptPath, modelName)
 		}
+		cmd.Dir = root
+
+		installModelBtn.Disable()
+		busyBar.Show()
+		statusLabel.SetText("Downloading model " + modelName + "…")
+		appendLog("Downloading whisper model: " + modelName)
+
+		go func() {
+			defer fyne.Do(func() {
+				installModelBtn.Enable()
+				busyBar.Hide()
+			})
+
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				appendLog("❌ Model download failed: " + err.Error())
+				fyne.Do(func() { statusLabel.SetText("❌ Model download failed") })
+				return
+			}
+			cmd.Stderr = cmd.Stdout
+			if err := cmd.Start(); err != nil {
+				appendLog("❌ Model download failed: " + err.Error())
+				fyne.Do(func() { statusLabel.SetText("❌ Model download failed") })
+				return
+			}
+
+			scanner := bufio.NewScanner(stdout)
+			scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+			for scanner.Scan() {
+				appendLog(scanner.Text())
+			}
+
+			if err := cmd.Wait(); err != nil {
+				appendLog("❌ Model download failed: " + err.Error())
+				fyne.Do(func() { statusLabel.SetText("❌ Model download failed") })
+				return
+			}
+
+			expected := filepath.Join(root, "models", "ggml-"+modelName+".bin")
+			appendLog("✅ Model downloaded: " + expected)
+			fyne.Do(func() {
+				statusLabel.SetText("✅ Model downloaded")
+				if isReadableFile(expected) {
+					modelEntry.SetText(expected)
+				}
+				refreshModelOptions()
+			})
+		}()
 	})
 
 	generateCoreMLBtn := widget.NewButton("Generate CoreML Encoder (Terminal)", func() {
@@ -1381,7 +1455,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewSeparator(),
 		langLabel,
 		langSelect,
-		widget.NewLabel("Model Tools (macOS)"),
+		widget.NewLabel("Model Tools"),
 		modelNameSelect,
 		widget.NewLabel("CoreML Env (optional)"),
 		coremlCondaEnvEntry,
@@ -1493,16 +1567,16 @@ func findWhisperCppRoot(whisperBin, modelPath string) (string, error) {
 			continue
 		}
 		seen[root] = true
-		dl := filepath.Join(root, "models", "download-ggml-model.sh")
-		gen := filepath.Join(root, "models", "generate-coreml-model.sh")
-		if _, err := os.Stat(dl); err == nil {
-			if _, err2 := os.Stat(gen); err2 == nil {
-				return root, nil
-			}
+		dlSh := filepath.Join(root, "models", "download-ggml-model.sh")
+		dlCmd := filepath.Join(root, "models", "download-ggml-model.cmd")
+		if _, err := os.Stat(dlSh); err == nil {
+			return root, nil
+		}
+		if _, err := os.Stat(dlCmd); err == nil {
 			return root, nil
 		}
 	}
-	return "", fmt.Errorf("could not locate whisper.cpp root (expected models/download-ggml-model.sh). Check whisper-cli path / model path.")
+	return "", fmt.Errorf("could not locate whisper.cpp root (expected models/download-ggml-model.sh or .cmd). Check whisper-cli path / model path.")
 }
 
 func createTerminalCommandFile(workingDir, title string, cmd []string) (string, error) {
