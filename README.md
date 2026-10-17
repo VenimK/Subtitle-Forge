@@ -1,4 +1,4 @@
-# Subtitle Forge V2.4.7
+# Subtitle Forge V2.4.8
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -327,6 +327,10 @@ Typical outputs:
 
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
+
+## What's new in V2.4.8
+
+- **Whisper:** The log pane now shows live progress on Windows and Linux during local transcription — whisper-cli reports progress by rewriting the same line with `\r`, which the previous line scanner never displayed, leaving the log looking frozen. `\r` and `\n` are now both treated as line breaks, with throttling and dedupe. The same fix applies to the whisper-cli install/build output
 
 ## What's new in V2.4.7
 

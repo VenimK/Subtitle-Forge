@@ -1410,12 +1410,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 				return
 			}
 
-			scanner := bufio.NewScanner(stdout)
-			scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-			for scanner.Scan() {
-				line := scanner.Text()
-				appendLog(line)
-			}
+			streamCommandOutput(stdout, appendLog)
 
 			err = cmd.Wait()
 			fyne.Do(func() {
@@ -1639,15 +1634,55 @@ func runWhisperInstallCmd(log func(string), name string, args ...string) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		log(scanner.Text())
-	}
+	streamCommandOutput(stdout, log)
 	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("%s failed: %w", name, err)
 	}
 	return nil
+}
+
+// streamCommandOutput streams process output to log, treating both \n and \r
+// as line breaks. whisper-cli (and tools like cmake) report progress by
+// rewriting the same terminal line with \r, which a line scanner never emits
+// until the process exits — leaving the log looking frozen. \r-terminated
+// updates are throttled to avoid flooding the log.
+func streamCommandOutput(r io.Reader, log func(string)) {
+	buf := make([]byte, 32*1024)
+	var pending []byte
+	last := ""
+	var lastProgressAt time.Time
+	emit := func(inPlace bool) {
+		line := strings.TrimSpace(string(pending))
+		pending = pending[:0]
+		if line == "" || line == last {
+			return
+		}
+		last = line
+		if inPlace {
+			if time.Since(lastProgressAt) < 500*time.Millisecond {
+				return
+			}
+			lastProgressAt = time.Now()
+		}
+		log(line)
+	}
+	for {
+		n, err := r.Read(buf)
+		for i := 0; i < n; i++ {
+			switch buf[i] {
+			case '\n':
+				emit(false)
+			case '\r':
+				emit(true)
+			default:
+				pending = append(pending, buf[i])
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	emit(false)
 }
 
 func installWhisperCLI(log func(string)) (string, error) {
