@@ -453,18 +453,14 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	}
 	var installModelBtn *widget.Button
 	installModelBtn = widget.NewButton(installModelLabel, func() {
-		root, err := findWhisperCppRoot(whisperBinEntry.Text, modelEntry.Text)
-		if err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
 		modelName := strings.TrimSpace(modelNameSelect.Selected)
 		if modelName == "" {
 			dialog.ShowError(fmt.Errorf("please select a model name"), w)
 			return
 		}
+		root, rootErr := findWhisperCppRoot(whisperBinEntry.Text, modelEntry.Text)
 
-		if runtime.GOOS == "darwin" {
+		if runtime.GOOS == "darwin" && rootErr == nil {
 			scriptPath := filepath.Join(root, "models", "download-ggml-model.sh")
 			cmdFile, err := createTerminalCommandFile(root, fmt.Sprintf("Download model: %s", modelName), []string{"bash", scriptPath, modelName})
 			if err != nil {
@@ -478,32 +474,21 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			return
 		}
 
-		var cmd *exec.Cmd
-		if runtime.GOOS == "windows" {
-			scriptPath := filepath.Join(root, "models", "download-ggml-model.cmd")
-			if !isReadableFile(scriptPath) {
-				dialog.ShowError(fmt.Errorf("download script not found: %s", scriptPath), w)
-				return
-			}
-			cmd = exec.Command("cmd", "/c", scriptPath, modelName)
+		modelsDir := ""
+		if rootErr == nil {
+			modelsDir = filepath.Join(root, "models")
+		} else if d := filepath.Dir(strings.TrimSpace(modelEntry.Text)); d != "" && d != "." {
+			modelsDir = d
 		} else {
-			scriptPath := filepath.Join(root, "models", "download-ggml-model.sh")
-			if !isReadableFile(scriptPath) {
-				dialog.ShowError(fmt.Errorf("download script not found: %s", scriptPath), w)
-				return
-			}
-			shell := "bash"
-			if _, err := exec.LookPath(shell); err != nil {
-				shell = "sh"
-			}
-			cmd = exec.Command(shell, scriptPath, modelName)
+			modelsDir = filepath.Dir(whisperDefaultModelPath())
 		}
-		cmd.Dir = root
+		if rootErr != nil {
+			appendLog("whisper.cpp root not found; downloading directly to: " + modelsDir)
+		}
 
 		installModelBtn.Disable()
 		busyBar.Show()
 		statusLabel.SetText("Downloading model " + modelName + "…")
-		appendLog("Downloading whisper model: " + modelName)
 
 		go func() {
 			defer fyne.Do(func() {
@@ -511,38 +496,16 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 				busyBar.Hide()
 			})
 
-			stdout, err := cmd.StdoutPipe()
+			dest, err := downloadWhisperModel(modelName, modelsDir, appendLog)
 			if err != nil {
 				appendLog("❌ Model download failed: " + err.Error())
 				fyne.Do(func() { statusLabel.SetText("❌ Model download failed") })
 				return
 			}
-			cmd.Stderr = cmd.Stdout
-			if err := cmd.Start(); err != nil {
-				appendLog("❌ Model download failed: " + err.Error())
-				fyne.Do(func() { statusLabel.SetText("❌ Model download failed") })
-				return
-			}
-
-			scanner := bufio.NewScanner(stdout)
-			scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-			for scanner.Scan() {
-				appendLog(scanner.Text())
-			}
-
-			if err := cmd.Wait(); err != nil {
-				appendLog("❌ Model download failed: " + err.Error())
-				fyne.Do(func() { statusLabel.SetText("❌ Model download failed") })
-				return
-			}
-
-			expected := filepath.Join(root, "models", "ggml-"+modelName+".bin")
-			appendLog("✅ Model downloaded: " + expected)
+			appendLog("✅ Model downloaded: " + dest)
 			fyne.Do(func() {
 				statusLabel.SetText("✅ Model downloaded")
-				if isReadableFile(expected) {
-					modelEntry.SetText(expected)
-				}
+				modelEntry.SetText(dest)
 				refreshModelOptions()
 			})
 		}()
@@ -1537,6 +1500,65 @@ func writeTimestampsOnlySRT(inPath, outPath string) error {
 		return err
 	}
 	return nil
+}
+
+func downloadWhisperModel(modelName, destDir string, log func(string)) (string, error) {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return "", err
+	}
+	dest := filepath.Join(destDir, "ggml-"+modelName+".bin")
+	if isReadableFile(dest) {
+		log("Model already exists: " + dest)
+		return dest, nil
+	}
+
+	modelURL := fmt.Sprintf("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-%s.bin", modelName)
+	log("Downloading " + modelURL)
+	log("Destination: " + dest)
+
+	resp, err := http.Get(modelURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d — check that model name %q exists", resp.StatusCode, modelName)
+	}
+
+	tmp := dest + ".part"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return "", err
+	}
+
+	total := resp.ContentLength
+	pr := &progressReader{
+		r:     resp.Body,
+		total: total,
+		onUpdate: func(sent int64) {
+			if total > 0 {
+				log(fmt.Sprintf("Download progress: %.1f%% (%.2f/%.2f MB)",
+					float64(sent)/float64(total)*100, float64(sent)/1048576, float64(total)/1048576))
+			} else {
+				log(fmt.Sprintf("Download progress: %.2f MB", float64(sent)/1048576))
+			}
+		},
+	}
+	_, copyErr := io.Copy(out, pr)
+	closeErr := out.Close()
+	if copyErr != nil {
+		os.Remove(tmp)
+		return "", copyErr
+	}
+	if closeErr != nil {
+		os.Remove(tmp)
+		return "", closeErr
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		os.Remove(tmp)
+		return "", err
+	}
+	return dest, nil
 }
 
 func shellQuote(s string) string {

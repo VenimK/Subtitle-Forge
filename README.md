@@ -1,4 +1,4 @@
-# Subtitle Forge V2.4.5
+# Subtitle Forge V2.4.6
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -327,6 +327,11 @@ Typical outputs:
 
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
+
+## What's new in V2.4.6
+
+- **Whisper:** The model download helper no longer requires a whisper.cpp repo checkout — if none is found, the app downloads `ggml-<model>.bin` directly from the official Hugging Face repo with live progress in the log pane, and auto-selects the model on success
+- **Whisper:** Fixes "could not locate whisper.cpp root" errors for whisper-cli installs that don't ship the repo's download scripts (e.g. Homebrew or standalone binaries)
 
 ## What's new in V2.4.5
 
