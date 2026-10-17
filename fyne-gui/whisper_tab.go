@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -164,6 +165,9 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	remoteTerminalLogs.OnChanged = func(checked bool) {
 		a.Preferences().SetBool("whisper_remote_terminal_logs", checked)
 		applyModeUI()
+	}
+	if runtime.GOOS != "darwin" {
+		remoteTerminalLogs.Hide()
 	}
 
 	remoteModelEntry := widget.NewEntry()
@@ -577,6 +581,58 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		fd.Show()
 	})
 
+	var installWhisperBtn *widget.Button
+	installWhisperBtn = widget.NewButton("Check & Install whisper-cli", func() {
+		detected := ""
+		if p := strings.TrimSpace(whisperBinEntry.Text); isExecutableFile(p) {
+			detected = p
+		} else if p, err := exec.LookPath("whisper-cli"); err == nil {
+			detected = p
+		} else if p := whisperDefaultCLIPath(); isExecutableFile(p) {
+			detected = p
+		}
+		if detected != "" {
+			whisperBinEntry.SetText(detected)
+			dialog.ShowInformation("whisper-cli detected", "Already installed:\n"+detected, w)
+			return
+		}
+
+		msg := "whisper-cli was not found. Install it now?"
+		switch runtime.GOOS {
+		case "windows":
+			msg = "whisper-cli was not found.\n\nDownload the official whisper.cpp Windows binaries (x64 CPU build) from GitHub releases into ~/.whispercpp-coreml/bin?"
+		case "darwin":
+			msg = "whisper-cli was not found.\n\nClone and build whisper.cpp (with Core ML support) into ~/.whispercpp-coreml?\n\nRequires git, cmake and Xcode Command Line Tools."
+		default:
+			msg = "whisper-cli was not found.\n\nClone and build whisper.cpp into ~/.whispercpp-coreml?\n\nRequires git, cmake and a C/C++ toolchain."
+		}
+		dialog.ShowConfirm("Install whisper-cli", msg, func(ok bool) {
+			if !ok {
+				return
+			}
+			installWhisperBtn.Disable()
+			busyBar.Show()
+			statusLabel.SetText("Installing whisper-cli…")
+			go func() {
+				defer fyne.Do(func() {
+					installWhisperBtn.Enable()
+					busyBar.Hide()
+				})
+				binPath, err := installWhisperCLI(appendLog)
+				if err != nil {
+					appendLog("❌ whisper-cli install failed: " + err.Error())
+					fyne.Do(func() { statusLabel.SetText("❌ Install failed") })
+					return
+				}
+				appendLog("✅ whisper-cli installed: " + binPath)
+				fyne.Do(func() {
+					whisperBinEntry.SetText(binPath)
+					statusLabel.SetText("✅ whisper-cli installed — pick a model with Download Model")
+				})
+			}()
+		}, w)
+	})
+
 	browseModelBtn := widget.NewButton("Browse", func() {
 		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
 			if err != nil {
@@ -680,6 +736,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		if isRemote {
 			whisperBinEntry.Disable()
 			browseWhisperBtn.Disable()
+			installWhisperBtn.Disable()
 			modelEntry.Disable()
 			browseModelBtn.Disable()
 			modelSelect.Disable()
@@ -697,6 +754,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		} else {
 			whisperBinEntry.Enable()
 			browseWhisperBtn.Enable()
+			installWhisperBtn.Enable()
 			modelEntry.Enable()
 			browseModelBtn.Enable()
 			modelSelect.Enable()
@@ -1271,6 +1329,14 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			var tmpWav string
 			ext := strings.ToLower(filepath.Ext(inputFile))
 			if ext != ".wav" {
+				if _, err := exec.LookPath("ffmpeg"); err != nil {
+					appendLog("❌ ffmpeg not found on PATH — required to convert audio to WAV")
+					fyne.Do(func() {
+						statusLabel.SetText("❌ ffmpeg not found")
+						resultLabel.SetText("❌ ffmpeg is required to convert non-WAV input. Install ffmpeg and make sure it is on PATH.")
+					})
+					return
+				}
 				fyne.Do(func() {
 					statusLabel.SetText("Converting to WAV (16kHz mono)…")
 				})
@@ -1412,6 +1478,7 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewSeparator(),
 		widget.NewLabel("Whisper CLI"),
 		container.NewBorder(nil, nil, nil, browseWhisperBtn, whisperBinEntry),
+		container.NewHBox(installWhisperBtn, layout.NewSpacer()),
 		widget.NewLabel("Model"),
 		container.NewHBox(modelSelect, refreshModelsBtn),
 		container.NewBorder(nil, nil, nil, browseModelBtn, modelEntry),
@@ -1559,6 +1626,193 @@ func downloadWhisperModel(modelName, destDir string, log func(string)) (string, 
 		return "", err
 	}
 	return dest, nil
+}
+
+func runWhisperInstallCmd(log func(string), name string, args ...string) error {
+	log("$ " + name + " " + strings.Join(args, " "))
+	cmd := exec.Command(name, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	cmd.Stderr = cmd.Stdout
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		log(scanner.Text())
+	}
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("%s failed: %w", name, err)
+	}
+	return nil
+}
+
+func installWhisperCLI(log func(string)) (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	prefix := filepath.Join(homeDir, ".whispercpp-coreml")
+
+	if runtime.GOOS == "windows" {
+		return installWhisperCliWindows(filepath.Join(prefix, "bin"), log)
+	}
+
+	for _, tool := range []string{"git", "cmake"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			return "", fmt.Errorf("%s not found on PATH — required to build whisper.cpp", tool)
+		}
+	}
+	repoDir := filepath.Join(prefix, "whisper.cpp")
+	buildDir := filepath.Join(repoDir, "build")
+	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err == nil {
+		if err := runWhisperInstallCmd(log, "git", "-C", repoDir, "pull", "--ff-only"); err != nil {
+			return "", err
+		}
+	} else {
+		if err := runWhisperInstallCmd(log, "git", "clone", "https://github.com/ggml-org/whisper.cpp.git", repoDir); err != nil {
+			return "", err
+		}
+	}
+	cmakeArgs := []string{"-S", repoDir, "-B", buildDir}
+	if runtime.GOOS == "darwin" {
+		cmakeArgs = append(cmakeArgs, "-DWHISPER_COREML=1")
+	}
+	if err := runWhisperInstallCmd(log, "cmake", cmakeArgs...); err != nil {
+		return "", err
+	}
+	if err := runWhisperInstallCmd(log, "cmake", "--build", buildDir, "-j", "--config", "Release"); err != nil {
+		return "", err
+	}
+	bin := filepath.Join(buildDir, "bin", "whisper-cli")
+	if !isExecutableFile(bin) {
+		return "", fmt.Errorf("build finished but whisper-cli not found at %s", bin)
+	}
+	return bin, nil
+}
+
+func installWhisperCliWindows(destDir string, log func(string)) (string, error) {
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/ggml-org/whisper.cpp/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned HTTP %d", resp.StatusCode)
+	}
+	var rel struct {
+		TagName string `json:"tag_name"`
+		Assets  []struct {
+			Name string `json:"name"`
+			URL  string `json:"browser_download_url"`
+		} `json:"assets"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		return "", err
+	}
+	assetURL := ""
+	for _, a := range rel.Assets {
+		if a.Name == "whisper-bin-x64.zip" {
+			assetURL = a.URL
+			break
+		}
+	}
+	if assetURL == "" {
+		return "", fmt.Errorf("no whisper-bin-x64.zip asset found in release %s", rel.TagName)
+	}
+	log(fmt.Sprintf("Downloading %s (release %s)", assetURL, rel.TagName))
+
+	zr, err := http.Get(assetURL)
+	if err != nil {
+		return "", err
+	}
+	defer zr.Body.Close()
+	if zr.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d downloading release asset", zr.StatusCode)
+	}
+
+	tmp, err := os.CreateTemp("", "whisper-bin-*.zip")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(tmp.Name())
+	total := zr.ContentLength
+	pr := &progressReader{
+		r:     zr.Body,
+		total: total,
+		onUpdate: func(sent int64) {
+			if total > 0 {
+				log(fmt.Sprintf("Download progress: %.1f%% (%.2f/%.2f MB)",
+					float64(sent)/float64(total)*100, float64(sent)/1048576, float64(total)/1048576))
+			}
+		},
+	}
+	if _, err := io.Copy(tmp, pr); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", err
+	}
+
+	zipR, err := zip.OpenReader(tmp.Name())
+	if err != nil {
+		return "", err
+	}
+	defer zipR.Close()
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		return "", err
+	}
+	for _, f := range zipR.File {
+		name := filepath.Clean(f.Name)
+		if name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) || filepath.IsAbs(name) {
+			continue
+		}
+		dest := filepath.Join(destDir, name)
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(dest, 0755)
+			continue
+		}
+		os.MkdirAll(filepath.Dir(dest), 0755)
+		rc, err := f.Open()
+		if err != nil {
+			return "", err
+		}
+		out, err := os.Create(dest)
+		if err == nil {
+			_, err = io.Copy(out, rc)
+			out.Close()
+		}
+		rc.Close()
+		if err != nil {
+			return "", err
+		}
+	}
+	log("Extracted to " + destDir)
+
+	bin := filepath.Join(destDir, "whisper-cli.exe")
+	if isReadableFile(bin) {
+		return bin, nil
+	}
+	found := ""
+	_ = filepath.Walk(destDir, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() && strings.EqualFold(info.Name(), "whisper-cli.exe") && found == "" {
+			found = p
+		}
+		return nil
+	})
+	if found == "" {
+		return "", fmt.Errorf("whisper-cli.exe not found in the downloaded archive")
+	}
+	return found, nil
 }
 
 func shellQuote(s string) string {

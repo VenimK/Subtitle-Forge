@@ -271,10 +271,25 @@ func installScriptAvailable(scriptName string) bool {
 
 func whisperDefaultCLIPath() string {
 	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return ""
+	binName := "whisper-cli"
+	if runtime.GOOS == "windows" {
+		binName = "whisper-cli.exe"
 	}
-	return filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "build", "bin", "whisper-cli")
+	if err == nil {
+		defaultPath := filepath.Join(homeDir, ".whispercpp-coreml", "whisper.cpp", "build", "bin", binName)
+		if isExecutableFile(defaultPath) {
+			return defaultPath
+		}
+		// Fall back to a whisper-cli on PATH (e.g. installed via package manager or a release zip).
+		if p, lookErr := exec.LookPath("whisper-cli"); lookErr == nil {
+			return p
+		}
+		return defaultPath
+	}
+	if p, lookErr := exec.LookPath("whisper-cli"); lookErr == nil {
+		return p
+	}
+	return ""
 }
 
 func whisperDefaultModelPath() string {
@@ -388,6 +403,15 @@ func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 		libreEndpointDetail = fmt.Sprintf("Configured server URL: %s", T("settings.status_needs_setup"))
 	}
 
+	whisperDetails := []string{
+		whisperModeDetail,
+		fmt.Sprintf("whisper-cli (%s): %s", whisperCLIDetailLabel, statusLabelFor(isExecutableFile(whisperCLIPath))),
+		fmt.Sprintf("GGML model (%s): %s", whisperModelDetailLabel, statusLabelFor(isReadableFile(whisperModelPath))),
+	}
+	if runtime.GOOS == "darwin" {
+		whisperDetails = append(whisperDetails, fmt.Sprintf("macOS install helper: %s", statusLabelFor(whisperHelper)))
+	}
+
 	return []featureCheck{
 		{
 			Name:        T("settings.summary_core"),
@@ -425,12 +449,7 @@ func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 			Name:        T("settings.summary_whisper"),
 			Status:      whisperStatus,
 			Description: T("settings.summary_whisper_desc"),
-			Details: []string{
-				whisperModeDetail,
-				fmt.Sprintf("whisper-cli (%s): %s", whisperCLIDetailLabel, statusLabelFor(isExecutableFile(whisperCLIPath))),
-				fmt.Sprintf("GGML model (%s): %s", whisperModelDetailLabel, statusLabelFor(isReadableFile(whisperModelPath))),
-				fmt.Sprintf("macOS install helper: %s", statusLabelFor(whisperHelper)),
-			},
+			Details:     whisperDetails,
 		},
 		{
 			Name:        T("settings.summary_libre"),
@@ -505,7 +524,18 @@ func isExecutableFile(path string) bool {
 		return false
 	}
 	fileInfo, err := os.Stat(path)
-	return err == nil && !fileInfo.IsDir() && fileInfo.Mode().Perm()&0111 != 0
+	if err != nil || fileInfo.IsDir() {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		// Windows has no executable permission bits; check the extension instead.
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".exe", ".bat", ".cmd", ".com", ".ps1":
+			return true
+		}
+		return false
+	}
+	return fileInfo.Mode().Perm()&0111 != 0
 }
 
 func isReadableFile(path string) bool {

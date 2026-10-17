@@ -1,4 +1,4 @@
-# Subtitle Forge V2.4.6
+# Subtitle Forge V2.4.7
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -327,6 +327,13 @@ Typical outputs:
 
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
+
+## What's new in V2.4.7
+
+- **Whisper:** New "Check & Install whisper-cli" button — detects an existing install (path entry, PATH, or default location) and, if missing, installs whisper-cli with one click: official `whisper-bin-x64.zip` release binaries on Windows, or a git clone + cmake build on macOS (with Core ML) and Linux
+- **Whisper:** Fixed whisper-cli detection on Windows — executables are now recognized by extension (`.exe`, `.bat`, `.cmd`, `.com`, `.ps1`) since Windows has no exec permission bits
+- **Whisper:** Default whisper-cli path now uses `whisper-cli.exe` on Windows and falls back to a PATH lookup
+- **Whisper:** Clearer error when ffmpeg is missing and the input needs WAV conversion; the "Stream logs in Terminal (macOS)" option is now hidden on other platforms
 
 ## What's new in V2.4.6
 
