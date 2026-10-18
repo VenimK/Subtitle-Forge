@@ -284,7 +284,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	serverStatusLabel := widget.NewLabel("🔴 Stopped")
 	serverStatusLabel.TextStyle = fyne.TextStyle{Bold: true}
 
-	scriptAvailable := runtime.GOOS == "darwin" && libreHelperScriptPath() != ""
+	scriptAvailable := (runtime.GOOS == "darwin" || runtime.GOOS == "windows") && libreHelperScriptPath() != ""
 
 	startBtn := widget.NewButton("Start Server", nil)
 	stopBtn := widget.NewButton("Stop Server", nil)
@@ -361,14 +361,14 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		return n, nil
 	}
 
-	runLibreMac := func(subcmd string) {
-		if runtime.GOOS != "darwin" {
-			appendLog("❌ Local server helper is only available on macOS")
+	runLibreLocal := func(subcmd string) {
+		if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+			appendLog("❌ Local server helper is only available on macOS and Windows")
 			return
 		}
 		script := libreHelperScriptPath()
 		if script == "" {
-			appendLog("❌ Libre-mac.sh not found. Make sure it exists next to the app or in the repo root.")
+			appendLog("❌ LibreTranslate helper not found next to the app or in the repo root")
 			return
 		}
 
@@ -385,7 +385,12 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 		appendLog(fmt.Sprintf("Running: %s (THREADS=%d, REQ_LIMIT=%d)", subcmd, threads, reqLimit))
 
-		cmd := exec.Command("bash", script, subcmd)
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, subcmd)
+		} else {
+			cmd = exec.Command("bash", script, subcmd)
+		}
 		cmd.Env = append(os.Environ(),
 			fmt.Sprintf("THREADS=%d", threads),
 			fmt.Sprintf("REQ_LIMIT=%d", reqLimit),
@@ -441,8 +446,9 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	}
 
 	runLibreInstall := func() {
-		if runtime.GOOS != "darwin" {
-			appendLog("❌ Install helper is only available on macOS")
+		if runtime.GOOS == "windows" {
+			appendLog("Installing LibreTranslate. This can take several minutes...")
+			runLibreLocal("install")
 			return
 		}
 		script := libreHelperScriptPath()
@@ -472,20 +478,20 @@ end tell`, absScript)
 	startBtn.OnTapped = func() {
 		startBtn.Disable()
 		serverStatusLabel.SetText("🟡 Starting...")
-		go runLibreMac("start-bg")
+		go runLibreLocal("start-bg")
 	}
 	stopBtn.OnTapped = func() {
 		stopBtn.Disable()
 		serverStatusLabel.SetText("🟡 Stopping...")
 		go func() {
-			runLibreMac("stop")
+			runLibreLocal("stop")
 
 			// If server is still responding after script stop, kill the orphan process by port
 			baseURL := strings.TrimSpace(urlEntry.Text)
 			if baseURL == "" {
 				baseURL = "http://127.0.0.1:5100"
 			}
-			if isLibreTranslateServerUp(baseURL) {
+			if runtime.GOOS == "darwin" && isLibreTranslateServerUp(baseURL) {
 				appendLog("Server still responding — finding orphan process...")
 				// Extract port from URL
 				port := "5000"
@@ -683,7 +689,7 @@ end tell`, absScript)
 		statusLabel,
 		progressBar,
 		func() *fyne.Container {
-			hint := widget.NewLabel("THREADS/REQ_LIMIT apply only to a local LibreTranslate server started via Libre-mac.sh (macOS). For remote servers, change these on the server.")
+			hint := widget.NewLabel("THREADS/REQ_LIMIT apply only to a local LibreTranslate server started by the macOS or Windows helper. For remote servers, change these on the server.")
 			hint.Wrapping = fyne.TextWrapWord
 
 			serverLabel := widget.NewLabel("Local Server")

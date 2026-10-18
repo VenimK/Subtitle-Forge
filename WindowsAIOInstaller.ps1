@@ -59,7 +59,9 @@ if ($chocoInstalled) {
         @{Name = "ffmpeg"; Description = "FFmpeg multimedia framework"},
         @{Name = "deno"; Description = "Deno runtime"},
         @{Name = "tesseract"; Description = "Tesseract OCR engine"},
-        @{Name = "golang"; Description = "Go programming language"}
+        @{Name = "golang"; Description = "Go programming language"},
+        @{Name = "python311"; Description = "Python 3.11 for LibreTranslate"},
+        @{Name = "git"; Description = "Git for LibreTranslate setup"}
     )
     
     foreach ($dep in $dependencies) {

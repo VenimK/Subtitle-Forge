@@ -281,7 +281,8 @@ jobs:
           # Copy scripts from repo root (working-directory is ./fyne-gui)
           $rootDir = Resolve-Path ".."
           $scripts = @(
-            "Libre-mac.sh",
+            "Libre-windows.ps1",
+            "WindowsAIOInstaller.ps1",
             "Whisper-mac-coreml.sh",
             "batch_translate.sh"
           )

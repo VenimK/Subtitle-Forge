@@ -262,6 +262,9 @@ func whisperHelperScriptPath() string {
 }
 
 func libreHelperScriptPath() string {
+	if runtime.GOOS == "windows" {
+		return findHelperScript([]string{"../Libre-windows.ps1", "Libre-windows.ps1"})
+	}
 	return findHelperScript([]string{"../Libre-mac.sh", "Libre-mac.sh"})
 }
 
@@ -328,6 +331,9 @@ func libreDefaultBinaryPath() string {
 	prefix := librePrefixDir()
 	if prefix == "" {
 		return ""
+	}
+	if runtime.GOOS == "windows" {
+		return filepath.Join(prefix, "venv", "Scripts", "libretranslate.exe")
 	}
 	return filepath.Join(prefix, "venv", "bin", "libretranslate")
 }
@@ -460,7 +466,7 @@ func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 				fmt.Sprintf("Local LibreTranslate install: %s", statusLabelFor(libreLocalInstall)),
 				fmt.Sprintf("Local API key file: %s", statusLabelFor(isReadableFile(libreDefaultAPIKeyPath()))),
 				fmt.Sprintf("Local API key database: %s", statusLabelFor(isReadableFile(libreDefaultAPIKeysDBPath()))),
-				fmt.Sprintf("macOS local-server helper: %s", statusLabelFor(libreHelper)),
+				fmt.Sprintf("Local-server helper: %s", statusLabelFor(libreHelper)),
 			},
 		},
 	}
@@ -564,7 +570,7 @@ func isLibreTranslateConfigured() (bool, bool) {
 		return true, false
 	}
 
-	if runtime.GOOS == "darwin" && isLibreLocalInstallPresent() {
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "windows") && isLibreLocalInstallPresent() {
 		return true, true
 	}
 
