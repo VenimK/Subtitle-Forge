@@ -1,4 +1,4 @@
-# Subtitle Forge V2.4.8
+# Subtitle Forge V2.4.9
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -99,7 +99,7 @@ Use this table to understand what each workflow needs.
 | Whisper local | `whisper-cli` and model file | macOS helper script available |
 | Whisper remote | Remote server URL | API key may be required |
 | LibreTranslate remote | Server URL | API key optional depending on server |
-| LibreTranslate local | Local LibreTranslate install | macOS helper script available |
+| LibreTranslate local | Local LibreTranslate install | macOS/Windows helper script available |
 
 ## Installation
 
@@ -216,6 +216,31 @@ The local install is placed under:
 
 - `~/.libretranslate`
 
+### LibreTranslate on Windows
+
+Run PowerShell as Administrator and run:
+
+```powershell
+.\Libre-windows.ps1 install
+```
+
+Then start the server:
+
+```powershell
+.\Libre-windows.ps1 start-bg
+```
+
+Useful commands:
+
+```powershell
+.\Libre-windows.ps1 status
+.\Libre-windows.ps1 stop
+```
+
+The local install is placed under:
+
+- `%USERPROFILE%\.libretranslate`
+
 ## First run guide
 
 After launching Subtitle Forge:
@@ -276,7 +301,7 @@ Better results generally require:
   - Verify the selected model file exists and is readable
 
 - **LibreTranslate local mode is not ready**
-  - Make sure `Libre-mac.sh install` completed successfully
+  - Make sure the helper install completed successfully (`Libre-mac.sh` on macOS, `Libre-windows.ps1` on Windows)
   - Start the local server
   - Confirm the app is using the expected local or remote URL
 
@@ -327,6 +352,11 @@ Typical outputs:
 
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
+
+## What's new in V2.4.9
+
+- **LibreTranslate:** Local LibreTranslate server support is now available on Windows via the included `Libre-windows.ps1` helper. Install, start, stop, and check status directly from the LibreTranslate tab on Windows, just like on macOS
+- **LibreTranslate:** The Settings dependency summary and local-server UI no longer describe the helper as macOS-only
 
 ## What's new in V2.4.8
 
