@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -225,6 +226,25 @@ func stripANSI(s string) string {
 	osc := regexp.MustCompile(`\x1b\].*?(\x07|\x1b\\)`)
 	s = osc.ReplaceAllString(s, "")
 	return s
+}
+
+var gstProgressRe = regexp.MustCompile(`(\d+(?:\.\d+)?)\s*%`)
+
+// parseGSTProgress extracts the percentage from GST tqdm-style progress lines
+// (e.g. "Translating:  45%|████     | ..."). Returns ok=false for other lines.
+func parseGSTProgress(line string) (float64, bool) {
+	if !strings.HasPrefix(strings.TrimSpace(line), "Translating") {
+		return 0, false
+	}
+	m := gstProgressRe.FindStringSubmatch(line)
+	if m == nil {
+		return 0, false
+	}
+	pct, err := strconv.ParseFloat(m[1], 64)
+	if err != nil || pct < 0 || pct > 100 {
+		return 0, false
+	}
+	return pct, true
 }
 
 // TranslationJob represents a translation task
@@ -1036,7 +1056,16 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 			}
 
 			// Perform translation with progress updates
+			fileIndex := i
 			success, errorMsg := translateSubtitleFileWithProgress(ctx, inputFile, outputFile, sourceLang, targetLang, config, func(status string) {
+				// GST tqdm-style progress lines ("Translating: ... 45%") drive the
+				// progress bar instead of flooding the results log.
+				if pct, ok := parseGSTProgress(status); ok {
+					fyne.Do(func() {
+						progressBar.SetValue((float64(fileIndex) + pct/100.0) / float64(totalFiles))
+					})
+					return
+				}
 				if resultsArea != nil {
 					fyne.Do(func() {
 						appendToResults(fmt.Sprintf("   %s", status))
