@@ -315,14 +315,19 @@ func appendToResults(line string) {
 	}
 }
 
-// appendProgressToResults shows live progress as a single line that is updated
-// in place, instead of appending one line per percentage tick.
+// aiProgressLineIdx tracks the position of the live progress line in
+// aiResultsLines, or -1 when there is none. Other GST output lines are
+// appended after it, so the index (not "last line") must be tracked.
+var aiProgressLineIdx = -1
+
+// appendProgressToResults shows live progress as a single line that stays at
+// the bottom of the log, instead of appending one line per percentage tick.
 func appendProgressToResults(line string) {
-	if n := len(aiResultsLines); n > 0 && strings.HasPrefix(aiResultsLines[n-1], "   Translating:") {
-		aiResultsLines[n-1] = line
-	} else {
-		aiResultsLines = append(aiResultsLines, line)
+	if aiProgressLineIdx >= 0 && aiProgressLineIdx < len(aiResultsLines) {
+		aiResultsLines = append(aiResultsLines[:aiProgressLineIdx], aiResultsLines[aiProgressLineIdx+1:]...)
 	}
+	aiResultsLines = append(aiResultsLines, line)
+	aiProgressLineIdx = len(aiResultsLines) - 1
 	if resultsArea != nil {
 		resultsArea.SetText(strings.Join(aiResultsLines, "\n"))
 	}
@@ -985,6 +990,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 	updateAIResultsActions(w, "")
 	if resultsArea != nil {
 		aiResultsLines = []string{"🤖 Initializing AI translation..."}
+		aiProgressLineIdx = -1
 		resultsArea.SetText(strings.Join(aiResultsLines, "\n"))
 		// Always scroll to bottom at start
 		if resultsScroll != nil {
