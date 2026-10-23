@@ -315,6 +315,19 @@ func appendToResults(line string) {
 	}
 }
 
+// appendProgressToResults shows live progress as a single line that is updated
+// in place, instead of appending one line per percentage tick.
+func appendProgressToResults(line string) {
+	if n := len(aiResultsLines); n > 0 && strings.HasPrefix(aiResultsLines[n-1], "   Translating:") {
+		aiResultsLines[n-1] = line
+	} else {
+		aiResultsLines = append(aiResultsLines, line)
+	}
+	if resultsArea != nil {
+		resultsArea.SetText(strings.Join(aiResultsLines, "\n"))
+	}
+}
+
 func updateAIResultsActions(w fyne.Window, outputDir string) {
 	if aiResultsActions == nil {
 		return
@@ -1057,12 +1070,21 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 
 			// Perform translation with progress updates
 			fileIndex := i
+			lastShownPct := -1
 			success, errorMsg := translateSubtitleFileWithProgress(ctx, inputFile, outputFile, sourceLang, targetLang, config, func(status string) {
 				// GST tqdm-style progress lines ("Translating: ... 45%") drive the
-				// progress bar instead of flooding the results log.
+				// progress bar and show as a single updating line in the log.
 				if pct, ok := parseGSTProgress(status); ok {
+					whole := int(pct)
 					fyne.Do(func() {
 						progressBar.SetValue((float64(fileIndex) + pct/100.0) / float64(totalFiles))
+						if resultsArea != nil && whole != lastShownPct {
+							lastShownPct = whole
+							appendProgressToResults(fmt.Sprintf("   Translating: %d%%", whole))
+							if resultsScroll != nil && isNearBottom() {
+								resultsScroll.ScrollToBottom()
+							}
+						}
 					})
 					return
 				}
