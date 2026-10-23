@@ -171,6 +171,9 @@ func translateWithGST(ctx context.Context, inputFile, outputFile, targetLang str
 
 	AppLog("TRANSLATE", "Starting GST translation: %s -> %s (lang: %s, model: %s)", filepath.Base(inputFile), filepath.Base(outputFile), targetLang, config.Model)
 	cmd := exec.CommandContext(ctx, gstPath, args...)
+	// Very wide virtual terminal so GST never counts wrapped lines when it
+	// rewinds its redraw block (see stream below).
+	cmd.Env = append(os.Environ(), "COLUMNS=100000")
 	AppLog("CMD", "Execute: %s %s", gstPath, strings.Join(args, " "))
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
@@ -179,17 +182,34 @@ func translateWithGST(ctx context.Context, inputFile, outputFile, targetLang str
 		return false, fmt.Errorf("failed to start gst: %v", err)
 	}
 
-	// Stream gst output lines to progress callback
-	stream := func(r io.Reader) {
+	// Stream gst output lines to progress callback.
+	// GST redraws its whole block (progress bar + all previous messages) on every
+	// update, first moving the cursor up with ESC[F. We emulate that on a virtual
+	// screen and only forward lines that land beyond the furthest line already
+	// shown, plus every progress-bar line (which the GUI updates in place).
+	stream := func(r io.Reader, emulateScreen bool) {
 		scanner := bufio.NewScanner(r)
 		buf := make([]byte, 0, 256*1024)
 		scanner.Buffer(buf, 1024*1024)
+		screenLen, highWater := 0, 0
 		for scanner.Scan() {
 			raw := scanner.Text()
+			if emulateScreen {
+				screenLen = max(0, screenLen-strings.Count(raw, "\x1b[F"))
+			}
 			// Remove carriage returns used for in-place progress and ANSI color codes
 			line := strings.ReplaceAll(raw, "\r", "")
 			line = stripANSI(line)
+			isNew := true
+			if emulateScreen {
+				isNew = screenLen >= highWater
+				screenLen++
+				highWater = max(highWater, screenLen)
+			}
 			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			if _, isBar := parseGSTProgress(line); !isNew && !isBar {
 				continue
 			}
 			if progressCallback != nil {
@@ -197,8 +217,8 @@ func translateWithGST(ctx context.Context, inputFile, outputFile, targetLang str
 			}
 		}
 	}
-	go stream(stdout)
-	go stream(stderr)
+	go stream(stdout, true)
+	go stream(stderr, false)
 
 	err := cmd.Wait()
 	if err != nil {
@@ -1076,17 +1096,16 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 
 			// Perform translation with progress updates
 			fileIndex := i
-			lastShownPct := -1
+			lastShownBar := ""
 			success, errorMsg := translateSubtitleFileWithProgress(ctx, inputFile, outputFile, sourceLang, targetLang, config, func(status string) {
-				// GST tqdm-style progress lines ("Translating: ... 45%") drive the
+				// GST progress lines ("Translating: |███░░| 45% ...") drive the
 				// progress bar and show as a single updating line in the log.
 				if pct, ok := parseGSTProgress(status); ok {
-					whole := int(pct)
 					fyne.Do(func() {
 						progressBar.SetValue((float64(fileIndex) + pct/100.0) / float64(totalFiles))
-						if resultsArea != nil && whole != lastShownPct {
-							lastShownPct = whole
-							appendProgressToResults(fmt.Sprintf("   Translating: %d%%", whole))
+						if resultsArea != nil && status != lastShownBar {
+							lastShownBar = status
+							appendProgressToResults("   " + strings.TrimSpace(status))
 							if resultsScroll != nil && isNearBottom() {
 								resultsScroll.ScrollToBottom()
 							}
