@@ -241,6 +241,10 @@ func findHelperScript(candidates []string) string {
 }
 
 func isTessdataConfigured() bool {
+	return tessdataPath() != ""
+}
+
+func tessdataPath() string {
 	candidates := []string{}
 	if env := strings.TrimSpace(os.Getenv("TESSDATA_PREFIX")); env != "" {
 		candidates = append(candidates, env)
@@ -249,12 +253,20 @@ func isTessdataConfigured() bool {
 	if err == nil {
 		candidates = append(candidates, filepath.Join(homeDir, "tessdata_best"))
 	}
+	candidates = append(candidates,
+		"/opt/homebrew/share/tessdata",
+		"/usr/local/share/tessdata",
+		"/usr/share/tesseract-ocr/5/tessdata",
+		"/usr/share/tesseract-ocr/4.00/tessdata",
+		"/usr/share/tesseract-ocr/tessdata",
+		"/usr/share/tessdata",
+	)
 	for _, dir := range candidates {
 		if isReadableFile(filepath.Join(dir, "eng.traineddata")) {
-			return true
+			return dir
 		}
 	}
-	return false
+	return ""
 }
 
 func whisperHelperScriptPath() string {
@@ -431,7 +443,7 @@ func featureReadinessChecks(dependencyResults map[string]bool) []featureCheck {
 		},
 		{
 			Name:        T("settings.summary_ocr"),
-			Status:      statusLabelFor(ocrReady),
+			Status:      statusLabelFor(ocrReady && tessdataReady),
 			Description: T("settings.summary_ocr_desc"),
 			Details: []string{
 				fmt.Sprintf("Tesseract: %s", statusLabelFor(dependencyResults["Tesseract"])),

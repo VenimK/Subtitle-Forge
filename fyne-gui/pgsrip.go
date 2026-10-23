@@ -74,12 +74,13 @@ func checkPgsrip() bool {
 	os.Setenv("PATH", newPath)
 
 	// Set TESSDATA_PREFIX to point to tessdata_best in user's home directory
-	tessdataPath := filepath.Join(homeDir, "tessdata_best")
-	os.Setenv("TESSDATA_PREFIX", tessdataPath)
-	if debugLogger != nil {
-		fmt.Fprintf(debugLogger, "Set TESSDATA_PREFIX to: %s\n", tessdataPath)
+	if dataPath := tessdataPath(); dataPath != "" {
+		os.Setenv("TESSDATA_PREFIX", dataPath)
+		if debugLogger != nil {
+			fmt.Fprintf(debugLogger, "Set TESSDATA_PREFIX to: %s\n", dataPath)
+		}
+		fmt.Println("[DEBUG] Set TESSDATA_PREFIX to:", dataPath)
 	}
-	fmt.Println("[DEBUG] Set TESSDATA_PREFIX to:", tessdataPath)
 
 	// Debug the PATH
 	fmt.Println("[DEBUG] Extended PATH: " + newPath)
