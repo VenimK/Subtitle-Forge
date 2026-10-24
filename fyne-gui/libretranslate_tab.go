@@ -268,7 +268,8 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 	const maxLibreLogLines = 500
 	var logLines []string
 
-	appendLog := func(msg string) {
+	appendLog := func(format string, args ...any) {
+		msg := fmt.Sprintf(format, args...)
 		ts := time.Now().Format("15:04:05")
 		fyne.Do(func() {
 			logLines = append(logLines, fmt.Sprintf("[%s] %s", ts, msg))
@@ -383,7 +384,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 			return
 		}
 
-		appendLog(fmt.Sprintf("Running: %s (THREADS=%d, REQ_LIMIT=%d)", subcmd, threads, reqLimit))
+		appendLog("Running: %s (THREADS=%d, REQ_LIMIT=%d)", subcmd, threads, reqLimit)
 
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
@@ -398,13 +399,13 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
-			appendLog(fmt.Sprintf("❌ Failed to create pipe: %v", err))
+			appendLog("❌ Failed to create pipe: %v", err)
 			return
 		}
 		cmd.Stderr = cmd.Stdout // merge stderr into stdout pipe
 
 		if err := cmd.Start(); err != nil {
-			appendLog(fmt.Sprintf("❌ Failed to start: %v", err))
+			appendLog("❌ Failed to start: %v", err)
 			return
 		}
 
@@ -412,12 +413,15 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 		for scanner.Scan() {
 			line := scanner.Text()
 			if strings.TrimSpace(line) != "" {
-				appendLog(line)
+				appendLog("%s", line)
 			}
+		}
+		if scanErr := scanner.Err(); scanErr != nil {
+			appendLog("⚠️ Error reading helper output: %v", scanErr)
 		}
 
 		if err := cmd.Wait(); err != nil {
-			appendLog(fmt.Sprintf("❌ Command failed: %v", err))
+			appendLog("❌ Command failed: %v", err)
 		} else {
 			appendLog("✅ Done")
 		}
@@ -469,7 +473,7 @@ func createLibreTranslateTab(w fyne.Window, a fyne.App) *fyne.Container {
 end tell`, absScript)
 		cmd := exec.Command("osascript", "-e", osascript)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			appendLog(fmt.Sprintf("❌ Failed to open terminal: %v (%s)", err, strings.TrimSpace(string(out))))
+			appendLog("❌ Failed to open terminal: %v (%s)", err, strings.TrimSpace(string(out)))
 		} else {
 			appendLog("✅ Install started in Terminal. Close terminal when done.")
 		}
@@ -504,11 +508,11 @@ end tell`, absScript)
 				).Output()
 				pid := strings.TrimSpace(string(pidOut))
 				if err != nil || pid == "" {
-					appendLog(fmt.Sprintf("⚠️ No process found listening on port %s", port))
+					appendLog("⚠️ No process found listening on port %s", port)
 				} else {
-					appendLog(fmt.Sprintf("Killing PID %s on port %s...", pid, port))
+					appendLog("Killing PID %s on port %s...", pid, port)
 					if out, err := exec.Command("kill", pid).CombinedOutput(); err != nil {
-						appendLog(fmt.Sprintf("⚠️ kill failed: %v %s", err, strings.TrimSpace(string(out))))
+						appendLog("⚠️ kill failed: %v %s", err, strings.TrimSpace(string(out)))
 					} else {
 						appendLog("✅ Orphan process killed")
 					}
@@ -584,7 +588,7 @@ end tell`, absScript)
 					statusLabel.SetText("")
 					resultLabel.SetText(fmt.Sprintf("❌ Cannot reach LibreTranslate server: %v", err))
 				})
-				appendLog(fmt.Sprintf("Cannot reach server: %v", err))
+				appendLog("Cannot reach server: %v", err)
 				return
 			}
 			appendLog("Server reachable")
@@ -600,7 +604,10 @@ end tell`, absScript)
 						progressBar.SetValue(float64(i) / float64(len(inputFiles)))
 					}
 				})
-				appendLog(fmt.Sprintf("[%d/%d] Translating %s", i+1, len(inputFiles), filepath.Base(inFile)))
+				appendLog("[%d/%d] Translating %s", i+1, len(inputFiles), filepath.Base(inFile))
+				if info, statErr := os.Stat(inFile); statErr == nil {
+					appendLog("   📄 %s — %.1f KB, %d subtitle entries", filepath.Base(inFile), float64(info.Size())/1024, countSubtitleEntries(inFile))
+				}
 				outDir := outputDir
 				if outDir == "" {
 					outDir = filepath.Dir(inFile)
@@ -608,10 +615,17 @@ end tell`, absScript)
 				lastOutDir = outDir
 				baseName := strings.TrimSuffix(filepath.Base(inFile), filepath.Ext(inFile))
 				outFile := filepath.Join(outDir, fmt.Sprintf("%s.%s.srt", baseName, tgt))
-				err := libreTranslateTranslateFile(baseURL, apiKey, inFile, src, tgt, outFile)
+				err := libreTranslateFileChunked(baseURL, apiKey, inFile, src, tgt, outFile, appendLog, func(done, total int) {
+					fyne.Do(func() {
+						if len(inputFiles) > 0 && total > 0 {
+							progressBar.SetValue((float64(i) + float64(done)/float64(total)) / float64(len(inputFiles)))
+						}
+						statusLabel.SetText(fmt.Sprintf("Translating %d/%d: %s — %d/%d entries", i+1, len(inputFiles), filepath.Base(inFile), done, total))
+					})
+				})
 				if err != nil {
 					failCount++
-					appendLog(fmt.Sprintf("❌ Failed: %v", err))
+					appendLog("❌ Failed: %v", err)
 					continue
 				}
 				okCount++
@@ -648,7 +662,7 @@ end tell`, absScript)
 				resultLabel.SetText(fmt.Sprintf(T("libre.translation_completed_with_errors"), okCount, failCount, T("common.output_folder"), lastOutDir))
 				showLibreResultActions(lastOutDir)
 			})
-			appendLog(fmt.Sprintf("Finished: %d ok, %d failed", okCount, failCount))
+			appendLog("Finished: %d ok, %d failed", okCount, failCount)
 		}()
 	})
 	translateBtn.Importance = widget.HighImportance
@@ -662,11 +676,27 @@ end tell`, absScript)
 			widget.NewLabel("API key:"), apiKeyEntry,
 			widget.NewLabel(""), rememberKey,
 		),
-		widget.NewLabel("Advanced (local server)"),
-		container.New(layout.NewFormLayout(),
-			widget.NewLabel("THREADS:"), threadsEntry,
-			widget.NewLabel("REQ_LIMIT:"), reqLimitEntry,
-		),
+		widget.NewAccordion(widget.NewAccordionItem("Advanced: Local Server",
+			container.NewVBox(
+				container.New(layout.NewFormLayout(),
+					widget.NewLabel("THREADS:"), threadsEntry,
+					widget.NewLabel("REQ_LIMIT:"), reqLimitEntry,
+				),
+				func() *fyne.Container {
+					hint := widget.NewLabel("THREADS/REQ_LIMIT apply only to a local LibreTranslate server started by the macOS or Windows helper. For remote servers, change these on the server.")
+					hint.Wrapping = fyne.TextWrapWord
+
+					serverLabel := widget.NewLabel("Local Server")
+					serverLabel.TextStyle = fyne.TextStyle{Bold: true}
+
+					return container.NewVBox(
+						serverLabel,
+						container.NewHBox(widget.NewLabel("Status:"), serverStatusLabel, layout.NewSpacer()),
+						container.NewHBox(startBtn, stopBtn, installBtn),
+						hint,
+					)
+				}(),
+			))),
 		container.NewHBox(refreshLanguagesBtn, layout.NewSpacer()),
 		languagesLabel,
 		widget.NewSeparator(),
@@ -688,20 +718,6 @@ end tell`, absScript)
 		translateBtn,
 		statusLabel,
 		progressBar,
-		func() *fyne.Container {
-			hint := widget.NewLabel("THREADS/REQ_LIMIT apply only to a local LibreTranslate server started by the macOS or Windows helper. For remote servers, change these on the server.")
-			hint.Wrapping = fyne.TextWrapWord
-
-			serverLabel := widget.NewLabel("Local Server")
-			serverLabel.TextStyle = fyne.TextStyle{Bold: true}
-
-			return container.NewVBox(
-				serverLabel,
-				container.NewHBox(widget.NewLabel("Status:"), serverStatusLabel, layout.NewSpacer()),
-				container.NewHBox(startBtn, stopBtn, installBtn),
-				hint,
-			)
-		}(),
 		container.NewHBox(widget.NewLabel("Log"), layout.NewSpacer(), widget.NewButton("Clear", func() {
 			logLines = nil
 			logGrid.SetText("")
@@ -782,7 +798,16 @@ func fetchLibreTranslateLanguages(baseURL, apiKey string) ([]struct{ Code, Name 
 	return out, nil
 }
 
-func libreTranslateTranslateFile(baseURL, apiKey, inputFile, source, target, outputFile string) error {
+// countSubtitleEntries returns the number of subtitle blocks (lines containing "-->").
+func countSubtitleEntries(path string) int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	return bytes.Count(data, []byte("-->"))
+}
+
+func libreTranslateTranslateFile(baseURL, apiKey, inputFile, source, target, outputFile string, logf func(string, ...any)) error {
 	endpoint := strings.TrimRight(baseURL, "/") + "/translate_file"
 
 	f, err := os.Open(inputFile)
@@ -824,11 +849,18 @@ func libreTranslateTranslateFile(baseURL, apiKey, inputFile, source, target, out
 	}
 
 	client := &http.Client{Timeout: 5 * time.Minute}
+	if logf != nil {
+		logf("   ⬆️ Uploading %.1f KB to %s (source=%s target=%s)", float64(body.Len())/1024, endpoint, source, target)
+	}
+	reqStart := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+	if logf != nil {
+		logf("   ⬇️ Server responded HTTP %d in %s — downloading result...", resp.StatusCode, time.Since(reqStart).Round(time.Second))
+	}
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -869,10 +901,221 @@ func libreTranslateTranslateFile(baseURL, apiKey, inputFile, source, target, out
 				if err != nil {
 					return err
 				}
+				if logf != nil {
+					logf("   💾 Downloaded translated file (%.1f KB)", float64(len(data))/1024)
+				}
 				return os.WriteFile(outputFile, data, 0644)
 			}
 		}
 	}
 
+	if logf != nil {
+		logf("   💾 Writing output (%.1f KB)", float64(len(respBody))/1024)
+	}
 	return os.WriteFile(outputFile, respBody, 0644)
+}
+
+// srtBlock is one subtitle block: index line, timing line, text lines.
+type srtBlock struct {
+	index  string
+	timing string
+	texts  []string
+	raw    []string // kept verbatim for non-conforming blocks
+}
+
+func parseSRTBlocks(content string) []srtBlock {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.TrimPrefix(content, "\ufeff")
+	var blocks []srtBlock
+	var cur []string
+	flush := func() {
+		if len(cur) == 0 {
+			return
+		}
+		b := srtBlock{raw: cur}
+		// Conforming block: index, timing, text...
+		if len(cur) >= 3 && strings.Contains(cur[1], "-->") {
+			b.index = cur[0]
+			b.timing = cur[1]
+			b.texts = cur[2:]
+		}
+		blocks = append(blocks, b)
+		cur = nil
+	}
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) == "" {
+			flush()
+			continue
+		}
+		cur = append(cur, line)
+	}
+	flush()
+	return blocks
+}
+
+func writeSRTBlocks(blocks []srtBlock, outputFile string) error {
+	var sb strings.Builder
+	for _, b := range blocks {
+		if len(b.texts) == 0 {
+			for _, l := range b.raw {
+				sb.WriteString(l + "\n")
+			}
+		} else {
+			sb.WriteString(b.index + "\n")
+			sb.WriteString(b.timing + "\n")
+			for _, t := range b.texts {
+				sb.WriteString(t + "\n")
+			}
+		}
+		sb.WriteString("\n")
+	}
+	return os.WriteFile(outputFile, []byte(sb.String()), 0644)
+}
+
+// libreTranslateFileChunked translates an SRT entry-by-entry via POST /translate
+// (the "q" parameter accepts an array), giving real per-entry progress.
+// Falls back to the whole-file /translate_file endpoint when /translate is not
+// available on the server.
+func libreTranslateFileChunked(baseURL, apiKey, inputFile, source, target, outputFile string, logf func(string, ...any), onProgress func(done, total int)) error {
+	data, err := os.ReadFile(inputFile)
+	if err != nil {
+		return err
+	}
+	blocks := parseSRTBlocks(string(data))
+
+	var texts []string
+	for _, b := range blocks {
+		texts = append(texts, b.texts...)
+	}
+	total := len(texts)
+	if total == 0 {
+		return fmt.Errorf("no translatable subtitle text found")
+	}
+	if logf != nil {
+		logf("   🔄 Translating %d text lines via /translate", total)
+	}
+	if onProgress != nil {
+		onProgress(0, total)
+	}
+
+	endpoint := strings.TrimRight(baseURL, "/") + "/translate"
+	client := &http.Client{Timeout: 2 * time.Minute}
+	const batchSize = 50
+	done := 0
+
+	translateBatch := func(chunk []string) ([]string, error) {
+		payload := map[string]any{
+			"q":      chunk,
+			"source": source,
+			"target": target,
+			"format": "text",
+		}
+		if strings.TrimSpace(apiKey) != "" {
+			payload["api_key"] = apiKey
+		}
+		body, _ := json.Marshal(payload)
+		req, err := http.NewRequest("POST", endpoint, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+		}
+		var decoded struct {
+			TranslatedText json.RawMessage `json:"translatedText"`
+			Error          string          `json:"error"`
+		}
+		if err := json.Unmarshal(respBody, &decoded); err != nil {
+			return nil, err
+		}
+		if decoded.Error != "" {
+			return nil, fmt.Errorf("%s", decoded.Error)
+		}
+		var arr []string
+		if err := json.Unmarshal(decoded.TranslatedText, &arr); err == nil {
+			return arr, nil
+		}
+		var single string
+		if err := json.Unmarshal(decoded.TranslatedText, &single); err != nil {
+			return nil, err
+		}
+		return []string{single}, nil
+	}
+
+	translated := make([]string, total)
+	for start := 0; start < total; start += batchSize {
+		end := start + batchSize
+		if end > total {
+			end = total
+		}
+		chunk := texts[start:end]
+		var out []string
+		var lastErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			out, lastErr = translateBatch(chunk)
+			if lastErr == nil && len(out) == len(chunk) {
+				break
+			}
+			if lastErr == nil {
+				lastErr = fmt.Errorf("server returned %d translations for %d lines", len(out), len(chunk))
+			}
+			if logf != nil {
+				logf("   ⚠️ Batch %d-%d failed (attempt %d/3): %v", start+1, end, attempt, lastErr)
+			}
+			time.Sleep(time.Duration(attempt) * 2 * time.Second)
+		}
+		if lastErr != nil {
+			// /translate missing entirely? fall back to whole-file upload
+			if strings.Contains(lastErr.Error(), "HTTP 404") || strings.Contains(lastErr.Error(), "HTTP 405") {
+				if logf != nil {
+					logf("   ↩️ /translate not available, falling back to /translate_file")
+				}
+				return libreTranslateTranslateFile(baseURL, apiKey, inputFile, source, target, outputFile, logf)
+			}
+			return lastErr
+		}
+		copy(translated[start:end], out)
+		done = end
+		if logf != nil && len(out) > 0 {
+			srcSample := chunk[len(chunk)-1]
+			dstSample := out[len(out)-1]
+			if len(srcSample) > 60 {
+				srcSample = srcSample[:60] + "…"
+			}
+			if len(dstSample) > 60 {
+				dstSample = dstSample[:60] + "…"
+			}
+			logf("   %d/%d — \"%s\" → \"%s\"", done, total, srcSample, dstSample)
+		}
+		if onProgress != nil {
+			onProgress(done, total)
+		}
+	}
+
+	// Rebuild: walk blocks, consume translated strings in order.
+	pos := 0
+	for bi := range blocks {
+		for j := range blocks[bi].texts {
+			blocks[bi].texts[j] = translated[pos]
+			pos++
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(outputFile), 0755); err != nil {
+		return err
+	}
+	if logf != nil {
+		logf("   💾 Writing output: %s", filepath.Base(outputFile))
+	}
+	return writeSRTBlocks(blocks, outputFile)
 }

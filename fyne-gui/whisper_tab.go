@@ -159,6 +159,8 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	}
 
 	var applyModeUI func()
+	var remoteGroup, localGroup *fyne.Container
+	var advancedAccordion *widget.Accordion
 
 	remoteTerminalLogs := widget.NewCheck("Stream logs in Terminal (macOS)", nil)
 	remoteTerminalLogs.Checked = a.Preferences().BoolWithFallback("whisper_remote_terminal_logs", false)
@@ -734,6 +736,9 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		isRemote := modeSelect.Selected == "Remote API"
 		showLog := !(runtime.GOOS == "darwin" && remoteTerminalLogs.Checked)
 		if isRemote {
+			remoteGroup.Show()
+			localGroup.Hide()
+			advancedAccordion.Hide()
 			whisperBinEntry.Disable()
 			browseWhisperBtn.Disable()
 			installWhisperBtn.Disable()
@@ -752,6 +757,9 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			wantTXT.Enable()
 			langSelect.Disable()
 		} else {
+			remoteGroup.Hide()
+			localGroup.Show()
+			advancedAccordion.Show()
 			whisperBinEntry.Enable()
 			browseWhisperBtn.Enable()
 			installWhisperBtn.Enable()
@@ -1437,11 +1445,9 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 	})
 	runBtn.Importance = widget.HighImportance
 
-	config := container.NewVBox(
-		title,
-		widget.NewSeparator(),
-		widget.NewLabel("Mode"),
-		modeSelect,
+	remoteHelp := widget.NewLabel("Remote API: POST {url}/transcribe/{srt|vtt|txt} or {url}/transcribe/stream/{srt|vtt|txt} for SSE logs. Upload field: file. Header: x-api-key (optional). Response can be raw SRT/VTT/TXT or JSON with keys srt/vtt/text (auto-detected). Optional query params: model, threads, beam_size, best_of, language.")
+	remoteHelp.Wrapping = fyne.TextWrapWord
+	remoteGroup = container.NewVBox(
 		container.New(layout.NewFormLayout(),
 			widget.NewLabel("Remote URL:"), remoteURLEntry,
 			widget.NewLabel("Remote API key:"), remoteKeyEntry,
@@ -1457,7 +1463,42 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 			widget.NewLabel("Remote best-of:"), remoteBestOfEntry,
 			widget.NewLabel("Remote language:"), remoteLangEntry,
 		),
-		widget.NewLabel("Remote API: POST {url}/transcribe/{srt|vtt|txt} or {url}/transcribe/stream/{srt|vtt|txt} for SSE logs. Upload field: file. Header: x-api-key (optional). Response can be raw SRT/VTT/TXT or JSON with keys srt/vtt/text (auto-detected). Optional query params: model, threads, beam_size, best_of, language."),
+		remoteHelp,
+	)
+
+	localGroup = container.NewVBox(
+		widget.NewLabel("Whisper CLI"),
+		container.NewBorder(nil, nil, nil, browseWhisperBtn, whisperBinEntry),
+		container.NewHBox(installWhisperBtn, layout.NewSpacer()),
+		widget.NewLabel("Model"),
+		container.NewHBox(modelSelect, refreshModelsBtn),
+		container.NewBorder(nil, nil, nil, browseModelBtn, modelEntry),
+		langLabel,
+		langSelect,
+	)
+
+	advancedAccordion = widget.NewAccordion(
+		widget.NewAccordionItem("Advanced: Model Tools & Threads",
+			container.NewVBox(
+				widget.NewLabel("Model Tools"),
+				modelNameSelect,
+				widget.NewLabel("CoreML Env (optional)"),
+				coremlCondaEnvEntry,
+				coremlVenvActivateEntry,
+				container.NewHBox(installModelBtn, generateCoreMLBtn, layout.NewSpacer()),
+				threadsLabel,
+				threadsSlider,
+			)),
+	)
+
+	config := container.NewVBox(
+		title,
+		widget.NewSeparator(),
+		widget.NewLabel("Mode"),
+		modeSelect,
+		remoteGroup,
+		localGroup,
+		advancedAccordion,
 		widget.NewSeparator(),
 		widget.NewLabel("Status"),
 		statusLabel,
@@ -1470,25 +1511,6 @@ func createWhisperTranscribeTab(w fyne.Window, a fyne.App) *fyne.Container {
 		widget.NewLabel("Output"),
 		outputLabel,
 		selectOutputBtn,
-		widget.NewSeparator(),
-		widget.NewLabel("Whisper CLI"),
-		container.NewBorder(nil, nil, nil, browseWhisperBtn, whisperBinEntry),
-		container.NewHBox(installWhisperBtn, layout.NewSpacer()),
-		widget.NewLabel("Model"),
-		container.NewHBox(modelSelect, refreshModelsBtn),
-		container.NewBorder(nil, nil, nil, browseModelBtn, modelEntry),
-		widget.NewSeparator(),
-		langLabel,
-		langSelect,
-		widget.NewLabel("Model Tools"),
-		modelNameSelect,
-		widget.NewLabel("CoreML Env (optional)"),
-		coremlCondaEnvEntry,
-		coremlVenvActivateEntry,
-		container.NewHBox(installModelBtn, generateCoreMLBtn, layout.NewSpacer()),
-		widget.NewSeparator(),
-		threadsLabel,
-		threadsSlider,
 		widget.NewSeparator(),
 		widget.NewLabel("Formats"),
 		container.NewVBox(
