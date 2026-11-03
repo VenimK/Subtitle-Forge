@@ -613,8 +613,7 @@ end tell`, absScript)
 					outDir = filepath.Dir(inFile)
 				}
 				lastOutDir = outDir
-				baseName := strings.TrimSuffix(filepath.Base(inFile), filepath.Ext(inFile))
-				outFile := filepath.Join(outDir, fmt.Sprintf("%s.%s.srt", baseName, tgt))
+				outFile := translatedOutputName(inFile, tgt, outDir)
 				err := libreTranslateFileChunked(baseURL, apiKey, inFile, src, tgt, outFile, appendLog, func(done, total int) {
 					fyne.Do(func() {
 						if len(inputFiles) > 0 && total > 0 {

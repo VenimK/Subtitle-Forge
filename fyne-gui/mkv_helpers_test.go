@@ -250,3 +250,26 @@ func TestNewMkvmergeCmd(t *testing.T) {
 		t.Errorf("NewMkvmergeCmd Path = %q, want /opt/homebrew/bin/mkvmerge", cmd.Path)
 	}
 }
+
+func TestTranslatedOutputName(t *testing.T) {
+	tests := []struct {
+		input      string
+		targetLang string
+		outputDir  string
+		want       string
+	}{
+		{"/out/The Gilded Age - S01E01 - Never the New WEBDL-1080p.track2_eng.srt", "nl", "", "The Gilded Age - S01E01 - Never the New WEBDL-1080p.nl.srt"},
+		{"/out/movie.track12_zho.ass", "fra", "/out", "/out/movie.fra.srt"},
+		{"/out/plain.srt", "nl", "", "plain.nl.srt"},
+		{"movie.track2_eng.srt", "de", "", "movie.de.srt"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := translatedOutputName(tt.input, tt.targetLang, tt.outputDir)
+			if got != tt.want {
+				t.Errorf("translatedOutputName(%q, %q, %q) = %q, want %q", tt.input, tt.targetLang, tt.outputDir, got, tt.want)
+			}
+		})
+	}
+}

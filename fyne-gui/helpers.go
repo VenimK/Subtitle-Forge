@@ -3,9 +3,28 @@ package main
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
+
+// trackLangSuffixRe matches the source language part of an extracted name,
+// which extraction writes as <base>.track<num>_<lang>.
+var trackLangSuffixRe = regexp.MustCompile(`\.track\d+_[A-Za-z]{2,4}$`)
+
+// translatedOutputName builds the output name for a translated subtitle file.
+// It keeps only the target language: the source language, and the track number
+// that carries it, are dropped from the base name.
+func translatedOutputName(inputFile, targetLang, outputDir string) string {
+	base := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile))
+	base = strings.TrimSuffix(base, trackLangSuffixRe.FindString(base))
+
+	name := base + "." + targetLang + ".srt"
+	if outputDir != "" {
+		return filepath.Join(outputDir, name)
+	}
+	return name
+}
 
 // Helper function to check if a string matches any language name in the map
 func containsLanguageName(text string, languages map[string]string) bool {

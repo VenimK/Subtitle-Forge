@@ -1074,14 +1074,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 			})
 
 			// Determine output file
-			var outputFile string
-			if outputDir != "" {
-				baseName := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-				outputFile = filepath.Join(outputDir, fmt.Sprintf("%s_%s.srt", baseName, targetLang))
-			} else {
-				baseName := strings.TrimSuffix(inputFile, filepath.Ext(inputFile))
-				outputFile = fmt.Sprintf("%s_%s.srt", baseName, targetLang)
-			}
+			outputFile := translatedOutputName(inputFile, targetLang, outputDir)
 
 			// Show file processing start
 			if resultsArea != nil {
