@@ -19,11 +19,13 @@ jobs:
             output_name: subtitle-forge-mac-arm64
             artifact_name: Subtitle-Forge-macOS-ARM64
             arch: arm64
+            goarch: arm64
             cross: true # Built on the Intel runner because arm64 runners are capacity-limited
           - os: macos-15-intel
             output_name: subtitle-forge-mac-x86_64
             artifact_name: Subtitle-Forge-macOS-Intel
             arch: x86_64
+            goarch: amd64 # Go calls the x86_64 architecture "amd64"
           - os: ubuntu-latest
             output_name: subtitle-forge-linux
             artifact_name: subtitle-forge-linux
@@ -89,7 +91,7 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "13.0"
           CGO_ENABLED: "1"
-          GOARCH: ${{ matrix.arch }}
+          GOARCH: ${{ matrix.goarch }}
         working-directory: ./fyne-gui
         run: |
           if [ "${{ matrix.arch }}" != "$(uname -m | sed 's/^aarch64$/arm64/')" ]; then
