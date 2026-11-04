@@ -26,6 +26,41 @@ func translatedOutputName(inputFile, targetLang, outputDir string) string {
 	return name
 }
 
+// shortLangCode maps a language display name (the AI tab's select values) to
+// the short code used in the translated file name, so both tabs name the file
+// the same way: <base>.<code>.srt. GST still receives the full language name.
+// Unknown names are returned unchanged.
+func shortLangCode(name string) string {
+	if code, ok := langNameToShortCode[name]; ok {
+		return code
+	}
+	return name
+}
+
+var langNameToShortCode = map[string]string{
+	"English":               "en",
+	"Spanish":               "es",
+	"French":                "fr",
+	"German":                "de",
+	"Italian":               "it",
+	"Portuguese":            "pt",
+	"Russian":               "ru",
+	"Japanese":              "ja",
+	"Korean":                "ko",
+	"Chinese (Simplified)":  "zh",
+	"Chinese (Traditional)": "zh",
+	"Arabic":                "ar",
+	"Hindi":                 "hi",
+	"Dutch":                 "nl",
+	"Swedish":               "sv",
+	"Norwegian":             "no",
+	"Danish":                "da",
+	// Regional variants have no separate code: they fall back to the base language.
+	"Brazilian Portuguese": "pt",
+	"Mexican Spanish":      "es",
+	"Canadian French":      "fr",
+}
+
 // Helper function to check if a string matches any language name in the map
 func containsLanguageName(text string, languages map[string]string) bool {
 	for langName := range languages {

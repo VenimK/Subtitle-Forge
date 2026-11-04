@@ -273,3 +273,19 @@ func TestTranslatedOutputName(t *testing.T) {
 		})
 	}
 }
+
+func TestShortLangCode(t *testing.T) {
+	tests := map[string]string{
+		"Dutch":                 "nl",
+		"English":               "en",
+		"Chinese (Traditional)": "zh",
+		"Brazilian Portuguese":  "pt",
+		"Unknown language":      "Unknown language",
+	}
+
+	for name, want := range tests {
+		if got := shortLangCode(name); got != want {
+			t.Errorf("shortLangCode(%q) = %q, want %q", name, got, want)
+		}
+	}
+}

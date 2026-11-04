@@ -169,7 +169,7 @@ func translateWithGST(ctx context.Context, inputFile, outputFile, targetLang str
 		args = append(args, "-d", desc)
 	}
 
-	AppLog("TRANSLATE", "Starting GST translation: %s -> %s (lang: %s, model: %s)", filepath.Base(inputFile), filepath.Base(outputFile), targetLang, config.Model)
+	AppLog("TRANSLATE", "Starting GST translation: %s -> %s (lang: %s, model: %s)", filepath.Base(inputFile), outputFile, targetLang, config.Model)
 	cmd := exec.CommandContext(ctx, gstPath, args...)
 	// Very wide virtual terminal so GST never counts wrapped lines when it
 	// rewinds its redraw block (see stream below).
@@ -225,8 +225,14 @@ func translateWithGST(ctx context.Context, inputFile, outputFile, targetLang str
 		AppLog("ERROR", "AI Translation: gst failed: %v", err)
 		return false, fmt.Errorf("gst failed: %v", err)
 	}
-	// gst writes the output file itself; treat as success if it completed
-	AppLog("SUCCESS", "AI Translation completed: %s", filepath.Base(outputFile))
+	// gst writes the output file itself: only call this a success when the file
+	// is actually there, otherwise the results pane claims a file that does not
+	// exist.
+	if _, statErr := os.Stat(outputFile); statErr != nil {
+		AppLog("ERROR", "AI Translation: gst completed but no output file at %s", outputFile)
+		return false, fmt.Errorf("gst completed but wrote no output file to %s", outputFile)
+	}
+	AppLog("SUCCESS", "AI Translation completed: %s", outputFile)
 
 	// Post-process the translated SRT file to fix spacing issues
 	if err := postProcessSRT(outputFile); err != nil {
@@ -1073,8 +1079,13 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				}
 			})
 
-			// Determine output file
-			outputFile := translatedOutputName(inputFile, targetLang, outputDir)
+			// Determine output file. Without a chosen output folder the file lands
+			// next to the input file, not in the app's working directory.
+			outDir := outputDir
+			if outDir == "" {
+				outDir = filepath.Dir(inputFile)
+			}
+			outputFile := translatedOutputName(inputFile, shortLangCode(targetLang), outDir)
 
 			// Show file processing start
 			if resultsArea != nil {
@@ -1121,7 +1132,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				successCount++
 				if resultsArea != nil {
 					fyne.Do(func() {
-						appendToResults(fmt.Sprintf("✅ Completed: %s → %s", fileName, filepath.Base(outputFile)))
+						appendToResults(fmt.Sprintf("✅ Completed: %s → %s", fileName, outputFile))
 						// Only auto-scroll if user is near bottom
 						if resultsScroll != nil && isNearBottom() {
 							resultsScroll.ScrollToBottom()
@@ -1206,7 +1217,7 @@ func translateSubtitleFileInternal(ctx context.Context, inputFile, outputFile, s
 	if progressCallback != nil {
 		progressCallback("🐍 Running GST translation in-process...")
 		progressCallback(fmt.Sprintf("📝 Input: %s", filepath.Base(inputFile)))
-		progressCallback(fmt.Sprintf("📝 Output: %s", filepath.Base(outputFile)))
+		progressCallback(fmt.Sprintf("📝 Output: %s", outputFile))
 	}
 	success, err := translateWithGST(ctx, inputFile, outputFile, targetLang, config, progressCallback)
 	if err != nil {
