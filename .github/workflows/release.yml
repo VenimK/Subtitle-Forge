@@ -5,6 +5,7 @@ on:
     tags:
       - 'v*' # Trigger on version tags (e.g., v1.6.5)
       - 'V*' # Trigger on uppercase version tags (e.g., V2.4)
+  workflow_dispatch: # arm64 runners are capacity-limited, so a run can be started from the API without a new tag
 
 jobs:
   build:
@@ -14,10 +15,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-15-intel
             output_name: subtitle-forge-mac-arm64
             artifact_name: Subtitle-Forge-macOS-ARM64
             arch: arm64
+            cross: true # Built on the Intel runner because arm64 runners are capacity-limited
           - os: macos-15-intel
             output_name: subtitle-forge-mac-x86_64
             artifact_name: Subtitle-Forge-macOS-Intel
@@ -87,13 +89,28 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "13.0"
           CGO_ENABLED: "1"
+          GOARCH: ${{ matrix.arch }}
         working-directory: ./fyne-gui
         run: |
-          echo "Building macOS binary natively for ${{ matrix.arch }}..."
+          if [ "${{ matrix.arch }}" != "$(uname -m | sed 's/^aarch64$/arm64/')" ]; then
+            echo "Building macOS binary for ${{ matrix.arch }} by cross-compiling on ${{ matrix.os }}..."
+            export CC="clang -target arm64-apple-macos13.0"
+          else
+            echo "Building macOS binary natively for ${{ matrix.arch }}..."
+          fi
           go build -ldflags="-X 'main.AppVersion=${{ github.ref_name }}'" -o build/${{ matrix.output_name }}
           
           # Verify the binary
           file build/${{ matrix.output_name }}
+          case "$(file build/${{ matrix.output_name }})" in
+            *arm64*) built=arm64 ;;
+            *x86_64*) built=x86_64 ;;
+            *) built=unknown ;;
+          esac
+          if [ "$built" != "${{ matrix.arch }}" ]; then
+            echo "❌ Built binary is $built, expected ${{ matrix.arch }} — cross-compilation produced the wrong architecture"
+            exit 1
+          fi
           echo "✅ macOS ${{ matrix.arch }} binary created successfully"
           
           # Create the .app bundle using fyne package
