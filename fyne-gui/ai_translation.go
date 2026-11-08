@@ -33,8 +33,8 @@ type AITranslationConfig struct {
 	ResumeMode      bool
 	ProgressLog     bool
 	ThoughtsLog     bool
-	ThinkingBudget  int    // For Gemini 2.5 models (0-24576 for Flash, 128-32768 for Pro). 0 means unset.
-	ThinkingLevel   string // For Gemini 3.0 models (minimal, low, medium, high)
+	ThinkingBudget  int    // Passed through when set (0-24576); ignored for 3.0 models. 0 means unset.
+	ThinkingLevel   string // For 3.0 models (minimal, low, medium, high)
 }
 
 // findGSTPath tries to find the gst executable. Prefers the user's venv path, then PATH.
@@ -78,6 +78,21 @@ func findGSTPath() string {
 	}
 
 	return "gst"
+}
+
+var modelLineRe = regexp.MustCompile(`^(models/)?([A-Za-z0-9][A-Za-z0-9._-]*)$`)
+
+// parseModelNames keeps only the model-name lines of gst's list-models output, so
+// the header line and any upgrade notice are skipped.
+func parseModelNames(out string) []string {
+	var models []string
+	for _, line := range strings.Split(out, "\n") {
+		m := modelLineRe.FindStringSubmatch(strings.TrimSpace(line))
+		if len(m) == 3 {
+			models = append(models, m[2])
+		}
+	}
+	return models
 }
 
 // translateWithGSTInTerminal opens a terminal window and runs gst translate there.
@@ -586,16 +601,60 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 
 	gstPathRow := container.NewBorder(nil, nil, nil, installGSTBtn, gstPathEntry)
 
-	// Model selection for GST
-	modelSelect := widget.NewSelect([]string{
-		"gemini-2.5-flash (Recommended)",
-		"gemini-2.5-pro (Higher Quality)",
-		"gemini-3-flash-preview (Latest 3.0)",
-		"gemini-3-pro-image-preview (3.0 Image)",
-		"gemini-1.5-flash (Fast & Cheap)",
-		"gemini-1.5-pro (Balanced)",
-	}, nil)
-	modelSelect.SetSelected("gemini-2.5-flash (Recommended)")
+	// Model selection for GST. The live API list is the source of truth; the static
+	// list below is only the offline fallback for when no key is available.
+	offlineFallback := []string{
+		"gemini-3-flash-preview",
+		"gemini-3-pro-image-preview",
+	}
+	modelSelect := widget.NewSelect(offlineFallback, nil)
+	modelSelect.PlaceHolder = "Fetch models"
+	modelSelect.SetSelected(offlineFallback[0])
+
+	var fetchModelsBtn *widget.Button
+	fetchModelsBtn = widget.NewButton("Fetch Models", func() {
+		key := strings.TrimSpace(apiKeyEntry.Text)
+		if key == "" {
+			dialog.ShowError(fmt.Errorf("no API key, so the model list cannot be fetched"), w)
+			return
+		}
+		gstPath := strings.TrimSpace(gstPathEntry.Text)
+		if gstPath == "" {
+			gstPath = findGSTPath()
+		}
+		fetchModelsBtn.Disable()
+		go func() {
+			cmd := exec.Command(gstPath, "list-models", "-k", key)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				fyne.Do(func() {
+					fetchModelsBtn.Enable()
+					dialog.ShowError(fmt.Errorf("model list failed: %v\n\n%s", err, strings.TrimSpace(string(output))), w)
+				})
+				return
+			}
+			models := parseModelNames(string(output))
+			fyne.Do(func() {
+				fetchModelsBtn.Enable()
+				if len(models) == 0 {
+					dialog.ShowError(fmt.Errorf("no model names in the model list output"), w)
+					return
+				}
+				modelSelect.Options = models
+				modelSelect.Refresh()
+				found := false
+				for _, m := range models {
+					if m == modelSelect.Selected {
+						found = true
+						break
+					}
+				}
+				if !found {
+					modelSelect.SetSelected(models[0])
+				}
+			})
+		}()
+	})
 
 	// Language selection
 	sourceLanguageSelect := widget.NewSelect([]string{
@@ -887,9 +946,6 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 				thinkingLevel = "low" // Default for Gemini 3.0
 			}
 			thinkingBudget = 0 // Don't send thinking_budget for 3.0 models
-		} else if strings.Contains(modelName, "2.5-") {
-			// Gemini 2.5 models: use thinking_budget (if set), ignore thinking_level
-			thinkingLevel = "" // Don't send thinking_level for 2.5 models
 		}
 
 		// Create translation config
@@ -953,7 +1009,7 @@ func createAITranslationTab(w fyne.Window, a fyne.App) *fyne.Container {
 			widget.NewLabel("API Key:"), apiKeyEntry,
 			widget.NewLabel("Secondary Key:"), secondaryKeyEntry,
 			widget.NewLabel(""), rememberAPIKeyCheck,
-			widget.NewLabel("Model:"), modelSelect,
+			widget.NewLabel("Model:"), container.NewHBox(modelSelect, fetchModelsBtn),
 			widget.NewLabel("Source:"), sourceLanguageSelect,
 			widget.NewLabel("Target:"), targetLanguageSelect,
 		),

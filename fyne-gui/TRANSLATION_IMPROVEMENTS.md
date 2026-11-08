@@ -165,7 +165,7 @@ This will:
 
 Ready to implement when needed:
 1. **Audio Context**: Extract audio with FFmpeg for gender-aware translation
-2. **Thinking Mode**: Enable Gemini 2.5's extended thinking
+2. **Thinking Mode**: Extended thinking for models that support it (level for 3.x models, budget otherwise)
 3. **Multi-language Detection**: Auto-detect multiple languages in one file
 4. **Quality Scoring**: Rate translation quality automatically
 

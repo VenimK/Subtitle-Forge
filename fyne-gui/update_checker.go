@@ -21,7 +21,7 @@ import (
 )
 
 // Current application version - injected at build time
-var AppVersion = "V2.4.18" // Default value for development
+var AppVersion = "V2.5.0" // Default value for development
 
 // ReleaseInfo stores information about a GitHub release
 type ReleaseInfo struct {
@@ -31,8 +31,59 @@ type ReleaseInfo struct {
 	ZipballUrl string `json:"zipball_url"`
 	Assets     []struct {
 		Name               string `json:"name"`
+		ApiUrl             string `json:"api_url"`
 		BrowserDownloadURL string `json:"browser_download_url"`
 	} `json:"assets"`
+}
+
+// downloadClient bounds a single download attempt, so a stalled connection cannot
+// leave the progress dialog open forever.
+var downloadClient = &http.Client{Timeout: 10 * time.Minute}
+
+// fetchReleaseFile downloads a release asset. The API asset route is tried first
+// because it serves the bytes even when GitHub's public download route answers with
+// a gateway error; gateway responses are retried with a short backoff.
+func fetchReleaseFile(client *http.Client, urls []string) (*http.Response, error) {
+	var lastErr error
+
+	for attempt := 1; attempt <= 3; attempt++ {
+		if attempt > 1 {
+			time.Sleep(time.Duration(attempt-1) * 2 * time.Second)
+		}
+
+		for _, requestURL := range urls {
+			if requestURL == "" {
+				continue
+			}
+
+			req, err := http.NewRequest("GET", requestURL, nil)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			req.Header.Set("Accept", "application/octet-stream")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+
+			if resp.StatusCode == http.StatusOK {
+				return resp, nil
+			}
+			resp.Body.Close()
+
+			lastErr = fmt.Errorf("bad status: %s", resp.Status)
+			switch resp.StatusCode {
+			case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+				continue
+			}
+			return nil, lastErr
+		}
+	}
+
+	return nil, lastErr
 }
 
 func normalizeVersionString(version string) string {
@@ -186,6 +237,7 @@ func CheckForUpdates(w fyne.Window) {
 func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 	// Find the appropriate asset for the current platform
 	var downloadURL string
+	var apiURL string
 	var assetName string
 
 	// Look for platform-specific assets
@@ -205,6 +257,7 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 		for _, asset := range releaseInfo.Assets {
 			if asset.Name == expectedName {
 				downloadURL = asset.BrowserDownloadURL
+				apiURL = asset.ApiUrl
 				assetName = asset.Name
 				goto FOUND_ASSET
 			}
@@ -216,6 +269,7 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 			if strings.Contains(lower, "macos") || strings.Contains(lower, "darwin") {
 				if strings.Contains(lower, archHint) {
 					downloadURL = asset.BrowserDownloadURL
+					apiURL = asset.ApiUrl
 					assetName = asset.Name
 					goto FOUND_ASSET
 				}
@@ -226,6 +280,7 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 		for _, asset := range releaseInfo.Assets {
 			if asset.Name == "Subtitle-Forge-macOS.zip" {
 				downloadURL = asset.BrowserDownloadURL
+				apiURL = asset.ApiUrl
 				assetName = asset.Name
 				goto FOUND_ASSET
 			}
@@ -236,6 +291,7 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 			lower := strings.ToLower(asset.Name)
 			if strings.Contains(lower, "macos") || strings.Contains(lower, "darwin") {
 				downloadURL = asset.BrowserDownloadURL
+				apiURL = asset.ApiUrl
 				assetName = asset.Name
 				goto FOUND_ASSET
 			}
@@ -244,6 +300,7 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 		for _, asset := range releaseInfo.Assets {
 			if strings.Contains(strings.ToLower(asset.Name), "windows") {
 				downloadURL = asset.BrowserDownloadURL
+				apiURL = asset.ApiUrl
 				assetName = asset.Name
 				break
 			}
@@ -252,6 +309,7 @@ func downloadAndInstallUpdate(releaseInfo ReleaseInfo, w fyne.Window) {
 		for _, asset := range releaseInfo.Assets {
 			if strings.Contains(strings.ToLower(asset.Name), "linux") {
 				downloadURL = asset.BrowserDownloadURL
+				apiURL = asset.ApiUrl
 				assetName = asset.Name
 				break
 			}
@@ -317,21 +375,13 @@ FOUND_ASSET:
 		defer outFile.Close()
 
 		// Download the file
-		resp, err := http.Get(downloadURL)
+		resp, err := fetchReleaseFile(downloadClient, []string{apiURL, downloadURL})
 		if err != nil {
 			log.Printf("Failed to download update: %v", err)
 			showDownloadError(err, progressDialog, w)
 			return
 		}
 		defer resp.Body.Close()
-
-		// Check server response
-		if resp.StatusCode != http.StatusOK {
-			err := fmt.Errorf("bad status: %s", resp.Status)
-			log.Printf("Failed to download update: %v", err)
-			showDownloadError(err, progressDialog, w)
-			return
-		}
 
 		// Get the total size for progress reporting
 		totalSize := resp.ContentLength

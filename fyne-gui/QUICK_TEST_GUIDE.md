@@ -23,7 +23,7 @@ Your translator now uses the **same approach as your better Python translator**:
 
 3. **Configure settings:**
    - **API Key**: Your Gemini API key (get from https://aistudio.google.com/app/apikey)
-   - **Model**: Keep "gemini-2.5-flash"
+   - **Model**: Use "Fetch Models" to get the live list, or keep the default
    - **Target Language**: Choose (e.g., "Portuguese")
    - **Temperature**: Try 0.3 (lower = more consistent)
    - **Description**: Add context like "Casual conversation between friends"

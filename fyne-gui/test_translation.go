@@ -56,7 +56,7 @@ Would you like to grab coffee?`
 	config := AITranslationConfig{
 		GSTPath:     findGSTPath(),
 		APIKey:      apiKey,
-		Model:       "gemini-2.5-flash",
+		Model:       "gemini-3-flash-preview",
 		Temperature: 0.3, // Lower for more consistent translations
 		BatchSize:   100,
 		Description: "Casual conversation between friends. Use natural, conversational Portuguese.",
