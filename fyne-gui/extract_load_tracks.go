@@ -149,18 +149,32 @@ func extractLoadTracks(
 				}
 			}
 
+			// Fill in the languages the containers left untagged before rendering,
+			// so the list, the filter and the OCR defaults all see the result.
+			detected := detectTrackLanguages("", *trackItems, func(done, total int) {
+				fyne.Do(func() {
+					progress.Max = float64(total)
+					progress.SetValue(float64(done))
+					progress.Show()
+					currentTrackLabel.SetText(fmt.Sprintf("Detecting languages %d/%d", done, total))
+				})
+			})
+
 			// Update UI with all tracks
 			fyne.Do(func() {
-				progress.SetValue(float64(len(*mkvFiles)))
 				progress.Hide()
-				currentTrackLabel.SetText(fmt.Sprintf("Found %d subtitle tracks across %d files", totalTracks, len(*mkvFiles)))
+				summary := fmt.Sprintf("Found %d subtitle tracks across %d files", totalTracks, len(*mkvFiles))
+				if detected > 0 {
+					summary += fmt.Sprintf(" (%d languages detected)", detected)
+				}
+				currentTrackLabel.SetText(summary)
 
 				// Update track list
 				trackList.Objects = nil
 				for _, tt := range *trackItems {
 					// Show file name + track info
 					fileName := filepath.Base(tt.FilePath)
-					trackInfo := widget.NewLabel(fmt.Sprintf("%s - Track %d: %s (%s) %s", fileName, tt.Num, tt.Lang, tt.Codec, tt.Name))
+					trackInfo := widget.NewLabel(fmt.Sprintf("%s - Track %d: %s (%s) %s", fileName, tt.Num, trackLangDisplay(tt), tt.Codec, tt.Name))
 
 					if tt.ConvertOCR != nil {
 						// For PGS subtitles, show OCR option
@@ -173,7 +187,7 @@ func extractLoadTracks(
 						trackList.Add(row)
 					}
 				}
-				trackList.Refresh()
+				refreshTrackList(trackList, trackListScroll)
 
 				result.SetText(setLogMessage(LogSuccess, "Batch Tracks Loaded", fmt.Sprintf("Found %d subtitle tracks across %d files. Select the tracks you want to extract, then click 'Start Extraction'.", totalTracks, len(*mkvFiles))))
 			})
@@ -187,251 +201,207 @@ func extractLoadTracks(
 		return
 	}
 
-	// Detect container type and load tracks accordingly
-	if IsMP4File(*mkvPath) {
-		// Use ffprobe for MP4/M4V files
-		mp4Tracks, err := LoadMP4SubtitleTracks(*mkvPath)
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("Failed to analyze MP4 file: %v", err), w)
-			return
+	singlePath := *mkvPath
+	isMP4 := IsMP4File(singlePath)
+
+	// Container parsing and language sampling run off the UI thread, and rows are
+	// rendered only afterwards so the list never shows a stale "und" that then
+	// changes underneath the user.
+	go func() {
+		type subtitleMeta struct {
+			id    int
+			lang  string
+			codec string
+			name  string
 		}
+		var metas []subtitleMeta
 
-		*trackItems = []*TrackItem{}
-		trackList.Objects = nil
-
-		for _, mt := range mp4Tracks {
-			check := widget.NewCheck("", nil)
-			check.SetChecked(true)
-			status := widget.NewLabel("[ ]")
-
-			t := &TrackItem{
-				Num:    mt.Index,
-				Lang:   mt.Language,
-				Codec:  mt.Codec,
-				Name:   mt.TrackName,
-				State:  "Pending",
-				Check:  check,
-				Status: status,
+		if isMP4 {
+			// Use ffprobe for MP4/M4V files
+			mp4Tracks, err := LoadMP4SubtitleTracks(singlePath)
+			if err != nil {
+				fyne.Do(func() { dialog.ShowError(fmt.Errorf("Failed to analyze MP4 file: %v", err), w) })
+				return
 			}
-
-			if mt.Codec == "hdmv_pgs_subtitle" {
-				t.ConvertOCR = widget.NewCheck("", nil)
-				t.ConvertOCR.SetChecked(true)
+			for _, mt := range mp4Tracks {
+				metas = append(metas, subtitleMeta{id: mt.Index, lang: mt.Language, codec: mt.Codec, name: mt.TrackName})
 			}
-
-			*trackItems = append(*trackItems, t)
-
-			trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", mt.Index, mt.Language, MP4CodecDisplayName(mt.Codec), mt.TrackName))
-
-			// Preview button for text-based codecs
-			var previewBtn *widget.Button
-			if isPreviewableCodec(mt.Codec) {
-				capturedTrack := t
-				capturedPath := *mkvPath
-				previewBtn = widget.NewButton("👁 Preview", func() {
-					ShowSubtitlePreview(capturedPath, capturedTrack, w)
+		} else {
+			// Run mkvmerge to get track info (MKV files)
+			AppLog("DEBUG", "Loading tracks using mkvmerge")
+			output, err := NewMkvmergeCmd("-J", singlePath).Output()
+			if err != nil {
+				fyne.Do(func() {
+					dialog.ShowError(fmt.Errorf("Error running mkvmerge: %v (path: %s)", err, mkvmergeBinaryPath), w)
 				})
-				previewBtn.Importance = widget.LowImportance
+				return
 			}
 
-			var row *fyne.Container
-			if t.ConvertOCR != nil {
-				ocrLabel := widget.NewLabel("Convert to SRT")
-				row = container.NewHBox(check, status, trackInfo, t.ConvertOCR, ocrLabel)
-			} else if previewBtn != nil {
-				row = container.NewHBox(check, status, trackInfo, previewBtn)
-			} else {
-				row = container.NewHBox(check, status, trackInfo)
+			var mkvInfo map[string]interface{}
+			if err := json.Unmarshal(output, &mkvInfo); err != nil {
+				fyne.Do(func() { dialog.ShowError(fmt.Errorf("Error parsing mkvmerge output: %v", err), w) })
+				return
 			}
 
-			trackList.Add(row)
-		}
-		trackList.Refresh()
-
-		if len(mp4Tracks) == 0 {
-			result.SetText(setLogMessage(LogInfo, "No Subtitles", "No subtitle tracks found in this MP4 file."))
-		} else {
-			result.SetText(setLogMessage(LogSuccess, "Tracks Loaded", fmt.Sprintf("Found %d subtitle tracks. Select the tracks you want to extract, then click 'Start Extraction'.", len(mp4Tracks))))
-		}
-		return
-	}
-
-	// Run mkvmerge to get track info (MKV files)
-	cmd := NewMkvmergeCmd("-J", *mkvPath)
-	AppLog("DEBUG", "Loading tracks using mkvmerge")
-
-	output, err := cmd.Output()
-	if err != nil {
-		dialog.ShowError(fmt.Errorf("Error running mkvmerge: %v (path: %s)", err, mkvmergeBinaryPath), w)
-		return
-	}
-
-	// Parse JSON output
-	var mkvInfo map[string]interface{}
-	err = json.Unmarshal(output, &mkvInfo)
-	if err != nil {
-		dialog.ShowError(fmt.Errorf("Error parsing mkvmerge output: %v", err), w)
-		return
-	}
-
-	// Extract tracks
-	tracks, ok := mkvInfo["tracks"].([]interface{})
-	if !ok {
-		dialog.ShowError(fmt.Errorf("No tracks found in video file."), w)
-		return
-	}
-
-	// Clear previous tracks
-	*trackItems = []*TrackItem{}
-	trackList.Objects = nil
-
-	// Process subtitle tracks
-	for _, track := range tracks {
-		trackMap, ok := track.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		// Check if this is a subtitle track
-		trackType, ok := trackMap["type"].(string)
-		if !ok || trackType != "subtitles" {
-			continue
-		}
-
-		// Get track properties
-		properties, ok := trackMap["properties"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		trackID := int(trackMap["id"].(float64))
-
-		// Get language with nil check
-		var trackLang string
-		if properties != nil {
-			if lang, ok := properties["language"].(string); ok {
-				trackLang = lang
-			} else {
-				trackLang = "und" // undefined language code
+			tracks, ok := mkvInfo["tracks"].([]interface{})
+			if !ok {
+				fyne.Do(func() { dialog.ShowError(fmt.Errorf("No tracks found in video file."), w) })
+				return
 			}
-		} else {
-			trackLang = "und" // undefined language code
-		}
 
-		trackCodec := trackMap["codec"].(string)
-
-		// Get track name if available
-		var trackName string
-		if name, ok := properties["track_name"].(string); ok {
-			trackName = name
-		} else {
-			trackName = ""
-		}
-
-		// Create UI elements for this track
-		check := widget.NewCheck("", nil)
-		check.SetChecked(true)
-		status := widget.NewLabel("[ ]")
-
-		// Create track item
-		t := &TrackItem{
-			Num:    trackID,
-			Lang:   trackLang,
-			Codec:  trackCodec,
-			Name:   trackName,
-			State:  "Pending",
-			Check:  check,
-			Status: status,
-		}
-
-		// Add OCR option for PGS subtitles, ASS/SSA subtitles, and VobSub subtitles
-		if t.Codec == "hdmv_pgs_subtitle" || t.Codec == "HDMV PGS" ||
-			strings.Contains(strings.ToLower(t.Codec), "ass") || strings.Contains(strings.ToLower(t.Codec), "ssa") ||
-			strings.Contains(strings.ToLower(t.Codec), "substation") || strings.Contains(strings.ToLower(t.Codec), "sub station") ||
-			t.Codec == "vobsub" || t.Codec == "VobSub" {
-			t.ConvertOCR = widget.NewCheck("", nil)
-			t.ConvertOCR.SetChecked(true)
-
-			// Add language selection for OCR conversion
-			if t.Codec == "hdmv_pgs_subtitle" || t.Codec == "HDMV PGS" || t.Codec == "vobsub" || t.Codec == "VobSub" {
-				// Create language options
-				langOptions := []string{
-					"Auto (" + t.Lang + ")", // Auto option with detected language
-					"English (en)",
-					"French (fr)",
-					"German (de)",
-					"Spanish (es)",
-					"Italian (it)",
-					"Portuguese (pt)",
-					"Dutch (nl)",
-					"Russian (ru)",
-					"Japanese (ja)",
-					"Chinese (zh)",
-					"Korean (ko)",
-					"Czech (cs)",
-					"Polish (pl)",
-					"Swedish (sv)",
-					"Danish (da)",
-					"Finnish (fi)",
-					"Norwegian (no)",
-					"Hungarian (hu)",
-					"Greek (el)",
-					"Turkish (tr)",
-					"Arabic (ar)",
-					"Hebrew (he)",
-					"Thai (th)",
+			for _, track := range tracks {
+				trackMap, ok := track.(map[string]interface{})
+				if !ok {
+					continue
 				}
 
-				// Create language dropdown
-				t.LangSelect = widget.NewSelect(langOptions, nil)
-				t.LangSelect.SetSelected("Auto (" + t.Lang + ")")
-			} else {
-				t.LangSelect = nil
+				// Check if this is a subtitle track
+				if trackType, ok := trackMap["type"].(string); !ok || trackType != "subtitles" {
+					continue
+				}
+
+				// Get track properties
+				properties, ok := trackMap["properties"].(map[string]interface{})
+				if !ok {
+					continue
+				}
+				trackID, ok := trackMap["id"].(float64)
+				if !ok {
+					continue
+				}
+
+				lang := "und" // undefined language code
+				if v, ok := properties["language"].(string); ok && v != "" {
+					lang = v
+				}
+				codec, _ := trackMap["codec"].(string)
+				name, _ := properties["track_name"].(string)
+
+				metas = append(metas, subtitleMeta{id: int(trackID), lang: lang, codec: codec, name: name})
 			}
-		} else {
-			t.ConvertOCR = nil
-			t.LangSelect = nil
 		}
 
-		*trackItems = append(*trackItems, t)
-
-		// Create row for this track
-		trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", trackID, trackLang, trackCodec, trackName))
-
-		// Preview button for text-based codecs
-		var previewBtn *widget.Button
-		if isPreviewableCodec(trackCodec) {
-			capturedTrack := t
-			capturedPath := *mkvPath
-			previewBtn = widget.NewButton("👁 Preview", func() {
-				ShowSubtitlePreview(capturedPath, capturedTrack, w)
+		items := make([]*TrackItem, 0, len(metas))
+		for _, m := range metas {
+			check := widget.NewCheck("", nil)
+			check.SetChecked(true)
+			items = append(items, &TrackItem{
+				Num:    m.id,
+				Lang:   m.lang,
+				Codec:  m.codec,
+				Name:   m.name,
+				State:  "Pending",
+				Check:  check,
+				Status: widget.NewLabel("[ ]"),
 			})
-			previewBtn.Importance = widget.LowImportance
 		}
 
-		var row *fyne.Container
-		if t.ConvertOCR != nil {
-			// For PGS/VobSub subtitles, show OCR option and language selection
-			ocrLabel := widget.NewLabel("Convert to SRT")
+		detected := detectTrackLanguages(singlePath, items, func(done, total int) {
+			fyne.Do(func() {
+				progress.Max = float64(total)
+				progress.SetValue(float64(done))
+				progress.Show()
+				currentTrackLabel.SetText(fmt.Sprintf("Detecting languages %d/%d", done, total))
+			})
+		})
 
-			if t.LangSelect != nil {
-				// Add language selection dropdown for OCR-based conversion
-				langLabel := widget.NewLabel("OCR Language:")
-				row = container.NewHBox(check, status, trackInfo, t.ConvertOCR, ocrLabel, langLabel, t.LangSelect)
-			} else {
-				// For ASS/SSA conversion (no OCR language needed)
-				row = container.NewHBox(check, status, trackInfo, t.ConvertOCR, ocrLabel)
+		fyne.Do(func() {
+			progress.Hide()
+			currentTrackLabel.Hide()
+
+			*trackItems = items
+			trackList.Objects = nil
+
+			for _, t := range items {
+				// OCR conversion offered for PGS/VobSub/ASS; MP4 keeps the narrower
+				// PGS-only option it has always had.
+				ocrCodec := t.Codec == "hdmv_pgs_subtitle"
+				if !isMP4 {
+					ocrCodec = IsPGSCodec(t.Codec) || IsVobSubCodec(t.Codec) ||
+						strings.Contains(strings.ToLower(t.Codec), "ass") ||
+						strings.Contains(strings.ToLower(t.Codec), "ssa") ||
+						strings.Contains(strings.ToLower(t.Codec), "substation") ||
+						strings.Contains(strings.ToLower(t.Codec), "sub station")
+				}
+				if ocrCodec {
+					t.ConvertOCR = widget.NewCheck("", nil)
+					t.ConvertOCR.SetChecked(true)
+					if IsPGSCodec(t.Codec) || IsVobSubCodec(t.Codec) {
+						t.LangSelect = widget.NewSelect(ocrLanguageOptions(t.Lang), nil)
+						t.LangSelect.SetSelected("Auto (" + t.Lang + ")")
+					}
+				}
+
+				codecLabel := t.Codec
+				if isMP4 {
+					codecLabel = MP4CodecDisplayName(t.Codec)
+				}
+				trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", t.Num, trackLangDisplay(t), codecLabel, t.Name))
+
+				var row *fyne.Container
+				switch {
+				case t.ConvertOCR != nil && t.LangSelect != nil:
+					row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR,
+						widget.NewLabel("Convert to SRT"), widget.NewLabel("OCR Language:"), t.LangSelect)
+				case t.ConvertOCR != nil:
+					row = container.NewHBox(t.Check, t.Status, trackInfo, t.ConvertOCR, widget.NewLabel("Convert to SRT"))
+				case isPreviewableCodec(t.Codec):
+					capturedTrack := t
+					previewBtn := widget.NewButton("👁 Preview", func() {
+						ShowSubtitlePreview(singlePath, capturedTrack, w)
+					})
+					previewBtn.Importance = widget.LowImportance
+					row = container.NewHBox(t.Check, t.Status, trackInfo, previewBtn)
+				default:
+					row = container.NewHBox(t.Check, t.Status, trackInfo)
+				}
+				trackList.Add(row)
 			}
-		} else if previewBtn != nil {
-			row = container.NewHBox(check, status, trackInfo, previewBtn)
-		} else {
-			// For other subtitle formats
-			row = container.NewHBox(check, status, trackInfo)
-		}
+			refreshTrackList(trackList, trackListScroll)
 
-		trackList.Add(row)
+			switch {
+			case len(items) == 0 && isMP4:
+				result.SetText(setLogMessage(LogInfo, "No Subtitles", "No subtitle tracks found in this MP4 file."))
+			case len(items) == 0:
+				result.SetText(setLogMessage(LogInfo, "No Subtitles", "No subtitle tracks found in this file."))
+			default:
+				summary := fmt.Sprintf("Found %d subtitle tracks. Select the tracks you want to extract, then click 'Start Extraction'.", len(items))
+				if detected > 0 {
+					summary += fmt.Sprintf(" Detected the language of %d untagged track(s).", detected)
+				}
+				result.SetText(setLogMessage(LogSuccess, "Tracks Loaded", summary))
+			}
+		})
+	}()
+}
+
+// ocrLanguageOptions builds the OCR language dropdown, offering the track's own
+// language as the auto default.
+func ocrLanguageOptions(lang string) []string {
+	return []string{
+		"Auto (" + lang + ")", // Auto option with the track's language
+		"English (en)",
+		"French (fr)",
+		"German (de)",
+		"Spanish (es)",
+		"Italian (it)",
+		"Portuguese (pt)",
+		"Dutch (nl)",
+		"Russian (ru)",
+		"Japanese (ja)",
+		"Chinese (zh)",
+		"Korean (ko)",
+		"Czech (cs)",
+		"Polish (pl)",
+		"Swedish (sv)",
+		"Danish (da)",
+		"Finnish (fi)",
+		"Norwegian (no)",
+		"Hungarian (hu)",
+		"Greek (el)",
+		"Turkish (tr)",
+		"Arabic (ar)",
+		"Hebrew (he)",
+		"Thai (th)",
 	}
-	trackList.Refresh()
-
-	result.SetText(setLogMessage(LogSuccess, "Tracks Loaded", "Tracks loaded. Select the tracks you want to extract, then click 'Start Extraction'"))
 }

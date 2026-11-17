@@ -54,6 +54,17 @@ type ExtractTabWidgets struct {
 	CancelExtractFunc func()
 }
 
+// refreshTrackList redraws the track rows after their container was emptied and
+// refilled. The scroll keeps the offset and content size it measured before the
+// swap, so a shorter list would otherwise be painted above the viewport and the
+// user sees an empty track area.
+func refreshTrackList(trackList *fyne.Container, trackListScroll *container.Scroll) {
+	trackList.Refresh()
+	if trackListScroll != nil {
+		trackListScroll.ScrollToTop()
+	}
+}
+
 func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *ExtractTabWidgets) {
 	trackList := container.NewVBox()
 	trackListScroll := container.NewScroll(trackList)
@@ -141,7 +152,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 			selectedDir.SetText(outDir)
 			trackItems = []*TrackItem{}
 			trackList.Objects = nil
-			trackList.Refresh()
+			refreshTrackList(trackList, trackListScroll)
 			result.SetText(setLogMessage(LogInfo, "Video File Loaded", "Video file loaded. Output directory automatically set to file location. Click 'Load Tracks' to analyze the file."))
 		}, w)
 		fd.SetFilter(filter)
@@ -180,7 +191,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 			selectedDir.SetText(outDir)
 			trackItems = []*TrackItem{}
 			trackList.Objects = nil
-			trackList.Refresh()
+			refreshTrackList(trackList, trackListScroll)
 			selectedFile.SetText(fmt.Sprintf("%d video files selected for batch processing", len(mkvFiles)))
 			result.SetText(setLogMessage(LogInfo, "Batch Mode Enabled", fmt.Sprintf("Found %d video files. Click 'Start Extraction' to process all files.", len(mkvFiles))))
 		}, w)
@@ -196,7 +207,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 		selectedDir.SetText(T("extract.no_dir"))
 		trackItems = []*TrackItem{}
 		trackList.Objects = nil
-		trackList.Refresh()
+		refreshTrackList(trackList, trackListScroll)
 		result.SetText("Select video file(s) to begin.")
 	})
 
@@ -382,9 +393,9 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 			var trackInfoText string
 			if t.FilePath != "" {
 				filename := filepath.Base(t.FilePath)
-				trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, t.Lang, t.Codec, t.Name, filename)
+				trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, trackLangDisplay(t), t.Codec, t.Name, filename)
 			} else {
-				trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name)
+				trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, trackLangDisplay(t), t.Codec, t.Name)
 			}
 			trackInfo := widget.NewLabel(trackInfoText)
 			var row *fyne.Container
@@ -401,7 +412,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 			}
 			trackList.Add(row)
 		}
-		trackList.Refresh()
+		refreshTrackList(trackList, trackListScroll)
 	}
 
 	filterEntry.OnChanged = func(text string) { filterTracks(text) }
@@ -480,7 +491,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 			selectedDir.SetText(outDir)
 			trackItems = []*TrackItem{}
 			trackList.Objects = nil
-			trackList.Refresh()
+			refreshTrackList(trackList, trackListScroll)
 			result.SetText(setLogMessage(LogInfo, "Video File Loaded", "Video file dropped and loaded. Output directory automatically set to file location. Click 'Load Tracks' to analyze the file."))
 		} else {
 			batchMode = true
@@ -500,7 +511,7 @@ func createExtractSubtitlesTab(w fyne.Window, a fyne.App) (*fyne.Container, *Ext
 			}
 			trackItems = []*TrackItem{}
 			trackList.Objects = nil
-			trackList.Refresh()
+			refreshTrackList(trackList, trackListScroll)
 			selectedFile.SetText(fmt.Sprintf("%d video files selected for batch processing", len(mkvFiles)))
 			result.SetText(setLogMessage(LogInfo, "Batch Mode Enabled", fmt.Sprintf("Dropped %d video files. Click 'Load Tracks' to analyze all files and select which tracks to extract.", len(mkvFiles))))
 		}

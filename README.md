@@ -1,4 +1,4 @@
-# Subtitle Forge V2.5.0
+# Subtitle Forge V2.5.1
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -352,6 +352,14 @@ Typical outputs:
 
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
+
+## What's new in V2.5.1
+
+- **Extract:** untagged subtitle tracks get their language detected on **Load Tracks**. Releases that carry no language tag used to be listed as `und` for every track; Subtitle Forge now samples a short window of each subtitle stream at three points across the runtime and matches the text against per-language word profiles, script ranges, and language-exclusive marker words. Detected languages are shown as `Track 28: nl (detected)`, so a tag that came from the container stays unmarked
+- **Extract:** the detected language is used everywhere the old `und` value was: the track **Filter** field, **Sort by → By Language**, the OCR **Auto (<language>)** default for image-based tracks, and the output file name (`movie.track28_nl.srt` instead of `movie.track28_und.srt`)
+- **Extract:** detection needs no new dependency — it uses the `ffmpeg`/`ffprobe` you already have, runs the tracks in parallel (about two seconds for a 39-track file), and never rewrites the video or its track tags. Bitmap tracks (PGS, VobSub) have no text to sample and stay `und`; a track whose text gives no evidence is left `und` rather than guessed
+- **Extract:** fixed the track list going blank after typing in **Filter**. The track rows live in a scroll container that kept its old scroll offset when the list was refilled with fewer rows, so the surviving rows were drawn above the visible area — the list looked empty while the tracks were still there. Refilling the list now resets the scroll to the top, including after loading a different file
+- **Internal:** the automatic update check no longer crashes when no application is running
 
 ## What's new in V2.4.9
 

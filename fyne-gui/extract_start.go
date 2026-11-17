@@ -366,7 +366,7 @@ func extractStartExtraction(
 				// Update track list
 				trackList.Objects = nil
 				for _, tt := range *trackItems {
-					trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", tt.Num, tt.Lang, tt.Codec, tt.Name))
+					trackInfo := widget.NewLabel(fmt.Sprintf("Track %d: %s (%s) %s", tt.Num, trackLangDisplay(tt), tt.Codec, tt.Name))
 
 					if tt.ConvertOCR != nil {
 						ocrLabel := widget.NewLabel("Convert to SRT")

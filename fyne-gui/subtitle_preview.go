@@ -111,7 +111,7 @@ func ShowSubtitlePreview(videoPath string, track *TrackItem, w fyne.Window) {
 			}
 
 			// Build the preview dialog
-			title := fmt.Sprintf("Track %d: %s (%s) %s", track.Num, track.Lang, track.Codec, track.Name)
+			title := fmt.Sprintf("Track %d: %s (%s) %s", track.Num, trackLangDisplay(track), track.Codec, track.Name)
 			titleLabel := widget.NewLabel(title)
 			titleLabel.TextStyle = fyne.TextStyle{Bold: true}
 

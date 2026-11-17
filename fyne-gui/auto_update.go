@@ -19,10 +19,14 @@ func startUpdateCheckerAutomatically() bool {
 		// Wait for the application to fully initialize (5 seconds should be enough)
 		time.Sleep(5 * time.Second)
 
-		// Check for updates if there are any windows open
-		if len(fyne.CurrentApp().Driver().AllWindows()) > 0 {
-			w := fyne.CurrentApp().Driver().AllWindows()[0]
-			CheckForUpdates(w)
+		// Check for updates if there are any windows open. fyne.CurrentApp() is nil
+		// in a test binary, where no app is ever started.
+		app := fyne.CurrentApp()
+		if app == nil || app.Driver() == nil {
+			return
+		}
+		if windows := app.Driver().AllWindows(); len(windows) > 0 {
+			CheckForUpdates(windows[0])
 		}
 	}()
 

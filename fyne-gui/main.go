@@ -33,6 +33,10 @@ type TrackItem struct {
 	Status     *widget.Label
 	ConvertOCR *widget.Check  // Option to convert PGS to SRT using OCR
 	LangSelect *widget.Select // Language selection dropdown for OCR
+
+	// LangDetected marks Lang as guessed from the subtitle text because the
+	// container carried no language tag ("und").
+	LangDetected bool
 }
 
 // Global debug logger for dependency checks

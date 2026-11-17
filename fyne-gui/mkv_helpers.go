@@ -153,10 +153,10 @@ func CreateTrackRow(t *TrackItem, videoPath string, w fyne.Window) *fyne.Contain
 	var trackInfoText string
 	if t.FilePath != "" {
 		// Include filename for batch processing
-		trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, t.Lang, t.Codec, t.Name, filepath.Base(t.FilePath))
+		trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s [%s]", t.Num, trackLangDisplay(t), t.Codec, t.Name, filepath.Base(t.FilePath))
 	} else {
 		// Single file mode
-		trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, t.Lang, t.Codec, t.Name)
+		trackInfoText = fmt.Sprintf("Track %d: %s (%s) %s", t.Num, trackLangDisplay(t), t.Codec, t.Name)
 	}
 	trackInfo := widget.NewLabel(trackInfoText)
 
