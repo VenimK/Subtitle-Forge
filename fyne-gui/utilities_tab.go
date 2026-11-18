@@ -389,77 +389,51 @@ func extractAllSubtitleTracks(mkvPath, outDir string) bool {
 
 // Helper function to adjust SRT timing
 
-func adjustSRTTiming(content string, offsetSeconds float64) string {
-	lines := strings.Split(content, "\n")
-	result := []string{}
+// srtTimestampPairRe matches "00:00:00,000 --> 00:00:00,000".
+var srtTimestampPairRe = regexp.MustCompile(`(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})`)
 
-	// Regular expression to match SRT timestamp format: 00:00:00,000 --> 00:00:00,000
-	re := regexp.MustCompile(`(\d{2}):(\d{2}):(\d{2}),(\d{3}) --> (\d{2}):(\d{2}):(\d{2}),(\d{3})`)
-
-	for _, line := range lines {
-		// Check if the line contains timestamps
-		if re.MatchString(line) {
-			// Apply offset to both start and end timestamps
-			adjustedLine := re.ReplaceAllStringFunc(line, func(match string) string {
-				parts := re.FindStringSubmatch(match)
-				if len(parts) != 9 {
-					return match
-				}
-
-				// Parse start time
-				startHour, _ := strconv.Atoi(parts[1])
-				startMin, _ := strconv.Atoi(parts[2])
-				startSec, _ := strconv.Atoi(parts[3])
-				startMs, _ := strconv.Atoi(parts[4])
-
-				// Parse end time
-				endHour, _ := strconv.Atoi(parts[5])
-				endMin, _ := strconv.Atoi(parts[6])
-				endSec, _ := strconv.Atoi(parts[7])
-				endMs, _ := strconv.Atoi(parts[8])
-
-				// Convert to milliseconds and apply offset
-				startTimeMs := startHour*3600000 + startMin*60000 + startSec*1000 + startMs
-				endTimeMs := endHour*3600000 + endMin*60000 + endSec*1000 + endMs
-
-				offsetMs := int(offsetSeconds * 1000)
-				startTimeMs += offsetMs
-				endTimeMs += offsetMs
-
-				// Ensure times don't go negative
-				if startTimeMs < 0 {
-					startTimeMs = 0
-				}
-				if endTimeMs < 0 {
-					endTimeMs = 0
-				}
-
-				// Convert back to SRT format
-				startHour = startTimeMs / 3600000
-				startTimeMs %= 3600000
-				startMin = startTimeMs / 60000
-				startTimeMs %= 60000
-				startSec = startTimeMs / 1000
-				startMs = startTimeMs % 1000
-
-				endHour = endTimeMs / 3600000
-				endTimeMs %= 3600000
-				endMin = endTimeMs / 60000
-				endTimeMs %= 60000
-				endSec = endTimeMs / 1000
-				endMs = endTimeMs % 1000
-
-				return fmt.Sprintf("%02d:%02d:%02d,%03d --> %02d:%02d:%02d,%03d",
-					startHour, startMin, startSec, startMs,
-					endHour, endMin, endSec, endMs)
-			})
-
-			result = append(result, adjustedLine)
-		} else {
-			result = append(result, line)
-		}
+// shiftSRTTimestamp applies a millisecond offset to one timestamp pair, keeping
+// both times at or above zero.
+func shiftSRTTimestamp(match string, offsetMs int) string {
+	parts := srtTimestampPairRe.FindStringSubmatch(match)
+	if len(parts) != 9 {
+		return match
 	}
 
+	times := make([]int, 8)
+	for i, v := range parts[1:] {
+		times[i], _ = strconv.Atoi(v)
+	}
+
+	startMs := times[0]*3600000 + times[1]*60000 + times[2]*1000 + times[3] + offsetMs
+	endMs := times[4]*3600000 + times[5]*60000 + times[6]*1000 + times[7] + offsetMs
+	if startMs < 0 {
+		startMs = 0
+	}
+	if endMs < 0 {
+		endMs = 0
+	}
+
+	return fmt.Sprintf("%02d:%02d:%02d,%03d --> %02d:%02d:%02d,%03d",
+		startMs/3600000, (startMs/60000)%60, (startMs/1000)%60, startMs%1000,
+		endMs/3600000, (endMs/60000)%60, (endMs/1000)%60, endMs%1000)
+}
+
+// adjustSRTTiming shifts every SRT timestamp by offsetSeconds.
+func adjustSRTTiming(content string, offsetSeconds float64) string {
+	offsetMs := int(offsetSeconds * 1000)
+	lines := strings.Split(content, "\n")
+	result := make([]string, 0, len(lines))
+	for _, line := range lines {
+		// Most lines are text or an index; only a line with the arrow can hold a
+		// timestamp pair, so skip the regex on everything else.
+		if strings.Contains(line, "-->") {
+			line = srtTimestampPairRe.ReplaceAllStringFunc(line, func(match string) string {
+				return shiftSRTTimestamp(match, offsetMs)
+			})
+		}
+		result = append(result, line)
+	}
 	return strings.Join(result, "\n")
 }
 

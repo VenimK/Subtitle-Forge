@@ -38,7 +38,8 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 	settingsSetupSummaryLabel = setupSummaryLabel
 
 	recheckSetupBtn := widget.NewButton(T("settings.recheck_setup"), func() {
-		updateDependencyStatus(w)
+		// Runs nine tool checks in subprocesses; keep them off the UI goroutine.
+		go updateDependencyStatus(w)
 	})
 	recheckSetupBtn.Importance = widget.MediumImportance
 
@@ -184,8 +185,8 @@ func createSettingsTab(a fyne.App, w fyne.Window, dependencyButtons *fyne.Contai
 			pgsToSrtPathLabel.SetText(pgsToSrtScriptPath)
 			reader.Close()
 
-			// Run the dependency check again to update status
-			updateDependencyStatus(w)
+			// Run the dependency check again to update status (off the UI goroutine)
+			go updateDependencyStatus(w)
 		}, w)
 
 		// Set filters for JavaScript files

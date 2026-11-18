@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -769,15 +768,15 @@ func extractPgsTrack(
 				stderrWriter = &outputBuffer
 			}
 
-			frameProgressRegex := regexp.MustCompile(`Processing frame (\d+)/(\d+)`)
-			statusUpdateRegex := regexp.MustCompile(`Status: (.+)`)
+			// Same package-level regexes the pgsrip progress reader uses; these
+			// match every line of the OCR output.
 
 			go func() {
 				bufReader := bufio.NewReaderSize(stdoutPipe, 4096)
 				scanner := bufio.NewScanner(bufReader)
 				for scanner.Scan() {
 					line := scanner.Text() + "\n"
-					if matches := frameProgressRegex.FindStringSubmatch(line); len(matches) == 3 {
+					if matches := frameProgressRe.FindStringSubmatch(line); len(matches) == 3 {
 						currentFrame := 0
 						totalFrames := 0
 						fmt.Sscanf(matches[1], "%d", &currentFrame)
@@ -806,7 +805,7 @@ func extractPgsTrack(
 							statusLabel.SetText(fmt.Sprintf("Processing frame %d of %d (%.1f%%)",
 								currentFrame, totalFrames, percentComplete))
 						})
-					} else if matches := statusUpdateRegex.FindStringSubmatch(line); len(matches) == 2 {
+					} else if matches := statusUpdateRe.FindStringSubmatch(line); len(matches) == 2 {
 						statusMsg := matches[1]
 						fyne.Do(func() {
 							statusLabel.SetText(statusMsg)
@@ -823,7 +822,7 @@ func extractPgsTrack(
 				scanner := bufio.NewScanner(bufReader)
 				for scanner.Scan() {
 					line := scanner.Text() + "\n"
-					if matches := frameProgressRegex.FindStringSubmatch(line); len(matches) == 3 {
+					if matches := frameProgressRe.FindStringSubmatch(line); len(matches) == 3 {
 						currentFrame := 0
 						totalFrames := 0
 						fmt.Sscanf(matches[1], "%d", &currentFrame)

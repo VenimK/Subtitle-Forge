@@ -1,4 +1,4 @@
-# Subtitle Forge V2.5.1
+# Subtitle Forge V2.5.2
 > Powerful subtitle extraction, conversion, translation, and transcription for **macOS**, **Windows**, and **Linux**.
 > [![GitHub Release](https://img.shields.io/github/v/release/VenimK/Subtitle-Forge)](https://github.com/VenimK/Subtitle-Forge/releases/latest)
 > [![GitHub Release Date](https://img.shields.io/github/release-date/VenimK/Subtitle-Forge?style=flat)](https://github.com/VenimK/Subtitle-Forge/releases)
@@ -352,6 +352,14 @@ Typical outputs:
 
 - macOS: `./build/subtitle-forge-mac`
 - Linux: `./build/subtitle-forge-linux`
+
+## What's new in V2.5.2
+
+- **Convert:** parsing a subtitle file is about **8x faster**. `parseSRT`, `parseASS`, `parseVTT` and the SRT post-processing compiled their regular expressions **on every subtitle entry**, so a 2000-entry file cost 167 000 allocations; the expressions are compiled once now, and `HH:MM:SS,mmm` / `HH:MM:SS.mmm` timestamps are read digit by digit with the regex as fallback only
+- **Convert:** shifting timings (the **Shift** utility) skips the timestamp regex on lines that cannot contain one, which cuts its allocations to about a quarter
+- **Settings:** the dependency check no longer freezes the window on startup. The nine tool checks each run `--version`, so they now run **concurrently** and off the UI goroutine, and a verified `pgsrip` path is reused within a session — about **0.54 s** for the whole sweep before, about **0.05 s** when the tools are already known
+- **AI translation:** the log pane redraws at most about eight times per second instead of once per GST progress tick, and the auto-scroll is measured only when it actually paints — long translations no longer chew CPU on the results window
+- **OCR / PGS:** the progress reader for `pgsrip` and the OCR script compiled its regexes per output line; they are compiled once now, so the progress display costs what the line costs
 
 ## What's new in V2.5.1
 

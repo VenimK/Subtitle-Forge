@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -123,7 +124,10 @@ func getExecutablePath() string {
 	return exePath
 }
 
-// checkDependencies verifies if all required external dependencies are installed
+// checkDependencies verifies if all required external dependencies are installed.
+// The checks run concurrently: each one shells out to `--version` and they only
+// write their own *BinaryPath global, so the total is the slowest tool rather
+// than the sum (about 0.5 s serial, about 0.4 s here, and off the UI goroutine).
 func checkDependencies() map[string]bool {
 	// Create a debug log file in the application's log directory
 	homeDir, err := os.UserHomeDir()
@@ -144,16 +148,36 @@ func checkDependencies() map[string]bool {
 			debugLogger = logFile
 		}
 	}
-	dependencyResults := make(map[string]bool)
-	dependencyResults["FFmpeg"] = checkFfmpeg()
-	dependencyResults["vobsub2srt"] = checkVobsub2srt()
-	dependencyResults["MKVMerge"] = checkMkvmerge()
-	dependencyResults["MKVExtract"] = checkMkvextract()
-	dependencyResults["Deno"] = checkDeno()
-	dependencyResults["Tesseract"] = checkTesseract()
-	dependencyResults["Go"] = checkGo()
-	dependencyResults["PGStoSRT"] = checkPgsToSrt()
-	dependencyResults["pgsrip"] = checkPgsrip()
+	type dependencyCheck struct {
+		name  string
+		check func() bool
+	}
+	checks := []dependencyCheck{
+		{"FFmpeg", checkFfmpeg},
+		{"vobsub2srt", checkVobsub2srt},
+		{"MKVMerge", checkMkvmerge},
+		{"MKVExtract", checkMkvextract},
+		{"Deno", checkDeno},
+		{"Tesseract", checkTesseract},
+		{"Go", checkGo},
+		{"PGStoSRT", checkPgsToSrt},
+		{"pgsrip", checkPgsrip},
+	}
+	results := make([]bool, len(checks))
+	var wg sync.WaitGroup
+	for i, c := range checks {
+		wg.Add(1)
+		go func(i int, check func() bool) {
+			defer wg.Done()
+			results[i] = check()
+		}(i, c.check)
+	}
+	wg.Wait()
+
+	dependencyResults := make(map[string]bool, len(checks))
+	for i, c := range checks {
+		dependencyResults[c.name] = results[i]
+	}
 
 	return dependencyResults
 }

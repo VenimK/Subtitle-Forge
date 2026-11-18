@@ -504,7 +504,10 @@ func main() {
 
 	// Create settings tab content
 	settingsTabContent := createSettingsTab(a, w, dependencyButtons)
-	updateDependencyStatus(w)
+	// Each tool check runs `--version`, so the whole sweep takes a few hundred
+	// milliseconds. Do it off the UI goroutine: the Settings labels start out as
+	// "loading" and updateDependencyStatus only writes them through fyne.Do.
+	go updateDependencyStatus(w)
 
 	// Create convert subtitles tab content
 	convertTabContent, loadConvertFile, loadConvertFiles := createConvertSubtitlesTab(w)

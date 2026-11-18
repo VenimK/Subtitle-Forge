@@ -19,6 +19,37 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// Compiled once: the subtitle parsers run these per entry, and compiling them
+// on every call dominated parsing (see BenchmarkParseSRT in perf_bench_test.go).
+var (
+	punctSpaceRes = []struct {
+		re   *regexp.Regexp
+		with string
+	}{
+		{regexp.MustCompile(`,(\S)`), ", $1"},
+		{regexp.MustCompile(`\.(\S)`), ". $1"},
+		{regexp.MustCompile(`\?(\S)`), "? $1"},
+		{regexp.MustCompile(`!(\S)`), "! $1"},
+	}
+	srtTimeRe   = regexp.MustCompile(`(\d{2}):(\d{2}):(\d{2}),(\d{3})`)
+	srtHeaderRe = regexp.MustCompile(`\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}`)
+	assTimeRe   = regexp.MustCompile(`(\d+):(\d{2}):(\d{2})\.(\d{2})`)
+	vttTimeRe   = regexp.MustCompile(`(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})`)
+	assTagRe    = regexp.MustCompile(`\{[^}]*\}`)
+	htmlTagRe   = regexp.MustCompile(`<[^>]*>`)
+	indexLineRe = regexp.MustCompile(`^\d+$`)
+)
+
+// addPunctuationSpaces inserts a space after punctuation glued to the next
+// character, which the translators expect as a word separator. Same four passes
+// as before, just compiled once instead of once per subtitle entry.
+func addPunctuationSpaces(text string) string {
+	for _, p := range punctSpaceRes {
+		text = p.re.ReplaceAllString(text, p.with)
+	}
+	return text
+}
+
 // detectSubtitleFormat detects the subtitle format based on file extension and content
 func detectSubtitleFormat(filePath string) string {
 	ext := strings.ToLower(filepath.Ext(filePath))
@@ -76,11 +107,11 @@ func detectFormatByContent(filePath string) string {
 		lineCount++
 
 		// SRT format detection
-		if regexp.MustCompile(`^\d+$`).MatchString(line) {
+		if indexLineRe.MatchString(line) {
 			// Next line should be timestamp
 			if scanner.Scan() {
 				nextLine := strings.TrimSpace(scanner.Text())
-				if regexp.MustCompile(`\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}`).MatchString(nextLine) {
+				if srtHeaderRe.MatchString(nextLine) {
 					return "SRT"
 				}
 			}
@@ -246,13 +277,8 @@ func parseSRT(content string) ([]SubtitleEntry, error) {
 		if len(textLines) > 0 {
 			// Join text lines with proper spacing for GST compatibility
 			text := strings.Join(textLines, "\n")
-			// Add explicit spaces after commas to help GST
-			text = regexp.MustCompile(`,(\S)`).ReplaceAllString(text, ", $1")
-			// Add explicit spaces after periods to help GST
-			text = regexp.MustCompile(`\.(\S)`).ReplaceAllString(text, ". $1")
-			// Add explicit spaces after question marks and exclamation marks
-			text = regexp.MustCompile(`\?(\S)`).ReplaceAllString(text, "? $1")
-			text = regexp.MustCompile(`!(\S)`).ReplaceAllString(text, "! $1")
+			// Add explicit spaces after punctuation to help GST
+			text = addPunctuationSpaces(text)
 
 			entries = append(entries, SubtitleEntry{
 				Index:     index,
@@ -286,11 +312,40 @@ func parseSRTTimestamp(line string) (time.Duration, time.Duration, error) {
 	return start, end, nil
 }
 
+// clockField reads n decimal digits from s[start:end], ok=false otherwise.
+// It does not allocate, which is the point: subtitle files call the time
+// parsers twice per entry.
+func clockField(s string, start, end int) (int, bool) {
+	if end > len(s) || end <= start {
+		return 0, false
+	}
+	n := 0
+	for i := start; i < end; i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
+}
+
 // parseSRTTime parses individual SRT time
 func parseSRTTime(timeStr string) (time.Duration, error) {
+	// Fast path: the exact "HH:MM:SS,mmm" form almost every file uses.
+	if len(timeStr) == 12 && timeStr[2] == ':' && timeStr[5] == ':' && timeStr[8] == ',' {
+		h, okH := clockField(timeStr, 0, 2)
+		m, okM := clockField(timeStr, 3, 5)
+		s, okS := clockField(timeStr, 6, 8)
+		ms, okMs := clockField(timeStr, 9, 12)
+		if okH && okM && okS && okMs {
+			return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute +
+				time.Duration(s)*time.Second + time.Duration(ms)*time.Millisecond, nil
+		}
+	}
+
 	// Format: HH:MM:SS,mmm
-	re := regexp.MustCompile(`(\d{2}):(\d{2}):(\d{2}),(\d{3})`)
-	matches := re.FindStringSubmatch(timeStr)
+	matches := srtTimeRe.FindStringSubmatch(timeStr)
 	if len(matches) != 5 {
 		return 0, fmt.Errorf("invalid time format: %s", timeStr)
 	}
@@ -327,8 +382,7 @@ func convertASSTagsToSRT(text string) string {
 	text = strings.ReplaceAll(text, "{\\u0}", "</u>")
 
 	// Remove other ASS tags (position, alignment, color, etc.)
-	re := regexp.MustCompile(`\{[^}]*\}`)
-	text = re.ReplaceAllString(text, "")
+	text = assTagRe.ReplaceAllString(text, "")
 
 	return strings.TrimSpace(text)
 }
@@ -369,9 +423,8 @@ func parseASS(content string) ([]SubtitleEntry, error) {
 				// Convert ASS tags to SRT-compatible HTML tags
 				text = convertASSTagsToSRT(text)
 
-				// Ensure proper spacing after commas and punctuation for better GST translation
-				text = regexp.MustCompile(`,(\S)`).ReplaceAllString(text, ", $1")
-				text = regexp.MustCompile(`\.(\S)`).ReplaceAllString(text, ". $1")
+				// Ensure proper spacing after punctuation for better GST translation
+				text = addPunctuationSpaces(text)
 
 				entries = append(entries, SubtitleEntry{
 					Index:     index,
@@ -390,8 +443,7 @@ func parseASS(content string) ([]SubtitleEntry, error) {
 // parseASSTime parses ASS time format
 func parseASSTime(timeStr string) (time.Duration, error) {
 	// Format: H:MM:SS.cc
-	re := regexp.MustCompile(`(\d+):(\d{2}):(\d{2})\.(\d{2})`)
-	matches := re.FindStringSubmatch(strings.TrimSpace(timeStr))
+	matches := assTimeRe.FindStringSubmatch(strings.TrimSpace(timeStr))
 	if len(matches) != 5 {
 		return 0, fmt.Errorf("invalid ASS time format: %s", timeStr)
 	}
@@ -480,9 +532,28 @@ func parseVTTTimestamp(line string) (time.Duration, time.Duration, error) {
 
 // parseVTTTime parses individual VTT time
 func parseVTTTime(timeStr string) (time.Duration, error) {
+	// Fast path: "HH:MM:SS.mmm" or "MM:SS.mmm", the two forms files actually use.
+	if len(timeStr) == 12 && timeStr[2] == ':' && timeStr[5] == ':' && timeStr[8] == '.' {
+		h, okH := clockField(timeStr, 0, 2)
+		m, okM := clockField(timeStr, 3, 5)
+		s, okS := clockField(timeStr, 6, 8)
+		ms, okMs := clockField(timeStr, 9, 12)
+		if okH && okM && okS && okMs {
+			return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute +
+				time.Duration(s)*time.Second + time.Duration(ms)*time.Millisecond, nil
+		}
+	} else if len(timeStr) == 8 && timeStr[2] == ':' && timeStr[5] == '.' {
+		m, okM := clockField(timeStr, 0, 2)
+		s, okS := clockField(timeStr, 3, 5)
+		ms, okMs := clockField(timeStr, 6, 9)
+		if okM && okS && okMs {
+			return time.Duration(m)*time.Minute + time.Duration(s)*time.Second +
+				time.Duration(ms)*time.Millisecond, nil
+		}
+	}
+
 	// Format: MM:SS.mmm or HH:MM:SS.mmm
-	re := regexp.MustCompile(`(?:(\d+):)?(\d{2}):(\d{2})\.(\d{3})`)
-	matches := re.FindStringSubmatch(timeStr)
+	matches := vttTimeRe.FindStringSubmatch(timeStr)
 	if len(matches) < 4 {
 		return 0, fmt.Errorf("invalid VTT time format: %s", timeStr)
 	}
@@ -1105,9 +1176,9 @@ func applyConversionOptions(entries []SubtitleEntry, options ConversionOptions) 
 		// Remove formatting tags if requested
 		if options.RemoveFormatting {
 			// Remove HTML tags
-			text = regexp.MustCompile(`<[^>]*>`).ReplaceAllString(text, "")
+			text = htmlTagRe.ReplaceAllString(text, "")
 			// Remove ASS tags
-			text = regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(text, "")
+			text = assTagRe.ReplaceAllString(text, "")
 		}
 
 		// Apply case conversion

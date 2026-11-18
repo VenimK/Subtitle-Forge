@@ -98,6 +98,12 @@ func parseModelNames(out string) []string {
 // translateWithGSTInTerminal opens a terminal window and runs gst translate there.
 // It is kept for reference but the in-process path (translateWithGST) is used by default.
 
+// Compiled once: postProcessSRT runs on every translated file.
+var (
+	srtTimestampLineRe = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->`)
+	srtIndexLineRe     = regexp.MustCompile(`^\d+\s*$`)
+)
+
 // postProcessSRT fixes common spacing and line break issues in translated SRT files.
 // It only applies punctuation fixes to subtitle text lines, leaving index and timestamp lines untouched.
 func postProcessSRT(filePath string) error {
@@ -106,26 +112,14 @@ func postProcessSRT(filePath string) error {
 		return err
 	}
 
-	timestampRe := regexp.MustCompile(`^\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->`)
-	indexRe := regexp.MustCompile(`^\d+\s*$`)
-
-	commaRe := regexp.MustCompile(`,(\S)`)
-	dotRe := regexp.MustCompile(`\.(\S)`)
-	questionRe := regexp.MustCompile(`\?(\S)`)
-	exclamationRe := regexp.MustCompile(`!(\S)`)
-
 	lines := strings.Split(string(content), "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || timestampRe.MatchString(trimmed) || indexRe.MatchString(trimmed) {
+		if trimmed == "" || srtTimestampLineRe.MatchString(trimmed) || srtIndexLineRe.MatchString(trimmed) {
 			continue
 		}
 		// Fix spacing after punctuation only in subtitle text lines
-		line = commaRe.ReplaceAllString(line, ", $1")
-		line = dotRe.ReplaceAllString(line, ". $1")
-		line = questionRe.ReplaceAllString(line, "? $1")
-		line = exclamationRe.ReplaceAllString(line, "! $1")
-		lines[i] = line
+		lines[i] = addPunctuationSpaces(line)
 	}
 
 	return os.WriteFile(filePath, []byte(strings.Join(lines, "\n")), 0644)
@@ -258,14 +252,18 @@ func translateWithGST(ctx context.Context, inputFile, outputFile, targetLang str
 	return true, nil
 }
 
+// Compiled once: stripANSI runs on every line GST writes.
+var (
+	ansiCSIEscapeRe = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	ansiOSCEscapeRe = regexp.MustCompile(`\x1b\].*?(\x07|\x1b\\)`)
+)
+
 // stripANSI removes ANSI escape sequences used for terminal colors and cursor moves
 func stripANSI(s string) string {
 	// Matches CSI sequences like \x1b[31m, \x1b[?25l, and OSC etc.
-	ansi := regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
-	s = ansi.ReplaceAllString(s, "")
+	s = ansiCSIEscapeRe.ReplaceAllString(s, "")
 	// Also remove other ESC sequences (OSC terminated by BEL or ST) conservatively
-	osc := regexp.MustCompile(`\x1b\].*?(\x07|\x1b\\)`)
-	s = osc.ReplaceAllString(s, "")
+	s = ansiOSCEscapeRe.ReplaceAllString(s, "")
 	return s
 }
 
@@ -363,15 +361,70 @@ var aiProgressLineIdx = -1
 
 // appendProgressToResults shows live progress as a single line that stays at
 // the bottom of the log, instead of appending one line per percentage tick.
+//
+// GST emits these ticks many times per second, and every SetText makes Fyne
+// re-wrap and redraw the whole log (up to maxAIResultLines), so paints are
+// coalesced to about eight per second. The trailing timer always paints the
+// last tick, so nothing is lost.
+const resultsRefreshInterval = 120 * time.Millisecond
+
+var (
+	resultsRefreshTimer   *time.Timer
+	resultsRefreshPending bool
+)
+
+// appendProgressToResults replaces the live progress line at the bottom of the log.
 func appendProgressToResults(line string) {
 	if aiProgressLineIdx >= 0 && aiProgressLineIdx < len(aiResultsLines) {
 		aiResultsLines = append(aiResultsLines[:aiProgressLineIdx], aiResultsLines[aiProgressLineIdx+1:]...)
 	}
 	aiResultsLines = append(aiResultsLines, line)
 	aiProgressLineIdx = len(aiResultsLines) - 1
-	if resultsArea != nil {
-		resultsArea.SetText(strings.Join(aiResultsLines, "\n"))
+	if resultsArea == nil {
+		return
 	}
+	if resultsRefreshTimer != nil {
+		resultsRefreshPending = true
+		return
+	}
+	paintResultsArea()
+	resultsRefreshTimer = time.AfterFunc(resultsRefreshInterval, func() {
+		fyne.Do(func() {
+			if !resultsRefreshPending {
+				resultsRefreshTimer = nil
+				return
+			}
+			resultsRefreshTimer = nil
+			paintResultsArea()
+		})
+	})
+}
+
+// paintResultsArea renders the buffered log lines into the results entry and
+// keeps the view at the bottom when the user was already following the log.
+func paintResultsArea() {
+	resultsRefreshPending = false
+	if resultsArea == nil {
+		return
+	}
+	nearBottom := resultsNearBottom()
+	resultsArea.SetText(strings.Join(aiResultsLines, "\n"))
+	if nearBottom && resultsScroll != nil {
+		resultsScroll.ScrollToBottom()
+	}
+}
+
+// resultsNearBottom reports whether the results log is scrolled to (or within
+// 50 pixels of) its bottom. It measures the text layout, so call it only when
+// painting, not once per progress tick.
+func resultsNearBottom() bool {
+	if resultsScroll == nil || resultsArea == nil {
+		return false
+	}
+	offset := resultsScroll.Offset
+	contentSize := resultsArea.MinSize()
+	visibleSize := resultsScroll.Size()
+	return (contentSize.Height - offset.Y - visibleSize.Height) < 50
 }
 
 func updateAIResultsActions(w fyne.Window, outputDir string) {
@@ -1080,18 +1133,6 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 		}
 	}
 
-	// Helper function to check if user is near bottom (smart auto-scroll)
-	isNearBottom := func() bool {
-		if resultsScroll == nil {
-			return false
-		}
-		offset := resultsScroll.Offset
-		contentSize := resultsArea.MinSize()
-		visibleSize := resultsScroll.Size()
-		// Check if within 50 pixels of bottom
-		return (contentSize.Height - offset.Y - visibleSize.Height) < 50
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	setAIRunning(true, cancel)
 
@@ -1109,7 +1150,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 					if resultsArea != nil {
 						appendToResults(fmt.Sprintf("\n⛔ Translation cancelled by user\n✅ Completed: %d files\n⏭️ Skipped: %d files", successCount, totalFiles-i))
 						// Only auto-scroll if user is near bottom
-						if resultsScroll != nil && isNearBottom() {
+						if resultsScroll != nil && resultsNearBottom() {
 							resultsScroll.ScrollToBottom()
 						}
 					}
@@ -1129,7 +1170,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				if resultsArea != nil {
 					appendToResults(fmt.Sprintf("🔄 Processing: %s", fileName))
 					// Only auto-scroll if user is near bottom
-					if resultsScroll != nil && isNearBottom() {
+					if resultsScroll != nil && resultsNearBottom() {
 						resultsScroll.ScrollToBottom()
 					}
 				}
@@ -1148,7 +1189,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				fyne.Do(func() {
 					appendToResults("   📖 Reading subtitle file...")
 					// Only auto-scroll if user is near bottom
-					if resultsScroll != nil && isNearBottom() {
+					if resultsScroll != nil && resultsNearBottom() {
 						resultsScroll.ScrollToBottom()
 					}
 				})
@@ -1165,10 +1206,9 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 						progressBar.SetValue((float64(fileIndex) + pct/100.0) / float64(totalFiles))
 						if resultsArea != nil && status != lastShownBar {
 							lastShownBar = status
+							// appendProgressToResults coalesces the redraw and does
+							// the auto-scroll, so a tick costs no layout of its own.
 							appendProgressToResults("   " + strings.TrimSpace(status))
-							if resultsScroll != nil && isNearBottom() {
-								resultsScroll.ScrollToBottom()
-							}
 						}
 					})
 					return
@@ -1177,7 +1217,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 					fyne.Do(func() {
 						appendToResults(fmt.Sprintf("   %s", status))
 						// Only auto-scroll if user is near bottom
-						if resultsScroll != nil && isNearBottom() {
+						if resultsScroll != nil && resultsNearBottom() {
 							resultsScroll.ScrollToBottom()
 						}
 					})
@@ -1190,7 +1230,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 					fyne.Do(func() {
 						appendToResults(fmt.Sprintf("✅ Completed: %s → %s", fileName, outputFile))
 						// Only auto-scroll if user is near bottom
-						if resultsScroll != nil && isNearBottom() {
+						if resultsScroll != nil && resultsNearBottom() {
 							resultsScroll.ScrollToBottom()
 						}
 					})
@@ -1200,7 +1240,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 					fyne.Do(func() {
 						appendToResults(fmt.Sprintf("❌ Failed: %s\n   Error: %s", fileName, errorMsg))
 						// Only auto-scroll if user is near bottom
-						if resultsScroll != nil && isNearBottom() {
+						if resultsScroll != nil && resultsNearBottom() {
 							resultsScroll.ScrollToBottom()
 						}
 					})
@@ -1220,7 +1260,7 @@ func startAITranslation(inputFiles []string, sourceLang, targetLang, outputDir s
 				appendToResults(fmt.Sprintf(T("ai.batch_complete_summary"), successCount, totalFiles-successCount, finalOutputDir))
 				updateAIResultsActions(w, finalOutputDir)
 				// Only auto-scroll if user is near bottom
-				if resultsScroll != nil && isNearBottom() {
+				if resultsScroll != nil && resultsNearBottom() {
 					resultsScroll.ScrollToBottom()
 				}
 			}

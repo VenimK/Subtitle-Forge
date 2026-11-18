@@ -18,6 +18,14 @@ import (
 // Global variable to store the path to the pgsrip binary
 var pgsripBinaryPath = ""
 
+// Compiled once: these match every output line of the pgsrip process, so
+// compiling them per line was the hot path of the PGS progress display.
+var (
+	frameProgressRe = regexp.MustCompile(`Processing frame (\d+)/(\d+)`)
+	statusUpdateRe  = regexp.MustCompile(`Status: (.+)`)
+	progressPctRe   = regexp.MustCompile(`Progress: ([0-9.]+)%`)
+)
+
 func pgsripManagedBinaryPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -42,6 +50,17 @@ type PgsConversionSettings struct {
 func checkPgsrip() bool {
 	fmt.Println("[DEBUG] Checking for pgsrip...")
 	pgsripFound := false
+
+	// pgsrip is a Python CLI, so `pgsrip --version` costs ~0.6 s - most of the
+	// whole dependency sweep. Once a path has been verified this session, reuse
+	// it; an install or a changed path resets pgsripBinaryPath.
+	if pgsripBinaryPath != "" {
+		if pgsripBinaryPath == "python3 -m pgsrip" || isExecutableFile(pgsripBinaryPath) {
+			fmt.Println("[DEBUG] pgsrip already verified this session:", pgsripBinaryPath)
+			return true
+		}
+		pgsripBinaryPath = ""
+	}
 
 	// Log to debug file if available
 	if debugLogger != nil {
@@ -286,8 +305,7 @@ func convertPgsWithPgsrip(pgsFilePath, outFilePath, langCode string, result *wid
 	}
 
 	// Regular expressions to extract progress information from the output
-	frameProgressRegex := regexp.MustCompile(`Processing frame (\d+)/(\d+)`)
-	statusUpdateRegex := regexp.MustCompile(`Status: (.+)`)
+	// (compiled once per file, see the package-level vars above)
 
 	// Copy stdout and stderr to the writers in a buffered way to reduce UI updates
 	go func() {
@@ -298,7 +316,7 @@ func convertPgsWithPgsrip(pgsFilePath, outFilePath, langCode string, result *wid
 
 			if strings.HasPrefix(line, "Progress: ") {
 				// Parse progress percentage
-				progMatch := regexp.MustCompile(`Progress: ([0-9.]+)%`).FindStringSubmatch(line)
+				progMatch := progressPctRe.FindStringSubmatch(line)
 				if len(progMatch) == 2 {
 					prog, _ := strconv.ParseFloat(progMatch[1], 64)
 					fyne.Do(func() {
@@ -308,7 +326,7 @@ func convertPgsWithPgsrip(pgsFilePath, outFilePath, langCode string, result *wid
 			}
 
 			// Check for progress information in the output
-			if matches := frameProgressRegex.FindStringSubmatch(line); len(matches) == 3 {
+			if matches := frameProgressRe.FindStringSubmatch(line); len(matches) == 3 {
 				current, _ := strconv.Atoi(matches[1])
 				total, _ := strconv.Atoi(matches[2])
 				if total > 0 {
@@ -320,7 +338,7 @@ func convertPgsWithPgsrip(pgsFilePath, outFilePath, langCode string, result *wid
 			}
 
 			// Check for status updates
-			if matches := statusUpdateRegex.FindStringSubmatch(line); len(matches) == 2 {
+			if matches := statusUpdateRe.FindStringSubmatch(line); len(matches) == 2 {
 				status := matches[1]
 				fyne.Do(func() {
 					statusLabel.SetText(status)

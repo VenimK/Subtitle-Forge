@@ -4,7 +4,7 @@
 # Parse command line arguments
 BUILD_ALL=false
 BUNDLE_DEPS=false
-VERSION="V2.5.1"
+VERSION="V2.5.2"
 
 for arg in "$@"; do
     case $arg in
