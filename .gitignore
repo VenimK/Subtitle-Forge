@@ -63,3 +63,9 @@ fyne-gui/SubtitleForge
 # Test files
 fyne-gui/test_color.srt
 fyne-gui/subtitle-forge-dev
+# Memory system (local, not committed)
+.claude/
+CLAUDE.md
+memory/
+MEMORY.md
+PROGRESS.md
