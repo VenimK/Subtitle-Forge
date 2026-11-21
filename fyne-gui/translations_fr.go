@@ -124,6 +124,7 @@ var translationsFR = map[string]string{
 	"insert.default_track":        "Définir comme piste de sous-titres par défaut",
 	"insert.forced_track":         "Marquer comme piste de sous-titres forcée",
 	"insert.remove_others":        "Supprimer toutes les autres pistes de sous-titres",
+	"insert.replace_original":     "Remplacer le fichier original (nom de scène Sonarr conservé)",
 	"insert.output_note":          "Note : ",
 	"insert.output_note_text":     "Laissez le nom de fichier vide pour utiliser le nom original avec le suffixe \"-subtitled\".",
 

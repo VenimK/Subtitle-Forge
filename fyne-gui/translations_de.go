@@ -155,6 +155,7 @@ var translationsDE = map[string]string{
 	"insert.default_track":        "Als Standard-Untertitelspur festlegen",
 	"insert.forced_track":         "Als erzwungene Untertitelspur markieren",
 	"insert.remove_others":        "Alle anderen Untertitelspuren entfernen",
+	"insert.replace_original":     "Original ersetzen (Sonarr-Szenename bleibt erhalten)",
 	"insert.output_note":          "Hinweis: ",
 	"insert.output_note_text":     "Lassen Sie den Dateinamen leer, um den Originalnamen mit dem Suffix \"-subtitled\" zu verwenden.",
 

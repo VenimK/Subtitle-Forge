@@ -2,6 +2,7 @@ package main
 
 import (
 	"image/color"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -194,6 +195,10 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 	// Create option to remove other subtitle tracks
 	removeOtherTracks := widget.NewCheck(T("insert.remove_others"), nil)
 
+	// Create option to replace the original file in-place (keeps scene name for Sonarr)
+	replaceOriginal := widget.NewCheck(T("insert.replace_original"), nil)
+	replaceOriginal.SetChecked(true)
+
 	// Create output file name options
 	outputNameEntry := widget.NewEntry()
 	outputNameEntry.SetPlaceHolder(T("insert.auto_naming"))
@@ -270,6 +275,37 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 
 		outputPath := filepath.Join(dir, outputName)
 
+		// Remux into a hidden temporary folder in the same directory first, so the
+		// result can be moved into place afterwards - either under the derived
+		// output name, or over the original file when in-place replacement is on.
+		tmpDir, err := os.MkdirTemp(dir, ".subtitle-forge-*")
+		if err != nil {
+			AppLog("ERROR", "Could not create temporary directory: %v", err)
+			dialog.ShowError(err, w)
+			return
+		}
+		tmpPath := filepath.Join(tmpDir, "remux"+inputExt)
+
+		finalPath := outputPath
+		if replaceOriginal.Checked {
+			finalPath = mkvPath
+		}
+
+		// finalize moves the remuxed file to its destination and cleans up the temp dir.
+		finalize := func() error {
+			if replaceOriginal.Checked {
+				if rmErr := os.Remove(mkvPath); rmErr != nil && !os.IsNotExist(rmErr) {
+					os.RemoveAll(tmpDir)
+					return rmErr
+				}
+			}
+			if rmErr := os.Rename(tmpPath, finalPath); rmErr != nil {
+				os.RemoveAll(tmpDir)
+				return rmErr
+			}
+			return os.Remove(tmpDir)
+		}
+
 		insertResultLabel.SetText(T("insert.adding"))
 		insertProgress.Show()
 		insertProgressLabel.SetText(T("insert.inserting"))
@@ -283,7 +319,10 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 			}
 
 			go func() {
-				output, err := InsertMP4Subtitle(mkvPath, subtitlePath, outputPath, lang, trackName, removeOtherTracks.Checked)
+				output, err := InsertMP4Subtitle(mkvPath, subtitlePath, tmpPath, lang, trackName, removeOtherTracks.Checked)
+				if err == nil {
+					err = finalize()
+				}
 
 				fyne.Do(func() {
 					insertProgress.Hide()
@@ -291,19 +330,20 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 					insertSubtitleBtn.Enable()
 
 					if err != nil {
+						os.RemoveAll(tmpDir)
 						AppLog("ERROR", "Insert subtitle into MP4 failed: %v", err)
 						insertResultLabel.SetText(insertResultLabel.Text + "\n" + T("common.error") + ": " + err.Error() + "\n" + string(output))
 						return
 					}
 
-					AppLog("SUCCESS", "Subtitle inserted into MP4 successfully: %s", filepath.Base(outputPath))
-					insertResultLabel.SetText(insertResultLabel.Text + "\n✅ " + T("insert.success") + "\n" + T("insert.output_file") + outputPath)
+					AppLog("SUCCESS", "Subtitle inserted into MP4 successfully: %s", filepath.Base(finalPath))
+					insertResultLabel.SetText(insertResultLabel.Text + "\n✅ " + T("insert.success") + "\n" + T("insert.output_file") + finalPath)
 				})
 			}()
 		} else {
 			// Use mkvmerge for MKV files
 			mkvmergeArgs := []string{
-				"-o", outputPath,
+				"-o", tmpPath,
 			}
 
 			if removeOtherTracks.Checked {
@@ -332,9 +372,12 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 				cmd := NewMkvmergeCmd(mkvmergeArgs...)
 				AppLog("DEBUG", "Subtitle insertion using mkvmerge")
 
-				AppLog("INSERT", "Adding subtitle to MKV: %s -> %s", filepath.Base(subtitlePath), filepath.Base(outputPath))
+				AppLog("INSERT", "Adding subtitle to MKV: %s -> %s", filepath.Base(subtitlePath), filepath.Base(finalPath))
 				output, err := cmd.CombinedOutput()
 				AppLogCmd(cmd, output, err)
+				if err == nil {
+					err = finalize()
+				}
 
 				fyne.Do(func() {
 					insertProgress.Hide()
@@ -342,13 +385,14 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 					insertSubtitleBtn.Enable()
 
 					if err != nil {
+						os.RemoveAll(tmpDir)
 						AppLog("ERROR", "Insert subtitle failed: %v", err)
 						insertResultLabel.SetText(insertResultLabel.Text + "\n" + T("common.error") + ": " + err.Error() + "\n" + string(output))
 						return
 					}
 
-					AppLog("SUCCESS", "Subtitle inserted successfully: %s", filepath.Base(outputPath))
-					insertResultLabel.SetText(insertResultLabel.Text + "\n✅ " + T("insert.success") + "\n" + T("insert.output_file") + outputPath + "\n" + string(output))
+					AppLog("SUCCESS", "Subtitle inserted successfully: %s", filepath.Base(finalPath))
+					insertResultLabel.SetText(insertResultLabel.Text + "\n✅ " + T("insert.success") + "\n" + T("insert.output_file") + finalPath + "\n" + string(output))
 				})
 			}()
 		}
@@ -467,6 +511,7 @@ func createInsertSubtitlesTab(w fyne.Window) (*fyne.Container, *InsertTabWidgets
 		defaultTrack,
 		forcedTrack,
 		removeOtherTracks,
+		replaceOriginal,
 	)
 
 	// Group subtitle options with improved organization and readability

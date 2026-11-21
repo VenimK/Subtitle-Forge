@@ -124,6 +124,7 @@ var translationsES = map[string]string{
 	"insert.default_track":        "Establecer como pista de subtítulos predeterminada",
 	"insert.forced_track":         "Marcar como pista de subtítulos forzada",
 	"insert.remove_others":        "Eliminar todas las demás pistas de subtítulos",
+	"insert.replace_original":     "Reemplazar el archivo original (mantiene el nombre de escena de Sonarr)",
 	"insert.output_note":          "Nota: ",
 	"insert.output_note_text":     "Deje el nombre de archivo vacío para usar el nombre original con el sufijo \"-subtitled\".",
 

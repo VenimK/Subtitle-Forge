@@ -159,6 +159,7 @@ var translationsEN = map[string]string{
 	"insert.default_track":        "Set as default subtitle track",
 	"insert.forced_track":         "Mark as forced subtitle track",
 	"insert.remove_others":        "Remove all other subtitle tracks",
+	"insert.replace_original":     "Replace original file (keeps Sonarr scene name)",
 	"insert.output_note":          "Note: ",
 	"insert.output_note_text":     "Leave filename empty to use the original filename with \"-subtitled\" suffix.",
 

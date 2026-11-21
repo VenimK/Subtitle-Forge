@@ -124,6 +124,7 @@ var translationsNL = map[string]string{
 	"insert.default_track":        "Instellen als standaard ondertitelspoor",
 	"insert.forced_track":         "Markeren als geforceerd ondertitelspoor",
 	"insert.remove_others":        "Alle andere ondertitelsporen verwijderen",
+	"insert.replace_original":     "Origineel vervangen (Sonarr-scenennaam intact)",
 	"insert.output_note":          "Opmerking: ",
 	"insert.output_note_text":     "Laat de bestandsnaam leeg om de originele bestandsnaam te gebruiken met het achtervoegsel \"-subtitled\".",
 
